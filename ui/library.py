@@ -1,0 +1,841 @@
+"""library.py — page « Bibliothèque » : grille, tri, filtres et collections."""
+import gi
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+gi.require_version("GdkPixbuf", "2.0")
+from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, GObject, Gtk, Pango
+
+import picker as P
+from i18n import available, get_lang, tr
+from .theme import STATUTS, TILE_W, TILE_H, COVER_PX
+
+
+class LibraryMixin:
+
+    # ---------- page « Bibliothèque » : grille de pochettes ----------
+    def _build_library_page(self):
+        self.search = Gtk.SearchEntry(hexpand=True)
+        if hasattr(self.search, "set_placeholder_text"):  # GTK >= 4.10
+            self.search.set_placeholder_text(tr("Search games…"))
+        self.search.connect("search-changed", self._apply_filter)
+        self.search_bar = Gtk.SearchBar(child=Adw.Clamp(maximum_size=420, child=self.search))
+        self.search_bar.connect_entry(self.search)
+
+        self.lib_flow = Gtk.FlowBox(valign=Gtk.Align.START, homogeneous=True, selection_mode=Gtk.SelectionMode.NONE,
+                                    activate_on_single_click=True, min_children_per_line=2, max_children_per_line=12,
+                                    column_spacing=14, row_spacing=14,
+                                    margin_top=14, margin_bottom=18, margin_start=18, margin_end=18)
+        self.lib_flow.set_filter_func(self._match)
+        self.lib_flow.set_sort_func(self._sort_func)
+        self.lib_flow.connect("child-activated", lambda _f, child: self._open_game(child._game["id"]))
+        self.lib_scroll = Gtk.ScrolledWindow(child=self.lib_flow, vexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER)
+        self.lib_empty = Adw.StatusPage(icon_name="view-grid-symbolic", vexpand=True)
+        self.lib_stack = Gtk.Stack()
+        self.lib_stack.add_named(self.lib_scroll, "grid")
+        self.lib_stack.add_named(self.lib_empty, "empty")
+
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        content.append(self.search_bar)
+        content.append(self.lib_stack)
+
+        # barre latérale : « Tous les jeux » + une ligne par collection
+        self.col_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE, css_classes=["navigation-sidebar"])
+        self.col_list.set_activate_on_single_click(False)  # row-activated = double-clic (ou Entrée) = isoler
+        self.col_list.connect("row-activated", self._on_col_activated)
+        col_scroll = Gtk.ScrolledWindow(child=self.col_list, vexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER)
+        head = Gtk.Box(spacing=6, margin_top=8, margin_bottom=6, margin_start=12, margin_end=6)
+        title_lbl = Gtk.Label(label=tr("Collections"), xalign=0, hexpand=True, css_classes=["heading"])
+        add_col = Gtk.Button(icon_name="list-add-symbolic", css_classes=["flat"], tooltip_text=tr("New collection"))
+        add_col.connect("clicked", self._on_new_collection)
+        head.append(title_lbl)
+        head.append(add_col)
+        sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        sidebar.append(head)
+        sidebar.append(col_scroll)
+
+        paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
+        paned.set_start_child(sidebar)
+        paned.set_end_child(content)
+        paned.set_resize_start_child(False)
+        paned.set_shrink_start_child(False)
+        paned.set_position(200)
+        return paned
+
+    def _build_sort_menu(self):
+        for name, initial, callback in (("lib-sort", self.lib_sort, self._on_sort),
+                                        ("lib-filter", self.lib_filter, self._on_filter)):
+            act = Gio.SimpleAction.new_stateful(name, GLib.VariantType.new("s"), GLib.Variant.new_string(initial))
+            act.connect("activate", callback)
+            self.add_action(act)
+        menu, sort_sec, filter_sec = Gio.Menu(), Gio.Menu(), Gio.Menu()
+        for key, label in (("name", tr("Name")), ("recent", tr("Last played")), ("played", tr("Most played"))):
+            sort_sec.append(label, f"win.lib-sort::{key}")
+        filter_sec.append(tr("All"), "win.lib-filter::all")
+        for s in STATUTS:
+            filter_sec.append(P.status_label(s), f"win.lib-filter::{s}")
+        menu.append_section(tr("Sort by"), sort_sec)
+        menu.append_section(tr("Status"), filter_sec)
+        return menu
+
+    def _on_sort(self, action, param):
+        action.set_state(param)
+        self.lib_sort = param.get_string()
+        P.set_setting(self.con, "lib_sort", self.lib_sort)
+        self.lib_flow.invalidate_sort()
+
+    def _on_filter(self, action, param):
+        action.set_state(param)
+        self.lib_filter = param.get_string()
+        self._apply_filter()
+
+    def _on_page_changed(self, *_):
+        page = self.stack.get_visible_child_name()
+        on_lib = page == "lib"
+        for w in getattr(self, "lib_widgets", []):
+            w.set_visible(on_lib)
+        if page == "retro":
+            self._refresh_retro()
+        self._refresh_moods()
+        self._refresh_pick_collections()
+
+    def _toggle_search(self, *_):
+        if self.stack.get_visible_child_name() == "lib":
+            self.search_btn.set_active(not self.search_btn.get_active())
+        return True
+
+    def _match(self, child):
+        g = child._game
+        if self.lib_filter != "all" and g["status"] != self.lib_filter:
+            return False
+        if self.col_selected and g["id"] not in self.col_game_ids:
+            return False
+        return self.search.get_text().strip().casefold() in child._hay
+
+    def _sort_key(self, g):
+        by = {"name": g["name"].casefold(), "recent": -g["last_played"], "played": -g["playtime_min"]}[self.lib_sort]
+        return (g["hidden"], by, g["name"].casefold())  # les jeux masqués passent toujours en dernier
+
+    def _sort_func(self, a, b):
+        ka, kb = self._sort_key(a._game), self._sort_key(b._game)
+        return (ka > kb) - (ka < kb)
+
+    def _apply_filter(self, *_):
+        self.lib_flow.invalidate_filter()
+        if any(self._match(c) for c in self._tiles):
+            self.lib_stack.set_visible_child_name("grid")
+            return
+        empty = not self._tiles
+        self.lib_empty.set_title(tr("Your library is empty") if empty else tr("No games found"))
+        self.lib_empty.set_description(tr("Import your games, or add one by hand with +.") if empty
+                                       else tr("Try another search or filter."))
+        self.lib_stack.set_visible_child_name("empty")
+
+    def _make_cover(self, g, w, h, big=False):
+        """Pochette : fond coloré avec le nom du jeu ; l'image se pose dessus quand elle est chargée."""
+        hue = sum(map(ord, g["name"])) % 6
+        label = Gtk.Label(label=g["name"], wrap=True, wrap_mode=Pango.WrapMode.WORD_CHAR, lines=5,
+                          ellipsize=Pango.EllipsizeMode.END, max_width_chars=12, justify=Gtk.Justification.CENTER,
+                          margin_start=10, margin_end=10, vexpand=True, valign=Gtk.Align.CENTER,
+                          css_classes=["title-3" if big else "title-4"])
+        placeholder = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, css_classes=["game-placeholder", f"ph-{hue}"])
+        placeholder.append(label)
+        pic = Gtk.Picture(content_fit=Gtk.ContentFit.COVER, can_shrink=True, visible=False)
+        cover = Gtk.Overlay(child=placeholder, width_request=w, height_request=h, css_classes=["card"])
+        cover.set_overflow(Gtk.Overflow.HIDDEN)
+        cover.add_overlay(pic)
+        return cover, pic
+
+    def _cover_texture(self, g):
+        """Texture réduite de la couverture (gardée en cache tant que le fichier ne change pas)."""
+        f = P.cover_file(g)
+        if not f:
+            return None
+        try:
+            key = (str(f), f.stat().st_mtime_ns)
+        except OSError:
+            return None
+        if key not in self._tex_cache:
+            try:
+                pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(f), -1, COVER_PX, True)
+                self._tex_cache[key] = Gdk.Texture.new_for_pixbuf(pixbuf)
+            except Exception:
+                self._tex_cache[key] = None
+        return self._tex_cache[key]
+
+    @staticmethod
+    def _image_ok(path):
+        """Le fichier est-il une image que GdkPixbuf sait réellement décoder ?"""
+        try:
+            GdkPixbuf.Pixbuf.new_from_file_at_scale(path, 32, 32, True)
+            return True
+        except Exception:
+            return False
+
+    def _cover_row(self, g, pic):
+        """Ligne « Couverture » de la fiche : choisir une image / retirer la couverture perso."""
+        row = Adw.ActionRow(title=tr("Cover image"), subtitle=tr("Custom") if g["custom_cover"] else "")
+        remove = Gtk.Button(icon_name="edit-delete-symbolic", valign=Gtk.Align.CENTER, css_classes=["flat"],
+                            tooltip_text=tr("Remove custom cover"), sensitive=bool(g["custom_cover"]))
+
+        def refresh():
+            fresh = self.con.execute("SELECT * FROM games WHERE id=?", (g["id"],)).fetchone()
+            custom = bool(fresh and fresh["custom_cover"])
+            row.set_subtitle(tr("Custom") if custom else "")
+            remove.set_sensitive(custom)
+            tex = self._cover_texture(fresh) if fresh else None
+            if tex:
+                pic.set_paintable(tex)
+                pic.set_visible(True)
+            else:
+                pic.set_visible(False)
+            self._build_lib()              # la tuile de la bibliothèque reflète le changement
+            self._refresh_current_cover()  # et l'onglet « Choisir » s'il montre ce jeu
+
+        choose = Gtk.Button(label=tr("Choose…"), valign=Gtk.Align.CENTER, css_classes=["flat"])
+        choose.connect("clicked", lambda _b: self._pick_cover(g["id"], refresh))
+        remove.connect("clicked", lambda _b: self._clear_cover(g["id"], refresh))
+        row.add_suffix(choose)
+        row.add_suffix(remove)
+        return row
+
+    def _pick_cover(self, gid, on_done=None):
+        """Sélecteur de fichier filtré sur les images."""
+        dlg = Gtk.FileDialog(title=tr("Choose a cover image"))
+        filt = Gtk.FileFilter()
+        filt.set_name(tr("Images"))
+        for pat in ("*.png", "*.jpg", "*.jpeg", "*.webp", "*.bmp", "*.gif"):
+            filt.add_pattern(pat)
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        filters.append(filt)
+        dlg.set_filters(filters)
+        dlg.set_default_filter(filt)
+
+        def done(d, res):
+            try:
+                f = d.open_finish(res)
+            except GLib.Error:
+                return
+            if self._apply_cover(gid, f.get_path()) and on_done:
+                on_done()
+        dlg.open(self, None, done)
+
+    def _apply_cover(self, gid, path):
+        """Enregistre l'image choisie comme couverture perso (refuse un fichier illisible)."""
+        if not self._image_ok(path):
+            self.toasts.add_toast(Adw.Toast.new(tr("Unsupported image file")))
+            return False
+        try:
+            P.set_custom_cover(self.con, gid, path)
+        except OSError as e:
+            self.toasts.add_toast(Adw.Toast.new(GLib.markup_escape_text(tr("Failed: {e}", e=e))))
+            return False
+        self.toasts.add_toast(Adw.Toast.new(tr("Custom cover saved")))
+        return True
+
+    def _clear_cover(self, gid, on_done=None):
+        P.clear_custom_cover(self.con, gid)
+        self.toasts.add_toast(Adw.Toast.new(tr("Custom cover removed")))
+        if on_done:
+            on_done()
+
+    def _load_covers_step(self, gen):
+        """Charge les couvertures par petits lots, pour que la fenêtre s'affiche tout de suite."""
+        if gen != self._lib_gen:  # la grille a été reconstruite entre-temps
+            return False
+        for _ in range(3):
+            if not self._cover_queue:
+                return False
+            pic, g = self._cover_queue.pop(0)
+            tex = self._cover_texture(g)
+            if tex:
+                pic.set_paintable(tex)
+                pic.set_visible(True)
+        return True
+
+    def _make_tile(self, g):
+        gid = g["id"]
+        cover, pic = self._make_cover(g, TILE_W, TILE_H)
+        if P.cover_file(g):
+            self._cover_queue.append((pic, g))
+        bar = Gtk.Label(label=g["name"], ellipsize=Pango.EllipsizeMode.END, valign=Gtk.Align.END,
+                        css_classes=["game-title-bar"], visible=False)
+        play = Gtk.Button(icon_name="media-playback-start-symbolic", halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER,
+                          css_classes=["osd", "circular"], width_request=48, height_request=48,
+                          tooltip_text=tr("Play"), visible=False)
+        play.connect("clicked", lambda _b, gid=gid: self._quick_launch(gid))
+        cover.add_overlay(bar)
+        cover.add_overlay(play)
+        if g["hidden"] or not g["installed"]:
+            cover.add_css_class("dim-tile")
+
+        def on_hover(ctrl, _p):
+            hovered = ctrl.get_property("contains-pointer")
+            bar.set_visible(hovered and pic.get_visible())  # le nom n'est utile que sur une vraie couverture
+            play.set_visible(hovered and bool(g["installed"]))
+        motion = Gtk.EventControllerMotion()
+        motion.connect("notify::contains-pointer", on_hover)
+        cover.add_controller(motion)
+
+        child = Gtk.FlowBoxChild(child=cover, tooltip_text=g["name"])
+        child._game = g
+        child._hay = " ".join((g["name"], g["tags"], g["store_tags"])).casefold()
+        return child
+
+    def _lib_where(self, trailing=False):
+        """Filtre SQL de la grille : masqués et non-installés ne comptent/apparaissent que s'ils sont affichés."""
+        conds = []
+        if not self.show_hidden:
+            conds.append("hidden=0")
+        if not self.show_not_installed:
+            conds.append("installed=1")
+        sc = P.source_cond(self.con)
+        if sc:
+            conds.append(sc)
+        if not conds:
+            return ""
+        return "WHERE " + " AND ".join(conds) + (" " if trailing else "")
+
+    def _build_lib(self):
+        """(Re)construit la grille ; recherche, tri et filtre agissent ensuite sans rien reconstruire."""
+        self._lib_gen += 1
+        self._cover_queue = []
+        adj = self.lib_scroll.get_vadjustment()
+        pos = adj.get_value()
+        while (child := self.lib_flow.get_first_child()):
+            self.lib_flow.remove(child)
+        self._tiles = []
+        where = self._lib_where(trailing=True)
+        for row in self.con.execute(f"SELECT * FROM games {where}"):
+            tile = self._make_tile(dict(row))
+            self.lib_flow.append(tile)
+            self._tiles.append(tile)
+        self._apply_filter()
+        self._refresh_collections()
+        GLib.idle_add(self._load_covers_step, self._lib_gen, priority=GLib.PRIORITY_LOW)
+
+        def restore():
+            adj.set_value(pos)
+            return False
+        if pos:
+            GLib.timeout_add(80, restore)
+
+    # ---------- collections ----------
+    def _recompute_col_ids(self):
+        ids = set()
+        for cid in self.col_selected:
+            ids |= P.collection_game_ids(self.con, cid)
+        self.col_game_ids = ids
+
+    def _refresh_collections(self):
+        cols = P.list_collections(self.con, include_hidden=self.show_hidden,
+                                  include_not_installed=self.show_not_installed)
+        self.col_selected &= {c["id"] for c in cols}
+        self._build_collections(cols)
+        self._recompute_col_ids()
+        self._refresh_pick_collections()
+        self._apply_filter()
+
+    def _build_collections(self, cols):
+        self._building_cols = True
+        while (child := self.col_list.get_first_child()):
+            self.col_list.remove(child)
+        all_row = Adw.ActionRow(title=tr("All games"), activatable=True)
+        all_row._cid = None
+        self._add_row_click(all_row)
+        where = self._lib_where()
+        n_all = self.con.execute(f"SELECT COUNT(*) FROM games {where}").fetchone()[0]
+        all_row.add_suffix(Gtk.Label(label=str(n_all), css_classes=["dim-label"], valign=Gtk.Align.CENTER))
+        self.col_list.append(all_row)
+        manual = [c for c in cols if c["kind"] == "manual"]
+        auto = [c for c in cols if c["kind"] == "auto"]
+        if manual or auto:
+            self.col_list.append(self._make_separator_row())
+        for c in manual:
+            self.col_list.append(self._make_collection_row(c))
+        if manual and auto:
+            self.col_list.append(self._make_separator_row())
+        for c in auto:
+            self.col_list.append(self._make_collection_row(c))
+        self._update_col_highlight()
+        self._building_cols = False
+
+    def _col_label(self, c):
+        return tr(c["name"]) if c["kind"] == "auto" else c["name"]
+
+    def _make_collection_row(self, c):
+        row = Adw.ActionRow(title=GLib.markup_escape_text(self._col_label(c)), activatable=True)
+        row._cid = c["id"]
+        self._add_row_click(row)
+        row.add_suffix(Gtk.Label(label=str(c["n"]), css_classes=["dim-label"], valign=Gtk.Align.CENTER))
+        if c["kind"] == "auto":  # collection automatique : ni renommable ni supprimable
+            return row
+        pop = Gtk.Popover()
+        menu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2,
+                       margin_top=4, margin_bottom=4, margin_start=4, margin_end=4)
+        rename = Gtk.Button(label=tr("Rename"), css_classes=["flat"])
+        delete = Gtk.Button(label=tr("Delete"), css_classes=["flat"])
+        menu.append(rename)
+        menu.append(delete)
+        pop.set_child(menu)
+        rename.connect("clicked", lambda *_: (pop.popdown(), self._on_rename_collection(c)))
+        delete.connect("clicked", lambda *_: (pop.popdown(), self._on_delete_collection(c)))
+        row.add_suffix(Gtk.MenuButton(icon_name="view-more-symbolic", css_classes=["flat"],
+                                      valign=Gtk.Align.CENTER, popover=pop))
+        return row
+
+    def _make_separator_row(self):
+        row = Gtk.ListBoxRow(selectable=False, activatable=False, css_classes=["col-sep"])
+        row.set_child(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+        return row
+
+    def _add_row_click(self, row):
+        for button, handler in ((1, self._on_row_primary), (3, self._on_row_secondary)):
+            g = Gtk.GestureClick(button=button)
+            g.connect("pressed", handler, row)
+            row.add_controller(g)
+            for c in row.observe_controllers():      # le geste interne de la ligne « claim » le clic :
+                if isinstance(c, Gtk.GestureClick) and c is not g:
+                    g.group(c)                       # on les groupe pour recevoir aussi l'evenement
+                    break
+
+    def _on_row_primary(self, _gesture, _n_press, _x, _y, row):
+        """Clic gauche : n'isoler que cette collection."""
+        if self._building_cols:
+            return
+        self._isolate_col(row)
+
+    def _on_row_secondary(self, _gesture, _n_press, _x, _y, row):
+        """Clic droit : ajouter / retirer cette collection de la sélection."""
+        if self._building_cols:
+            return
+        self._toggle_col(row)
+
+    def _on_col_activated(self, _lb, row):
+        """Entrée clavier (ou double-clic géré par la liste) : n'isole que cette collection."""
+        if self._building_cols or row is None:
+            return
+        self._isolate_col(row)
+
+    def _isolate_col(self, row):
+        cid = getattr(row, "_cid", None)
+        self.col_selected = set() if cid is None else {cid}
+        self._recompute_col_ids()
+        self._apply_filter()
+        self._update_col_highlight()
+
+    def _toggle_col(self, row):
+        cid = getattr(row, "_cid", None)
+        if cid is None:                 # « Tous les jeux » : reinitialise la selection
+            self.col_selected = set()
+        elif cid in self.col_selected:  # recliquer une collection la deselectionne
+            self.col_selected.discard(cid)
+        else:
+            self.col_selected.add(cid)
+        self._recompute_col_ids()
+        self._apply_filter()
+        self._update_col_highlight()
+
+    def _update_col_highlight(self):
+        child = self.col_list.get_first_child()
+        while child:
+            cid = getattr(child, "_cid", None)
+            if hasattr(child, "_cid"):  # ligne « Tous les jeux » (None) ou collection
+                on = (not self.col_selected) if cid is None else (cid in self.col_selected)
+                child.remove_css_class("col-on") if not on else child.add_css_class("col-on")
+            child = child.get_next_sibling()
+
+    def _prompt_collection(self, title, initial, on_ok):
+        win = Adw.Dialog(content_width=380, title=title)
+        group = Adw.PreferencesGroup(margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
+        entry = Adw.EntryRow(title=tr("Name"), text=initial or "")
+        group.add(entry)
+        err = Gtk.Label(css_classes=["error"], wrap=True, visible=False, margin_start=12, margin_end=12)
+        save = Gtk.Button(label=tr("Save"), halign=Gtk.Align.CENTER,
+                          css_classes=["suggested-action", "pill"], margin_bottom=18)
+
+        def do(*_):
+            try:
+                on_ok(entry.get_text())
+            except ValueError as e:
+                err.set_text(str(e))
+                err.set_visible(True)
+                return
+            win.close()
+        save.connect("clicked", do)
+        entry.connect("entry-activated", do)
+
+        def on_key(ctrl, keyval, keycode, state):
+            if keyval == Gdk.KEY_Escape:
+                win.close()
+                return True
+            return False
+        key = Gtk.EventControllerKey()
+        key.connect("key-pressed", on_key)
+        win.add_controller(key)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        for w in (group, err, save):
+            box.append(w)
+        view = Adw.ToolbarView(content=box)
+        view.add_top_bar(Adw.HeaderBar())
+        win.set_child(view)
+        win.present(self)
+
+    def _on_new_collection(self, *_):
+        self._prompt_collection(tr("New collection"), "", lambda n: (P.add_collection(self.con, n),
+                                                                     self._refresh_collections()))
+
+    def _on_rename_collection(self, c):
+        self._prompt_collection(tr("Rename collection"), c["name"],
+                                lambda n: (P.rename_collection(self.con, c["id"], n), self._refresh_collections()))
+
+    def _on_delete_collection(self, c):
+        dlg = Adw.AlertDialog(heading=tr("Delete “{name}”?", name=c["name"]),
+                              body=tr("The collection is removed, but its games are kept."))
+        dlg.add_response("cancel", tr("Cancel"))
+        dlg.add_response("delete", tr("Delete"))
+        dlg.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
+        dlg.set_default_response("cancel")
+        dlg.set_close_response("cancel")
+
+        def on_resp(_d, resp):
+            if resp == "delete":
+                P.delete_collection(self.con, c["id"])
+                self.col_selected.discard(c["id"])
+                self._refresh_collections()
+        dlg.connect("response", on_resp)
+        dlg.present(self)
+
+    def _on_show_hidden(self, chk):
+        self.show_hidden = chk.get_active()
+        P.set_setting(self.con, "show_hidden", "1" if self.show_hidden else "0")
+        self._build_lib()
+        self._refresh_covers_summary()  # le compte des couvertures suit les jeux affichés
+
+    def _on_show_not_installed(self, chk):
+        self.show_not_installed = chk.get_active()
+        P.set_setting(self.con, "show_not_installed", "1" if self.show_not_installed else "0")
+        self._build_lib()
+        self._reset_pick()  # filtre du tirage : la proposition en cours est caduque
+        self._refresh_covers_summary()  # le compte des couvertures suit les jeux affichés
+        if self.show_not_installed:  # couvertures récupérées à la demande
+            self._fetch_covers_bg(include_not_installed=True)
+
+    def _lib_subtitle(self, gid, status):
+        inst, hid, pt = self.con.execute("SELECT installed, hidden, playtime_min FROM games WHERE id=?", (gid,)).fetchone()
+        extra = [P.fmt_minutes(pt)] if pt else []
+        return " · ".join([P.status_label(status)] + extra + ([] if inst else [tr("not installed")])
+                          + ([tr("hidden")] if hid else []))
+
+    # ---------- page « Bibliothèque » ----------
+    def _upd(self, gid, col, val):
+        self.con.execute(f"UPDATE games SET {col}=? WHERE id=?", (val, gid))
+        self.con.commit()
+
+    def _on_rename(self, gid, row, on_title):
+        new = row.get_text().strip()
+        if new:
+            self.con.execute("UPDATE games SET name=?, name_locked=1 WHERE id=?", (new, gid))
+            on_title(new)
+            msg = tr("Name saved")
+        else:
+            self.con.execute("UPDATE games SET name_locked=0 WHERE id=?", (gid,))
+            msg = tr("Original name restored on next import")
+        self.con.commit()
+        self.toasts.add_toast(Adw.Toast.new(msg))
+
+    def _launch_text(self, g, use_override=True):
+        try:
+            return P.launch_text(g, use_override)
+        except Exception:
+            return ""
+
+    def _on_exe(self, gid, row):
+        g = self.con.execute("SELECT * FROM games WHERE id=?", (gid,)).fetchone()
+        text, default = row.get_text().strip(), self._launch_text(g, use_override=False)
+        if not text and g["ext_id"].startswith("custom:"):
+            return self.toasts.add_toast(Adw.Toast.new(tr("A manually added game needs a command")))
+        if not text or text == default:
+            P.set_launch_override(self.con, gid, "")
+            row.set_text(default)
+            msg = tr("Default launch restored")
+        else:
+            try:
+                missing = P.check_command(text)
+            except ValueError:
+                return self.toasts.add_toast(Adw.Toast.new(tr("Invalid command (unclosed quotes?)")))
+            P.set_launch_override(self.con, gid, text)
+            msg = tr("Launch command saved") + (
+                " · " + tr("warning, not found: {cmd}", cmd=missing) if missing else "")
+        self.toasts.add_toast(Adw.Toast.new(GLib.markup_escape_text(msg)))
+
+    def _pick_exe(self, row):
+        dlg = Gtk.FileDialog(title=tr("Choose the executable"))
+
+        def done(d, res):
+            try:
+                f = d.open_finish(res)
+            except GLib.Error:  # annulé
+                return
+            row.set_text(P.join_command([f.get_path()]))
+            row.emit("apply")
+        dlg.open(self, None, done)
+
+    def _open_add_game(self, *_):
+        win = Adw.Dialog(content_width=440, title=tr("Add a game"))
+        group = Adw.PreferencesGroup(
+            description=tr("E.g. prismlauncher --launch \"Minecraft\", or the path to an AppImage or script."),
+            margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
+        name = Adw.EntryRow(title=tr("Name"))
+        cmd = Adw.EntryRow(title=tr("Executable or launch command"))
+        browse = Gtk.Button(icon_name="document-open-symbolic", valign=Gtk.Align.CENTER,
+                            css_classes=["flat"], tooltip_text=tr("Choose a file…"))
+        cmd.add_suffix(browse)
+        group.add(name)
+        group.add(cmd)
+        err = Gtk.Label(css_classes=["error"], wrap=True, visible=False, margin_start=12, margin_end=12)
+        add = Gtk.Button(label=tr("Add"), halign=Gtk.Align.CENTER, sensitive=False,
+                         css_classes=["suggested-action", "pill"], margin_bottom=18)
+
+        def on_change(*_):
+            add.set_sensitive(bool(name.get_text().strip() and cmd.get_text().strip()))
+        name.connect("changed", on_change)
+        cmd.connect("changed", on_change)
+
+        def on_browse(*_):
+            dlg = Gtk.FileDialog(title=tr("Choose the executable or AppImage"))
+
+            def done(d, res):
+                try:
+                    f = d.open_finish(res)
+                except GLib.Error:  # annulé
+                    return
+                path = f.get_path()
+                cmd.set_text(P.join_command([path]))
+                if not name.get_text().strip():  # nom proposé d'après le fichier
+                    base = path.replace("\\", "/").rsplit("/", 1)[-1]
+                    name.set_text(base[:-9] if base.lower().endswith(".appimage") else base)
+            dlg.open(win, None, done)
+        browse.connect("clicked", on_browse)
+
+        def on_add(*_):
+            if not add.get_sensitive():
+                return
+            title = name.get_text().strip()
+            try:
+                _, missing = P.add_custom(self.con, title, cmd.get_text())
+            except ValueError as e:
+                err.set_text(tr("Invalid command: {e}", e=e))
+                err.set_visible(True)
+                return
+            win.close()
+            self._build_lib()
+            self._refresh_moods()
+            msg = tr("“{title}” added", title=title) + (
+                " · " + tr("warning, not found: {cmd}", cmd=missing) if missing else "")
+            self.toasts.add_toast(Adw.Toast.new(GLib.markup_escape_text(msg)))
+        add.connect("clicked", on_add)
+        cmd.connect("entry-activated", on_add)
+
+        def on_key(ctrl, keyval, keycode, state):
+            if keyval == Gdk.KEY_Escape:
+                win.close()
+                return True
+            return False
+        key = Gtk.EventControllerKey()
+        key.connect("key-pressed", on_key)
+        win.add_controller(key)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        for w in (group, err, add):
+            box.append(w)
+        view = Adw.ToolbarView(content=box)
+        view.add_top_bar(Adw.HeaderBar())
+        win.set_child(view)
+        win.present(self)
+
+    def _on_game_closed(self, *_):
+        self._build_lib()  # reflète les modifications faites dans la fenêtre de détail
+        self._refresh_moods()
+        return False
+
+    def _open_game(self, gid):
+        g = self.con.execute("SELECT * FROM games WHERE id=?", (gid,)).fetchone()
+        if not g:
+            return
+        win = Adw.Dialog(content_width=440, content_height=700, title=g["name"])
+
+        cover, pic = self._make_cover(dict(g), 200, 300, big=True)
+        cover.set_halign(Gtk.Align.CENTER)
+        tex = self._cover_texture(g)
+        if tex:
+            pic.set_paintable(tex)
+            pic.set_visible(True)
+        title = Gtk.Label(label=g["name"], wrap=True, justify=Gtk.Justification.CENTER, css_classes=["title-1"])
+        subtitle = Gtk.Label(label=self._lib_subtitle(gid, g["status"]), wrap=True, css_classes=["dim-label"])
+        play = Gtk.Button(label=tr("Play"), halign=Gtk.Align.CENTER, sensitive=bool(g["installed"]),
+                          css_classes=["suggested-action", "pill"])
+        play.connect("clicked", lambda *_: (self._quick_launch(gid), win.close()))
+
+        store = None  # proposé juste sous « Lancer », seulement si une fiche magasin existe
+        if P.store_page(g):
+            store = Gtk.Button(label=tr("View in store"), halign=Gtk.Align.CENTER, css_classes=["pill"])
+            store.connect("clicked", lambda *_: self._open_store(g))
+
+        st = Adw.ComboRow(title=tr("Status"), model=Gtk.StringList.new([P.status_label(s) for s in STATUTS]),
+                          selected=STATUTS.index(g["status"]) if g["status"] in STATUTS else 1)
+
+        def on_status(r, _p):
+            s = STATUTS[r.get_selected()]
+            self._upd(gid, "status", s)
+            subtitle.set_text(self._lib_subtitle(gid, s))
+        st.connect("notify::selected", on_status)
+
+        tags = Adw.EntryRow(title=tr("Tags (e.g. calm,short)"), text=g["tags"])
+        tags.connect("changed", lambda r: self._upd(gid, "tags", r.get_text()))
+
+        mn = Adw.SpinRow.new_with_range(5, 480, 5)
+        mn.set_title(tr("Session length (min)"))
+        mn.set_value(g["session_length"])
+        mn.connect("notify::value", lambda r, _p: self._upd(gid, "session_length", int(r.get_value())))
+
+        sg = Adw.EntryRow(title=tr("SteamGridDB ID (cover)"), text=str(g["sgdb_id"] or ""), show_apply_button=True)
+        sg.connect("apply", lambda r: self._on_sgdb_id(gid, r))
+
+        cover_row = self._cover_row(g, pic)  # couverture choisie à la main, prioritaire sur SteamGridDB
+
+        hid = Adw.SwitchRow(title=tr("Hidden (stop suggesting)"), active=bool(g["hidden"]))
+
+        def on_hide(r, _p):
+            self._upd(gid, "hidden", int(r.get_active()))
+            subtitle.set_text(self._lib_subtitle(gid, STATUTS[st.get_selected()]))
+        hid.connect("notify::active", on_hide)
+
+        def on_title(text):
+            title.set_text(text)
+            win.set_title(text)
+        nm = Adw.EntryRow(title=tr("Name"), text=g["name"], show_apply_button=True)
+        nm.connect("apply", lambda r: self._on_rename(gid, r, on_title))
+
+        ex = Adw.EntryRow(title=tr("Executable or launch command"), text=self._launch_text(g), show_apply_button=True)
+        ex.connect("apply", lambda r: self._on_exe(gid, r))
+        browse = Gtk.Button(icon_name="document-open-symbolic", valign=Gtk.Align.CENTER,
+                            css_classes=["flat"], tooltip_text=tr("Choose a file…"))
+        browse.connect("clicked", lambda _b: self._pick_exe(ex))
+        ex.add_suffix(browse)
+
+        group = Adw.PreferencesGroup(margin_top=6)
+        rows = [nm, ex, st, tags, mn, sg, cover_row, hid]
+        streak_best = P.best_streak(self.con, gid)
+        if streak_best:
+            rows.append(Adw.ActionRow(
+                title=tr("Streak"),
+                subtitle=tr("{current} d · record {best} d",
+                            current=P.streak_for_game(self.con, gid), best=streak_best)))
+        if g["store_tags"]:
+            rows.append(Adw.ActionRow(title=tr("Store tags"),
+                                      subtitle=GLib.markup_escape_text(", ".join(g["store_tags"].split(",")))))
+        for row in rows:
+            group.add(row)
+
+        col_group = Adw.PreferencesGroup(title=tr("Collections"), margin_top=6)
+        col_rows = []
+
+        def fill_collections():
+            for w in col_rows:
+                col_group.remove(w)
+            col_rows.clear()
+            member = P.collections_of_game(self.con, gid)
+            gsrc = self.con.execute("SELECT source FROM games WHERE id=?", (gid,)).fetchone()["source"]
+            for c in P.list_collections(self.con):
+                if c["kind"] == "auto":  # lecture seule : simple indicateur, aucune option cliquable
+                    if c["auto_source"] != gsrc:
+                        continue
+                    row = Adw.ActionRow(title=GLib.markup_escape_text(self._col_label(c)), subtitle=tr("Automatic"))
+                    row.add_prefix(Gtk.Image(icon_name="object-select-symbolic", valign=Gtk.Align.CENTER,
+                                             css_classes=["success"]))
+                else:
+                    row = Adw.ActionRow(title=GLib.markup_escape_text(c["name"]))
+                    check = Gtk.CheckButton(active=c["id"] in member, valign=Gtk.Align.CENTER)
+                    check.connect("toggled", lambda b, cid=c["id"]: (
+                        P.add_game_to_collection(self.con, cid, gid) if b.get_active()
+                        else P.remove_game_from_collection(self.con, cid, gid)))
+                    row.add_prefix(check)
+                    row.set_activatable_widget(check)
+                col_group.add(row)
+                col_rows.append(row)
+            entry = Adw.EntryRow(title=tr("New collection…"), show_apply_button=True)
+
+            def on_apply(r):
+                t = r.get_text().strip()
+                if not t:
+                    return
+                try:
+                    cid = P.add_collection(self.con, t)
+                except ValueError:
+                    key = t.casefold()
+                    cid = next(r["id"] for r in self.con.execute("SELECT id, name FROM collections")
+                               if r["name"].strip().casefold() == key)
+                P.add_game_to_collection(self.con, cid, gid)
+                r.set_text("")
+                fill_collections()
+            entry.connect("apply", on_apply)
+            col_group.add(entry)
+            col_rows.append(entry)
+
+        fill_collections()
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12,
+                      margin_top=6, margin_bottom=24, margin_start=18, margin_end=18)
+        for w in (cover, title, subtitle, play, store, group, col_group):
+            if w is not None:
+                box.append(w)
+        body = Gtk.ScrolledWindow(child=Adw.Clamp(maximum_size=480, child=box), vexpand=True,
+                                  hscrollbar_policy=Gtk.PolicyType.NEVER)
+        view = Adw.ToolbarView(content=body)
+        view.add_top_bar(Adw.HeaderBar(title_widget=Gtk.Label()))
+        win.set_child(view)
+
+        def on_key(ctrl, keyval, keycode, state):
+            if keyval == Gdk.KEY_Escape:
+                win.close()
+                return True
+            return False
+        key = Gtk.EventControllerKey()
+        key.connect("key-pressed", on_key)
+        win.add_controller(key)
+        win.connect("closed", self._on_game_closed)
+        win.present(self)
+
+    def _quick_launch(self, gid):
+        g = self.con.execute("SELECT * FROM games WHERE id=?", (gid,)).fetchone()
+        ok = P.launch(self.con, g)
+        self.toasts.add_toast(Adw.Toast.new(GLib.markup_escape_text(
+            tr("▶ Launched. Have fun!") if ok else tr("Couldn't launch: is the game still installed?"))))
+
+    def _on_auto_collection(self, row, _p, source):
+        P.set_auto_collection_enabled(self.con, source, row.get_active())
+        self._refresh_collections()
+
+    def _on_import_source(self, row, _p, source):
+        """Une plateforme désactivée disparaît partout (rien n'est supprimé) ; réactiver la restaure."""
+        P.set_import_off(self.con, source, not row.get_active())
+        sw = self._auto_rows.get(source) if self._auto_rows else None
+        if sw is not None:
+            sw.set_visible(P.source_enabled(self.con, source))
+        self._build_lib()
+        self._refresh_moods()
+        self._refresh_retro()
+        self._refresh_collections()
+        self._refresh_covers_summary()  # le compte des couvertures suit les plateformes affichées
+
+    def _on_import(self, *_):
+        moved = P.import_all(self.con)
+        self._build_lib()
+        self._refresh_moods()
+        self._fetch_tags_bg()  # mots clés des nouveaux jeux itch.io / Steam
+        self._fetch_covers_bg()
+        msg = tr("Library imported")
+        if moved:
+            msg += " · " + tr("{n} paused", n=len(moved))
+        self.toasts.add_toast(Adw.Toast.new(msg))
