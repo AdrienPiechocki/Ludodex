@@ -13,10 +13,11 @@ from .theme import _install_css
 from .pickview import PickViewMixin
 from .library import LibraryMixin
 from .retrospec import RetroMixin
+from .notes import NotesMixin
 from .settingsui import SettingsMixin
 
 
-class Win(PickViewMixin, LibraryMixin, RetroMixin, SettingsMixin, Adw.ApplicationWindow):
+class Win(PickViewMixin, LibraryMixin, RetroMixin, NotesMixin, SettingsMixin, Adw.ApplicationWindow):
 
     def __init__(self, app, do_import=True):
         super().__init__(application=app, title="Ludodex", default_width=1000, default_height=720)
@@ -37,7 +38,8 @@ class Win(PickViewMixin, LibraryMixin, RetroMixin, SettingsMixin, Adw.Applicatio
         self.stack = stack
         self._page_meta = {"pick": (tr("Pick"), "media-playlist-shuffle-symbolic"),
                            "lib": (tr("Library"), "view-grid-symbolic"),
-                           "retro": (tr("Retrospective"), "document-open-recent-symbolic")}
+                           "retro": (tr("Retrospective"), "document-open-recent-symbolic"),
+                           "notes": (tr("Notes"), "document-edit-symbolic")}
         self.lib_sort = P.get_setting(self.con, "lib_sort")
         if self.lib_sort not in ("name", "recent", "played"):
             self.lib_sort = "name"
@@ -47,7 +49,7 @@ class Win(PickViewMixin, LibraryMixin, RetroMixin, SettingsMixin, Adw.Applicatio
         # toutes les pages sont construites (leur état sert ailleurs) ; seuls les modules
         # activés sont ajoutés à la barre
         self._pages = {"pick": self._build_pick(), "lib": self._build_library_page(),
-                       "retro": self._build_retro_page()}
+                       "retro": self._build_retro_page(), "notes": self._build_notes_page()}
         self._sync_modules()
         stack.connect("notify::visible-child-name", self._on_page_changed)
         self._build_lib()
@@ -93,14 +95,14 @@ class Win(PickViewMixin, LibraryMixin, RetroMixin, SettingsMixin, Adw.Applicatio
         self.stack.add_titled_with_icon(self._pages[name], name, title, icon)
 
     def _sync_modules(self):
-        """N'affiche que les modules activés (bibliothèque en tête, puis choix, rétrospective),
+        """N'affiche que les modules activés (bibliothèque en tête, puis choix, rétrospective, notes),
         en conservant la page courante si elle est toujours disponible."""
         keep = self.stack.get_visible_child_name()
-        for name in ("lib", "pick", "retro"):
+        for name in ("lib", "pick", "retro", "notes"):
             child = self.stack.get_child_by_name(name)
             if child is not None:
                 self.stack.remove(child)
-        for name in ("lib", "pick", "retro"):
+        for name in ("lib", "pick", "retro", "notes"):
             if name == "lib" or P.module_enabled(self.con, name):
                 self._add_page(name)
         self.stack.set_visible_child_name(keep if keep and self.stack.get_child_by_name(keep) else "lib")
@@ -108,6 +110,7 @@ class Win(PickViewMixin, LibraryMixin, RetroMixin, SettingsMixin, Adw.Applicatio
 
     def _on_close(self, *_):
         P.close_open_sessions(self.con)  # fin de session = durée enregistrée
+        self._flush_note()               # une note en cours d'édition est enregistrée
         return False
 
 

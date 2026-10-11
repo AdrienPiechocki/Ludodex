@@ -3,7 +3,7 @@
 import argparse, datetime, urllib.error
 
 from i18n import available, get_lang, tr
-from .db import db, find, save_lang
+from .db import db, find, save_lang, get_note, set_note
 from .launch import launch_text, set_launch_override, check_command
 from .steam import backfill_steam_logs
 from .tags import diagnose, fetch_missing_tags
@@ -43,6 +43,9 @@ def main():
     a.add_argument("name"); a.add_argument("command")
     rn = sub.add_parser("rename")  # le nom modifié résiste aux réimportations
     rn.add_argument("name"); rn.add_argument("new", help=tr('new name ("" = original name on next import)'))
+    nt = sub.add_parser("note")  # note libre attachée à un jeu
+    nt.add_argument("name")
+    nt.add_argument("text", nargs="?", default=None, help=tr('no argument: show; "": clear the note'))
     ex = sub.add_parser("exe")  # chemin ou commande de lancement personnalisé
     ex.add_argument("name")
     ex.add_argument("command", nargs="?", default=None, help=tr('no argument: show; "": restore the default launch'))
@@ -108,6 +111,13 @@ def main():
             con.execute("UPDATE games SET name_locked=0 WHERE id=?", (g["id"],))
         con.commit()
         print("OK:", new or tr("{name} (original name restored on next import)", name=g["name"]))
+    elif args.cmd == "note":
+        g = find(con, args.name)
+        if args.text is None:
+            print(get_note(con, g["id"]))
+        else:
+            set_note(con, g["id"], args.text)
+            print("OK:", g["name"] if args.text.strip() else tr("note cleared"))
     elif args.cmd == "exe":
         g = find(con, args.name)
         if args.command is None:

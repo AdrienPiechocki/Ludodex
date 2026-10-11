@@ -73,7 +73,7 @@ def db():
                      ("store_url", "TEXT NOT NULL DEFAULT ''"), ("cover_path", "TEXT NOT NULL DEFAULT ''"),
                      ("cover_fetched", "INTEGER NOT NULL DEFAULT 0"), ("sgdb_id", "INTEGER NOT NULL DEFAULT 0"),
                      ("name_locked", "INTEGER NOT NULL DEFAULT 0"), ("launch_override", "TEXT NOT NULL DEFAULT ''"),
-                     ("custom_cover", "TEXT NOT NULL DEFAULT ''")):
+                     ("custom_cover", "TEXT NOT NULL DEFAULT ''"), ("notes", "TEXT NOT NULL DEFAULT ''")):
         if col not in cols:
             con.execute(f"ALTER TABLE games ADD COLUMN {col} {ddl}")
     ccols = {r["name"] for r in con.execute("PRAGMA table_info(collections)")}
@@ -112,6 +112,18 @@ def get_setting(con, key, default=""):
 def set_setting(con, key, value):
     con.execute("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                 (key, value))
+    con.commit()
+
+
+def get_note(con, gid):
+    """Note libre attachée à un jeu ('' si aucune)."""
+    r = con.execute("SELECT notes FROM games WHERE id=?", (gid,)).fetchone()
+    return r["notes"] if r else ""
+
+
+def set_note(con, gid, text):
+    """Enregistre la note d'un jeu (chaîne vide = note effacée)."""
+    con.execute("UPDATE games SET notes=? WHERE id=?", (text or "", gid))
     con.commit()
 
 

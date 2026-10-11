@@ -42,7 +42,7 @@ class SettingsMixin:
             title=tr("Modules"),
             description=tr("Hide a screen from the main window. Nothing is deleted."))
         self._module_sw = {}
-        for name, label in (("pick", "Pick"), ("retro", "Retrospective")):
+        for name, label in (("pick", "Pick"), ("retro", "Retrospective"), ("notes", "Notes")):
             sw = Adw.SwitchRow(title=tr(label), active=P.module_enabled(self.con, name))
             sw.connect("notify::active", self._on_module, name)
             mod_group.add(sw)
@@ -107,6 +107,17 @@ class SettingsMixin:
             pick_group.add(prow)
             page.add(pick_group)
             self._pick_owned_chk = pchk  # référence pour les tests
+        elif scope == "notes":
+            notes_group = Adw.PreferencesGroup(title=tr("Notes"))
+            spin = Adw.SpinRow.new_with_range(8, 40, 1)
+            spin.set_title(tr("Text size"))
+            spin.set_subtitle(tr("In points"))
+            spin.set_value(self.notes_font_size)
+            spin.connect("notify::value", self._on_notes_font)  # connecté après la valeur initiale
+            notes_group.add(spin)
+            page.add(notes_group)
+            self._notes_group = notes_group   # référence pour les tests
+            self._notes_font_spin = spin
 
         # --- suite des réglages généraux ---
         imp_group = Adw.PreferencesGroup(
@@ -148,6 +159,11 @@ class SettingsMixin:
     def _on_module(self, sw, _p, name):
         P.set_setting(self.con, f"module_{name}", "1" if sw.get_active() else "0")
         self._sync_modules()
+
+    def _on_notes_font(self, spin, _p):
+        v = int(spin.get_value())
+        P.set_setting(self.con, "notes_font_size", str(v))
+        self._apply_note_font(v)
 
     def _rebuild(self):
         """Les textes sont posés à la construction : on rouvre la fenêtre dans la nouvelle langue."""

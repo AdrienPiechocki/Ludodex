@@ -95,6 +95,10 @@ class LibraryMixin:
             w.set_visible(on_lib)
         if page == "retro":
             self._refresh_retro()
+        if page == "notes":
+            self._refresh_notes()  # la liste suit les jeux ajoutés / renommés ailleurs
+        else:
+            self._flush_note()     # quitter l'onglet enregistre la note en cours
         self._refresh_moods()
         self._refresh_pick_collections()
 
@@ -704,7 +708,7 @@ class LibraryMixin:
 
         cover_row = self._cover_row(g, pic)  # couverture choisie à la main, prioritaire sur SteamGridDB
 
-        hid = Adw.SwitchRow(title=tr("Hidden (stop suggesting)"), active=bool(g["hidden"]))
+        hid = Adw.SwitchRow(title=tr("Hidden"), active=bool(g["hidden"]))
 
         def on_hide(r, _p):
             self._upd(gid, "hidden", int(r.get_active()))
