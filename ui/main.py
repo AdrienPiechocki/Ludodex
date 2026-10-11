@@ -121,7 +121,6 @@ class App(Adw.Application):
     def do_activate(self):
         win = self.props.active_window or Win(self)
         win.present()
-        win.maximize()  # l'application démarre maximisée
 
 
 if __name__ == "__main__":
