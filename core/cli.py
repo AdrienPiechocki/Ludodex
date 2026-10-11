@@ -9,7 +9,7 @@ from .steam import backfill_steam_logs
 from .tags import diagnose, fetch_missing_tags
 from .covers import sgdb_key, covers_dir, cover_file, fetch_missing_covers, fetch_cover, SgdbAuthError, \
     set_custom_cover, clear_custom_cover
-from .stats import auto_tidy, refresh_stats, week_text, fmt_minutes
+from .stats import auto_tidy, refresh_stats, week_text, month_text, year_text, fmt_minutes
 from .game_collections import find_collection, list_collections, add_collection, rename_collection, delete_collection, \
     collection_game_ids, add_game_to_collection, remove_game_from_collection
 from .importers import import_all, add_custom
@@ -184,6 +184,10 @@ def main():
     elif args.cmd == "stats":
         refresh_stats(con)
         print(week_text(con))
+        print()
+        print(month_text(con))
+        print()
+        print(year_text(con))
         for g in con.execute("SELECT id, name, playtime_min FROM games WHERE playtime_min > 0"
                              + ((" AND " + source_cond(con)) if source_cond(con) else "")
                              + " ORDER BY playtime_min DESC LIMIT 15"):

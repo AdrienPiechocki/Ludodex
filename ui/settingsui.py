@@ -25,6 +25,7 @@ class SettingsMixin:
         self._settings_scope = scope
         self._module_sw = self._import_sw = self._auto_rows = None
         self._hide_short_scale = self._hide_short_row = None
+        self._retro_enable_sw = None
         self._lib_group = self._auto_group = self._retro_group = self._pick_group = None
         self._pick_owned_chk = None
         self._show_hidden_chk = self._show_not_installed_chk = None
@@ -83,7 +84,7 @@ class SettingsMixin:
             rscale.set_adjustment(Gtk.Adjustment(lower=0, upper=15, step_increment=1, page_increment=1))
             rscale.set_value(self.hide_short_min)
             rrow = Adw.ActionRow(title=self._hide_short_label(self.hide_short_min),
-                                 subtitle=tr("In the weekly timeline"))
+                                 subtitle=tr("In the timelines"))
             rrow.add_suffix(rscale)
 
             def _on_scale(scale, row=rrow):
@@ -96,6 +97,15 @@ class SettingsMixin:
             page.add(retro_group)
             self._hide_short_scale = rscale  # références pour les tests
             self._hide_short_row = rrow
+
+            timelines = Adw.PreferencesGroup(title=tr("Timelines"))
+            self._retro_enable_sw = {}
+            for kind, label in (("week", "This week"), ("month", "This month"), ("year", "This year")):
+                sw = Adw.SwitchRow(title=tr(label), active=P.retro_enabled(self.con, kind))
+                sw.connect("notify::active", self._on_retro_enable, kind)
+                timelines.add(sw)
+                self._retro_enable_sw[kind] = sw
+            page.add(timelines)
         elif scope == "pick":
             self._pick_group = pick_group = Adw.PreferencesGroup(title=tr("Pick"))
             pchk = Gtk.CheckButton(active=self.pick_owned, valign=Gtk.Align.CENTER)
@@ -164,6 +174,10 @@ class SettingsMixin:
         v = int(spin.get_value())
         P.set_setting(self.con, "notes_font_size", str(v))
         self._apply_note_font(v)
+
+    def _on_retro_enable(self, sw, _p, kind):
+        P.set_setting(self.con, f"retro_enable_{kind}", "1" if sw.get_active() else "0")
+        self._refresh_retro()
 
     def _rebuild(self):
         """Les textes sont posés à la construction : on rouvre la fenêtre dans la nouvelle langue."""
