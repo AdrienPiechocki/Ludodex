@@ -423,24 +423,41 @@ def _int(v):
 
 
 def parse_steam_schema(data):
-    """GetSchemaForGame → [{ach_id, title, description, icon}] ; [] si le jeu
-    n'a aucun succès Steam (c'est le signe à retenir : rien à afficher)."""
+    """GetSchemaForGame → [{ach_id, title, description, icon, hidden}] ; [] si le
+    jeu n'a aucun succès Steam (c'est le signe à retenir : rien à afficher).
+
+    Steam range les succès sous `game.availableGameStats.achievements` — pas
+    directement sous `game`, qui ne porte que `gameName` et `gameVersion`. Le
+    schéma donne le libellé, l'icône et le drapeau `hidden` (spoiler), mais PAS
+    la description : elle ne vient que de la progression du compte, d'où le
+    merge dans `sync_steam_game`. Un jeu sans succès répond `{"game": {}}`."""
     jeu = data.get("game") if isinstance(data, dict) else None
-    if not isinstance(jeu, dict):
+    stats = jeu.get("availableGameStats") if isinstance(jeu, dict) else None
+    if not isinstance(stats, dict):
         return []
     out = []
-    for a in jeu.get("achievements") or []:
+    for a in stats.get("achievements") or []:
         if not isinstance(a, dict) or not a.get("name"):
             continue
         out.append({"ach_id": str(a["name"]),
                     "title": _loc(a.get("displayName")) or str(a["name"]),
-                    "description": _loc(a.get("description")),
-                    "icon": _loc(a.get("icon"))})
+                    "description": "",
+                    "icon": _loc(a.get("icon")),
+                    "hidden": _int(a.get("hidden"))})
     return out
 
 
 def parse_steam_progress(data):
     """GetPlayerAchievements → {ach_id: timestamp de déblocage} ; 0 = verrouillé."""
+    return {k: v["earned_at"] for k, v in parse_steam_compte(data).items()}
+
+
+def parse_steam_compte(data):
+    """GetPlayerAchievements → {ach_id: {earned_at, description}}.
+
+    C'est la SEULE source des descriptions : le schéma n'en contient pas. Un
+    joueur qui n'a jamais lancé le jeu reçoit un 400 « no stats » — pas de
+    progression, donc rien à débloquer, et surtout rien à faire échouer."""
     ps = data.get("playerstats") if isinstance(data, dict) else None
     if not isinstance(ps, dict) or ps.get("success") is False:
         return {}
@@ -448,7 +465,9 @@ def parse_steam_progress(data):
     for a in ps.get("achievements") or []:
         if not isinstance(a, dict) or not a.get("apiname"):
             continue
-        out[str(a["apiname"])] = _int(a.get("unlocktime")) if _int(a.get("achieved")) else 0
+        out[str(a["apiname"])] = {
+            "earned_at": _int(a.get("unlocktime")) if _int(a.get("achieved")) else 0,
+            "description": str(a.get("description") or "")}
     return out
 
 
@@ -458,15 +477,16 @@ def save_steam_achievements(con, gid, achievements):
     for a in achievements:
         con.execute(
             "INSERT OR REPLACE INTO steam_achievements "
-            "(game_id, ach_id, title, description, icon, earned_at) VALUES (?,?,?,?,?,?)",
-            (gid, a["ach_id"], a["title"], a["description"], a.get("icon", ""), a["earned_at"]))
+            "(game_id, ach_id, title, description, icon, hidden, earned_at) VALUES (?,?,?,?,?,?,?)",
+            (gid, a["ach_id"], a["title"], a["description"], a.get("icon", ""),
+             int(a.get("hidden") or 0), a["earned_at"]))
     con.commit()
 
 
 def steam_achievements(con, gid):
     """Succès Steam en cache : débloqués d'abord, puis par titre."""
     return [dict(r) for r in con.execute(
-        "SELECT ach_id, title, description, icon, earned_at FROM steam_achievements "
+        "SELECT ach_id, title, description, icon, hidden, earned_at FROM steam_achievements "
         "WHERE game_id=? ORDER BY (earned_at=0), title COLLATE NOCASE", (gid,))]
 
 
@@ -506,24 +526,33 @@ def sync_steam_game(con, gid, fetch=None):
     if not schema:
         save_steam_achievements(con, gid, [])
         return 0
-    earned = parse_steam_progress(steam_get(
+    compte = parse_steam_compte(steam_get(
         con, "ISteamUserStats/GetPlayerAchievements/v1/",
         {"steamid": sid, "appid": appid, "l": "english"}, fetch=fetch))
-    out = [{**a, "earned_at": earned.get(a["ach_id"], 0)} for a in schema]
+    out = []
+    for a in schema:
+        etat = compte.get(a["ach_id"], {})
+        # Le schéma porte le libellé, la progression porte la description et
+        # la date : aucun des deux endpoints n'est complet tout seul.
+        out.append({**a,
+                    "description": a["description"] or etat.get("description", ""),
+                    "earned_at": etat.get("earned_at", 0)})
     out.sort(key=lambda a: (a["earned_at"] == 0, a["title"].lower()))
     save_steam_achievements(con, gid, out)
     return len(out)
 
 
-def sync_steam_games(con, fetch=None):
+def sync_steam_games(con, fetch=None, progress=None):
     """Télécharge les succès des jeux Steam installés ou joués non encore en cache.
 
     Seuls les jeux installés ou déjà joués sont interrogés : inutile de
     dépenser deux appels par jeu de bibliothèque jamais lancé. Déjà en cache →
     rappelé seulement par la 🔄 du jeu, comme pour RetroAchievements. Les
     identifiants sont vérifiés AVANT la boucle : un compte mal renseigné doit
-    le dire une fois, pas une fois par jeu. Renvoie le nombre de jeux
-    enregistrés."""
+    le dire une fois, pas une fois par jeu. `progress(i, total)` est appelé
+    après chaque jeu : le compte réel compte ~120 jeux et ~2 appels chacun,
+    soit une bonne minute d'attente qui ne doit pas se deviner. Renvoie le
+    nombre de jeux enregistrés."""
     if not steam_api_key(con):
         raise SteamAuthError(tr("Steam: API key required"))
     if not steam_id64(con):
@@ -531,13 +560,15 @@ def sync_steam_games(con, fetch=None):
     rows = con.execute("SELECT id FROM games WHERE source='steam' "
                        "AND (installed=1 OR playtime_min>0)").fetchall()
     n = 0
-    for r in rows:
+    for i, r in enumerate(rows, 1):
         gid = r["id"]
-        if con.execute("SELECT 1 FROM steam_achievements WHERE game_id=?", (gid,)).fetchone():
-            continue
         try:
-            if sync_steam_game(con, gid, fetch=fetch):
+            deja = con.execute("SELECT 1 FROM steam_achievements WHERE game_id=?",
+                               (gid,)).fetchone()
+            if not deja and sync_steam_game(con, gid, fetch=fetch):
                 n += 1
         except (SteamError, OSError):
-            continue          # un jeu en échec ne bloque pas les suivants
+            pass                     # un jeu en échec ne bloque pas les suivants
+        if progress:
+            progress(i, len(rows))
     return n

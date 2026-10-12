@@ -411,9 +411,11 @@ def is_masked(a, show_hidden=False):
     Source unique de vérité du masquage : le rendu de l'UI et la recherche des
     succès doivent donner le même verdict, sinon la barre de recherche sert
     d'oracle — on tape un nom au hasard et l'apparition d'une ligne confirme le
-    spoiler. `hidden` n'existe que dans le YAML local : les succès
-    RetroAchievements (sans cette clé) ne sont jamais masqués."""
-    return bool(a.get("hidden")) and not bool(a.get("done")) and not show_hidden
+    spoiler. `hidden` n'existe pas chez RetroAchievements (jamais masqués), mais
+    existe dans le YAML local ET dans le schéma Steam (drapeau 0/1) : le verdict
+    passe par `is_unlocked`, seule fonction qui connaît toutes les sources, pour
+    qu'un succès caché se révèle dès qu'il est acquis."""
+    return bool(a.get("hidden")) and not is_unlocked(a) and not show_hidden
 
 
 def filter_achievements(rows, status="all", query="", show_hidden=False):

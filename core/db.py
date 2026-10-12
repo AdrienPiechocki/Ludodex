@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS steam_achievements (
     title TEXT NOT NULL DEFAULT '',
     description TEXT NOT NULL DEFAULT '',
     icon TEXT NOT NULL DEFAULT '',
+    hidden INTEGER NOT NULL DEFAULT 0,   -- drapeau spoiler de Steam (1 = caché)
     earned_at INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (game_id, ach_id)
 );
@@ -122,6 +123,9 @@ def db():
         if "minutes" not in scols:
             con.execute("ALTER TABLE sessions ADD COLUMN minutes INTEGER NOT NULL DEFAULT 0")
         con.execute("UPDATE sessions SET ended=started, minutes=0 WHERE ended=0")  # sessions héritées : clôturées
+    hcols = {r["name"] for r in con.execute("PRAGMA table_info(steam_achievements)")}
+    if "hidden" not in hcols:  # table créée sans le drapeau spoiler de Steam
+        con.execute("ALTER TABLE steam_achievements ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
     ensure_auto_collections(con)
     con.execute("PRAGMA foreign_keys=ON")
     load_lang(con)  # langue choisie dans les réglages (sinon celle du système)

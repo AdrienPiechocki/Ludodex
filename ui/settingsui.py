@@ -32,7 +32,7 @@ class SettingsMixin:
         self._ach_show_hidden_chk = self._ra_user_row = self._ra_key_row = None
         self._ra_sync_row = self._ra_enabled_sw = None   # groupes réouvrables à l'identique
         self._steam_key_row = self._steam_id_row = None
-        self._steam_sync_row = self._steam_enabled_sw = None
+        self._steam_sync_row = self._steam_enabled_sw = self._steam_sync_btn = None
         self._notes_group = self._notes_font_spin = None   # curseur de la page précédente
         page = Adw.PreferencesPage()
 
@@ -218,8 +218,8 @@ class SettingsMixin:
             st_group.add(st_sync_row)
             for w in (st_key_row, st_id_row, st_sync_row):
                 w.set_sensitive(st_enabled)
-            self._steam_key_row, self._steam_id_row, self._steam_sync_row = \
-                st_key_row, st_id_row, st_sync_row
+            self._steam_key_row, self._steam_id_row, self._steam_sync_row, \
+                self._steam_sync_btn = st_key_row, st_id_row, st_sync_row, st_sync_btn
             page.add(st_group)
 
         # --- suite des réglages généraux ---
@@ -362,14 +362,60 @@ class SettingsMixin:
         self._toast_settings(tr("Steam settings saved"))
 
     def _on_steam_sync(self, *_btn):
+        """Télécharge les succès des jeux du compte, SANS figer l'interface.
+
+        Le travail part dans un fil de fond doté de sa propre connexion (le
+        motif exact de la récupération des couvertures) : la Steam Web API
+        répond en ~0,3 s par appel et le compte compte des centaines de jeux
+        — deux appels par jeu, soit l'application gelée une quarantaine de
+        secondes sur le fil GTK principal. Le retour se fait donc par
+        `GLib.idle_add`, avec le bouton grisé et la ligne en « Fetching… »."""
         self._on_steam_credentials()   # on enregistre d'abord ce qui est saisi
-        try:
-            n = P.sync_steam_games(self.con)
-        except (P.SteamError, OSError) as e:
-            return self._toast_settings(str(e))
+        if getattr(self, "_steam_syncing", False):
+            return self._toast_settings(tr("Already fetching"))
+        self._steam_syncing = True
+        if self._steam_sync_btn is not None:
+            self._steam_sync_btn.set_sensitive(False)
+        if self._steam_sync_row is not None:
+            self._steam_sync_row.set_subtitle(tr("Fetching…"))
+
+        def work():
+            n, err = 0, None
+            try:
+                con = P.db()          # connexion du fil : `self.con` lui est interdit
+                try:
+                    # Une minute d'attente sur un vrai compte : on affiche où
+                    # en est la synchro plutôt qu'un « Fetching… » figé.
+                    def progress(i, total):
+                        GLib.idle_add(self._steam_sync_progress, i, total)
+                    n = P.sync_steam_games(con, progress=progress)
+                finally:
+                    con.close()
+            except Exception as e:    # rien ne doit laisser le bouton bloqué
+                err = str(e) or type(e).__name__
+            finally:
+                self._steam_syncing = False
+            GLib.idle_add(self._steam_sync_done, n, err)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _steam_sync_progress(self, i, total):
+        """Retour du fil de fond : « Fetching… (42/122) » en cours de route."""
+        if self._steam_sync_row is not None:
+            self._steam_sync_row.set_subtitle(f"{tr('Fetching…')} ({i}/{total})")
+        return False
+
+    def _steam_sync_done(self, n, err):
+        """Retour du fil de fond : le réglage a pu être fermé entre-temps."""
+        if self._steam_sync_btn is not None:
+            self._steam_sync_btn.set_sensitive(True)
+        if self._steam_sync_row is not None:
+            self._steam_sync_row.set_subtitle(
+                tr("Download the achievements of your games on Steam"))
         if hasattr(self, "_refresh_achievements"):
             self._refresh_achievements()
-        self._toast_settings(tr("{n} game(s) synced", n=n))
+        self._toast_settings(err or tr("{n} game(s) synced", n=n))
+        return False
 
     def _on_covers(self, *_):
         if not P.sgdb_key():

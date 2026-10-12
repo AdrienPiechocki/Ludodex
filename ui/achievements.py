@@ -477,20 +477,30 @@ class AchievementsMixin:
 
         Trait pour trait identique, sauf la mention des points : Steam n'en
         attribue pas, et afficher « 0 pts » serait mensonger — la ligne se
-        contente alors de son cadenas."""
+        contente alors de son cadenas.
+
+        Un succès `hidden` (le drapeau spoiler de Steam, absent de
+        RetroAchievements) reste sous libellé générique tant qu'il est
+        verrouillé : c'est le même verdict que la recherche, tiré de
+        `core.tracker.is_masked`, sinon le nom réel resterait lisible ici
+        pendant que la recherche le prétendrait introuvable."""
         done = bool(a["earned_at"])
-        row = Adw.ActionRow(title=GLib.markup_escape_text(a["title"]))
+        mask = P.is_masked(a, self._ach_show_hidden)
+        row = Adw.ActionRow(title=tr("Hidden achievement") if mask
+                            else GLib.markup_escape_text(a["title"]))
         row.set_activatable(False)
-        row.add_prefix(Gtk.Label(label="🏆" if done else "🔒",
-                                 css_classes=["accent"] if done else ["dim-label"]))
-        if a["description"]:
+        row.add_prefix(Gtk.Label(label="❔" if mask else ("🏆" if done else "🔒"),
+                                 css_classes=["accent"] if (done and not mask) else ["dim-label"]))
+        if a["description"] and not mask:
             row.set_subtitle(GLib.markup_escape_text(a["description"]))
-        if done:
-            date = datetime.datetime.fromtimestamp(a["earned_at"]).strftime("%d/%m/%Y")
-            row.add_suffix(Gtk.Label(label=tr("Unlocked {date}", date=date), css_classes=["accent"]))
-        elif a.get("points") is not None:
-            row.add_suffix(Gtk.Label(label=tr("{points} pts", points=a["points"]),
-                                     css_classes=["dim-label"]))
+        if not mask:  # ni date ni points sous le masque : ils trahiraient le succès
+            if done:
+                date = datetime.datetime.fromtimestamp(a["earned_at"]).strftime("%d/%m/%Y")
+                row.add_suffix(Gtk.Label(label=tr("Unlocked {date}", date=date),
+                                         css_classes=["accent"]))
+            elif a.get("points") is not None:
+                row.add_suffix(Gtk.Label(label=tr("{points} pts", points=a["points"]),
+                                         css_classes=["dim-label"]))
         return row
 
     def _resync_game(self, gid):
