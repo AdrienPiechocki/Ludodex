@@ -2044,11 +2044,3 @@ achievements:
     icon: "🧼"
     match: 'BOUNTY DECREASED: 0\b'
     case_insensitive: true
-
-  # Un succès caché : son nom, sa description et son icône restent masqués
-  # tant qu'il est verrouillé ; il est révélé une fois débloqué.
-  - name: "A Secret Meeting"
-    description: "A hidden achievement, revealed only once unlocked."
-    icon: "🤫"
-    match: 'SECRET ENCOUNTER:'
-    hidden: true
