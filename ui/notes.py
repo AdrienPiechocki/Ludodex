@@ -49,7 +49,7 @@ class NotesMixin:
         self._note_rows = {}
         self._md_applying = False    # pose des balises en cours : on ignore les signaux
         self._md_idle = None
-        self._note_tasks = []        # cases à cocher à dessiner : (début du marqueur, coché)
+        self._note_tasks = []        # cases à cocher : (début du tiret, fin du `]`, coché)
 
         # --- volet gauche : recherche, filtre et liste des jeux ---
         self.notes_search = Gtk.SearchEntry()
@@ -141,14 +141,34 @@ class NotesMixin:
         return paned
 
     # ---------- aperçu en direct ----------
+    def _note_bg_color(self):
+        """Couleur de fond réelle de l'éditeur, pour peindre les marqueurs dedans.
+
+        GTK4 ne retient que le RGB de `foreground_rgba` : avec `Gdk.RGBA(0,0,0,0)`
+        les crochets `[ ]` n'étaient pas masqués mais repeints NOIRS ET OPEQUES
+        et restaient visibles à travers la case creuse. Peindre le marqueur dans
+        la couleur du fond le fait disparaître tout en lui gardant sa place — ce
+        qu'`invisible=True` ne fait pas : il supprime la largeur et le texte
+        suivant remonte, ce qui décalerait la case sur la tâche."""
+        sc = self.note_view.get_style_context()
+        for name in ("theme_base_color", "theme_bg_color"):
+            try:
+                found, col = sc.lookup_color(name)
+            except Exception:
+                found, col = False, None
+            if found:
+                return col
+        return Gdk.RGBA(1, 1, 1, 1)
+
     def _create_md_tags(self):
         """Une balise par style ; « md-hidden » masque les marqueurs de syntaxe."""
         buf = self.note_buffer
         names = ["md-hidden", "md-bold", "md-italic", "md-bi", "md-strike", "md-code",
                  "md-quote", "md-link", "md-list", "md-checked", "md-task", "md-tasklead"]
         buf.create_tag("md-hidden", invisible=True)
-        buf.create_tag("md-task", foreground_rgba=Gdk.RGBA(0, 0, 0, 0))  # garde la largeur
-        buf.create_tag("md-tasklead", foreground_rgba=Gdk.RGBA(0, 0, 0, 0), scale=0.01)  # tiret réduit à zéro
+        bg = self._note_bg_color()
+        buf.create_tag("md-task", foreground_rgba=bg)                   # peint dans le fond : garde la largeur
+        buf.create_tag("md-tasklead", foreground_rgba=bg, scale=0.01)   # tiret réduit à zéro
         buf.create_tag("md-bold", weight=Pango.Weight.BOLD)
         buf.create_tag("md-italic", style=Pango.Style.ITALIC)
         buf.create_tag("md-bi", weight=Pango.Weight.BOLD, style=Pango.Style.ITALIC)
@@ -248,8 +268,9 @@ class NotesMixin:
                     else:
                         start = line.marker[0] if line.marker else ts
                         self._apply_tag(buf, ls, "md-tasklead", start, ts)  # tiret réduit à zéro (la case prend sa place)
-                        self._apply_tag(buf, ls, "md-task", ts, te)         # `[ ]`/`[x]` : transparent (garde la largeur)
-                        self._note_tasks.append((ls.get_offset() + ts, checked))
+                        self._apply_tag(buf, ls, "md-task", ts, te)         # `[ ]`/`[x]` : peints dans le fond (garde la largeur)
+                        # tout l'emplacement (tiret -> fin de `]`) : c'est lui que la case doit occuper
+                        self._note_tasks.append((ls.get_offset() + start, ls.get_offset() + te, checked))
                 elif line.marker:
                     self._apply_tag(buf, ls, "md-list", *line.marker)
                 if line.checked and lineno != cursor_line:   # pas de surlignage en édition
@@ -360,11 +381,18 @@ class NotesMixin:
         if not self._note_tasks or self.notes_game_id is None:
             return
         view, buf = self.note_view, self.note_buffer
-        for offset, checked in self._note_tasks:
-            r = view.get_iter_location(buf.get_iter_at_offset(offset))
-            x, y = view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, r.x, r.y)
-            side = max(12.0, r.height - 3.0)
-            y += (r.height - side) / 2.0            # ancré à gauche du `[` : position identique coché ou non
+        for start, end, checked in self._note_tasks:
+            r0 = view.get_iter_location(buf.get_iter_at_offset(start))
+            r1 = view.get_iter_location(buf.get_iter_at_offset(end))
+            x, y = view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, r0.x, r0.y)
+            x_end, _ = view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, r1.x, r1.y)
+            span = x_end - x                        # emplacement complet : tiret + `[ ]`
+            if span <= 1.0:
+                continue
+            # Jamais plus large que l'emplacement : le côté ne dépendait que de la
+            # hauteur de ligne, donc la case débordait à droite du `]` sur le texte.
+            side = min(max(12.0, r0.height - 3.0), span)
+            y += (r0.height - side) / 2.0           # ancré au tiret : position identique coché ou non
             self._check_path(cr, x, y, side)
             if checked:
                 cr.set_source_rgb(*_CHECK_ACCENT)
