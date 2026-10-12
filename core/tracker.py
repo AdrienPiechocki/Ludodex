@@ -151,15 +151,18 @@ def tracked_games(con):
 
 
 def achievement_games(con):
-    """[(id, nom, has_tracker, has_ra)] des jeux ayant un suivi YAML et/ou des succès RA.
+    """[(id, nom, has_tracker, has_ra)] des jeux ayant un suivi YAML, un lien RA
+    ou des succès Steam en cache.
 
     Sert à la liste de gauche de la page « Achievements » : un jeu apparaît s'il a un
-    fichier de log suivi et/ou un lien vers un jeu RetroAchievements.
+    fichier de log suivi, et/ou un lien vers un jeu RetroAchievements, et/ou des
+    succès Steam déjà téléchargés.
 
-    Si RetroAchievements est désactivé dans les réglages, un jeu n'ayant QUE ce
-    lien n'a plus rien à montrer ici : il disparaît. Ceux suivis par un YAML, eux,
-    restent — leurs succès locaux ne dépendent pas de RetroAchievements."""
+    Chaque source peut être coupée dans les réglages ; un jeu qui n'a QUE cette
+    source disparaît alors — il n'aurait plus rien à montrer. Ceux suivis par un
+    YAML, eux, restent : leurs succès locaux ne dépendent d'aucune synchro."""
     from .ra import ra_linked_games, ra_enabled  # import local : évite un cycle de chargement
+    from .steam import steam_enabled
     info = {}
     for gid, name, _yaml, _log in tracked_games(con):
         info[gid] = [name, True, False]
@@ -170,6 +173,13 @@ def achievement_games(con):
                 continue
             entry = info.setdefault(gid, [row["name"], False, False])
             entry[2] = True
+    if steam_enabled(con):
+        # Seuls les jeux dont le cache n'est pas vide comptent : un jeu Steam
+        # sans succès téléchargés ne se distingue pas d'un jeu sans succès.
+        for r in con.execute("SELECT g.id, g.name FROM games g WHERE g.source='steam' "
+                             "AND EXISTS (SELECT 1 FROM steam_achievements s "
+                             "WHERE s.game_id=g.id)"):
+            info.setdefault(r["id"], [r["name"], False, False])
     return sorted(((gid, v[0], v[1], v[2]) for gid, v in info.items()),
                   key=lambda t: t[1].lower())
 
@@ -194,20 +204,29 @@ def show_hidden(con):
 def watch_paths(con, gid):
     """Chemins dont l'écriture signale « ce jeu est en train d'être joué ».
 
-    Suivi YAML → son log. Jeu RetroAchievements importé par RetroArch → le
-    fichier de runtime `.lrtl` que RetroArch met à jour en jouant : même
-    principe qu'un log, donc même détection. Renvoie [] s'il n'y a rien à
-    surveiller pour ce jeu."""
+    Trois sources, cumulées — que l'une ou l'autre bouge suffit :
+      - suivi YAML → son log ;
+      - jeu importé par RetroArch (sucés RetroAchievements) → le fichier de
+        runtime `.lrtl` que RetroArch met à jour en jouant ;
+      - jeu Steam → son `appmanifest_<appid>.acf`, où Steam écrit `LastPlayed`.
+    Renvoie [] s'il n'y a rien à surveiller pour ce jeu."""
     from .importers import runtime_path_for  # import local : évite un cycle
+    from .steam import appmanifest_path
     out = []
     p = tracker_paths(con, gid)
     if p:
         out.append(p[1])
     g = con.execute("SELECT source, ext_id FROM games WHERE id=?", (gid,)).fetchone()
-    if g is not None and g["source"] == "retroarch":
+    if g is None:
+        return out
+    if g["source"] == "retroarch":
         rt = runtime_path_for(g["ext_id"])
         if rt and rt not in out:
             out.append(rt)
+    if g["source"] == "steam" and g["ext_id"].isdigit():
+        am = appmanifest_path(g["ext_id"])
+        if am and am not in out:
+            out.append(am)
     return out
 
 

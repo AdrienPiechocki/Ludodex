@@ -63,6 +63,7 @@ class AchievementsMixin:
         self.ach_game_query = ""      # recherche appliquée au volet GAUCHE (liste des jeux)
         self._ach_state = []          # succès du jeu courant AVANT tri/filtre
         self._ra_state = []           # idem pour les succès RetroAchievements
+        self._steam_state = []        # idem pour les succès Steam
         self._ach_ra_linked = False
         self._ach_show_hidden = P.show_hidden(self.con)  # réglage global des succès cachés
         self._ach_watcher = None      # LogWatcher : détecte les logs en cours d'écriture
@@ -187,20 +188,22 @@ class AchievementsMixin:
         « closed » : les écritures viennent de s'arrêter = le jeu vient de se
         fermer → un dernier scan pour récupérer les dernières lignes.
 
-        Une partie repérée met à jour les DEUX sources du jeu : le suivi YAML
-        local et, si le jeu est relié et si RetroAchievements est activé, la
-        synchro RetroAchievements. Un seul snapshot avant/après couvre donc les
-        deux, et un seul toast annonce tous les nouveaux succès."""
+        Une partie repérée met à jour les TROIS sources du jeu : le suivi YAML
+        local, la synchro RetroAchievements (jeu lié), la synchro Steam (jeu
+        d'origine Steam) — chacune seulement si elle est activée dans les
+        réglages. Un seul snapshot avant/après les couvre donc toutes, et un
+        seul toast annonce tous les nouveaux succès."""
         if not P.module_enabled(self.con, "achievements"):
             return True   # module masqué : on sonde mais on ne fait rien
         if self._ach_watcher is None:
             self._ach_watcher = P.LogWatcher()
         for gid, _reason in self._ach_watcher.poll(self.con):
             avant = self._unlocked_snapshot(gid)
-            fait_scan = self._scan_tracked(gid)        # les deux doivent tourner
+            fait_scan = self._scan_tracked(gid)        # les trois doivent tourner
             fait_ra = self._sync_ra_played(gid)         # (pas de `or` : court-circuit)
+            fait_steam = self._sync_steam_played(gid)
             nouveaux = self._unlocked_snapshot(gid) - avant
-            touche = fait_scan or fait_ra
+            touche = fait_scan or fait_ra or fait_steam
             if nouveaux:
                 g = self.con.execute("SELECT name FROM games WHERE id=?", (gid,)).fetchone()
                 self.toasts.add_toast(Adw.Toast.new(tr("{n} new achievement(s) unlocked in {game}",
@@ -212,14 +215,16 @@ class AchievementsMixin:
         return True
 
     def _unlocked_snapshot(self, gid):
-        """Ensemble des succès ACQUIS du jeu, log YAML et RetroAchievements confondus.
+        """Ensemble des succès ACQUIS du jeu : log YAML, RetroAchievements, Steam.
 
         Deux snapshots encadrant un sondage donnent d'un coup les déblocages des
-        deux sources : ni toast en double, ni succès oublié."""
+        trois sources : ni toast en double, ni succès oublié."""
         out = {("log", r["ach_id"]) for r in self.con.execute(
             "SELECT ach_id FROM achievements WHERE game_id=? AND unlocked_at>0", (gid,))}
-        return out | {("ra", r["ach_id"]) for r in self.con.execute(
+        out |= {("ra", r["ach_id"]) for r in self.con.execute(
             "SELECT ach_id FROM ra_achievements WHERE game_id=? AND earned_at>0", (gid,))}
+        return out | {("steam", r["ach_id"]) for r in self.con.execute(
+            "SELECT ach_id FROM steam_achievements WHERE game_id=? AND earned_at>0", (gid,))}
 
     def _scan_tracked(self, gid):
         """Relit le log YAML du jeu. Renvoie True si le scan a tourné.
@@ -228,7 +233,7 @@ class AchievementsMixin:
         ne fait que lire. Un log ou un YAML cassé n'interrompt rien — l'erreur est
         déjà affichée à l'ouverture du jeu."""
         if P.tracker_paths(self.con, gid) is None:
-            return False   # jeu suivi par RetroAchievements seul : rien à lire
+            return False   # jeu suivi par une seule source téléchargée : rien à lire
         try:
             P.scan(self.con, gid)
         except (FileNotFoundError, ValueError):
@@ -246,6 +251,20 @@ class AchievementsMixin:
         try:
             P.sync_game(self.con, gid)
         except (P.RaError, OSError):
+            return False
+        return True
+
+    def _sync_steam_played(self, gid):
+        """Synchronise les succès Steam pour un jeu en train d'être joué.
+
+        C'est le `appmanifest_<appid>.acf` qui bouge quand Steam lance un jeu :
+        même détection, même cadence et même tolérance d'erreur qu'avec le log.
+        Renvoie True si la synchro a tourné."""
+        if not P.steam_enabled(self.con) or P.steam_appid(self.con, gid) is None:
+            return False
+        try:
+            P.sync_steam_game(self.con, gid)
+        except (P.SteamError, OSError):
             return False
         return True
 
@@ -321,7 +340,7 @@ class AchievementsMixin:
         self._render_ach_lists()
 
     def _show_ach_game(self, gid):
-        """Charge les succès du jeu (log et/ou cache RA), puis les affiche."""
+        """Charge les succès du jeu (log et/ou caches RA et Steam), puis les affiche."""
         self.ach_game_id = gid
         g = self.con.execute("SELECT name FROM games WHERE id=?", (gid,)).fetchone()
         self._ach_name = g["name"] if g else ""
@@ -343,18 +362,21 @@ class AchievementsMixin:
             else:
                 self._ach_entries[gid] = {a["id"]: a for a in state}
                 self._ach_state = state
-        # Réglage « Use RetroAchievements » (réglages → Succès) : à OFF, aucun
-        # succès RA n'est chargé — donc ni affiché, ni compté — et le jeu n'est
-        # pas considéré comme lié, sinon la section « synchroniser » se
-        # proposerait pour rien.
+        # Réglages « Use RetroAchievements » / « Use Steam achievements »
+        # (réglages → Succès) : à OFF, la source n'est pas chargée — donc ni
+        # affichée, ni comptée — et le jeu n'est pas considéré comme lié, sinon
+        # la section « synchroniser » se proposerait pour rien.
         ra_on = P.ra_enabled(self.con)
         self._ra_state = P.ra_achievements(self.con, gid) if ra_on else []
-        self._ach_ra_linked = ra_on and P.linked(self.con, gid) is not None        # Le compteur affiché sous le titre additionne les deux sources, pour que
-        # les jeux RetroAchievements affichent leur nombre au même endroit que
-        # les jeux suivis par un fichier YAML.
+        self._ach_ra_linked = ra_on and P.linked(self.con, gid) is not None
+        self._steam_state = P.steam_achievements(self.con, gid) \
+            if P.steam_enabled(self.con) else []
+        # Le compteur affiché sous le titre additionne les TROIS sources : un jeu
+        # affiche son nombre au même endroit, d'où que viennent ses succès.
         done = sum(1 for a in self._ach_state if a["done"]) \
-            + sum(1 for a in self._ra_state if a["earned_at"])
-        total = len(self._ach_state) + len(self._ra_state)
+            + sum(1 for a in self._ra_state if a["earned_at"]) \
+            + sum(1 for a in self._steam_state if a["earned_at"])
+        total = len(self._ach_state) + len(self._ra_state) + len(self._steam_state)
         if total:
             self.ach_subtitle.set_text(tr("{done}/{total} unlocked", done=done, total=total))
             self.ach_subtitle.set_visible(True)
@@ -368,7 +390,7 @@ class AchievementsMixin:
         self._ach_rows = {}
         self._ach_group = None
         gid = self.ach_game_id
-        # Les deux listes passent par le même tri et le même filtre (logique
+        # Les trois listes passent par le même tri et le même filtre (logique
         # partagée). `show_hidden` est indispensable : sans lui, la recherche
         # matcherait le vrai nom d'un succès encore masqué et en trahirait le
         # spoiler.
@@ -378,6 +400,10 @@ class AchievementsMixin:
             self.ach_sort)
         ra_rows = P.sort_achievements(
             P.filter_achievements(self._ra_state, self.ach_filter, self.ach_query,
+                                  show_hidden=self._ach_show_hidden),
+            self.ach_sort)
+        steam_rows = P.sort_achievements(
+            P.filter_achievements(self._steam_state, self.ach_filter, self.ach_query,
                                   show_hidden=self._ach_show_hidden),
             self.ach_sort)
         if self._ach_error:
@@ -395,12 +421,15 @@ class AchievementsMixin:
             # lié au compte mais sans succès en cache : on propose la synchro
             # plutôt que d'afficher « aucun succès » (le téléchargement manque).
             self._append_ra_section(gid, [], empty=True)
-        rendered = bool(local) or bool(ra_rows) or (self._ach_ra_linked and not self._ra_state)
+        if steam_rows:
+            self._append_cached_rows(steam_rows)
+        rendered = (bool(local) or bool(ra_rows) or bool(steam_rows)
+                    or (self._ach_ra_linked and not self._ra_state))
         if not rendered:
             self._ach_group = self._new_ach_group()
             # distingue « rien pour ce jeu » de « tout est masqué par le filtre »
             msg = (tr("no achievement matches the filter")
-                   if (self._ach_state or self._ra_state)
+                   if (self._ach_state or self._ra_state or self._steam_state)
                    else tr("no achievements for this game"))
             self._add_game_error(self._ach_name, msg)
 
@@ -411,18 +440,18 @@ class AchievementsMixin:
         self.achievements_box.append(group)
         return group
 
-    # ---------- succès RetroAchievements (sans en-tête de section) ----------
+    # ---------- succès téléchargés : RetroAchievements et Steam, sans en-tête ----------
     def _append_ra_section(self, gid, rows, empty=False):
         """Ajoute les succès RetroAchievements AU MÊME groupe que les succès locaux.
 
         L'en-tête « RetroAchievements » (titre + compteur) a été retiré : le
         compte total est déjà affiché dans le sous-titre, au-dessus de la barre
-        de recherche. Les deux sources sont donc rendues d'un seul bloc — un
+        de recherche. Les sources sont donc rendues d'un seul bloc — un
         second `boxed-list` posé juste en dessous aurait l'air d'une rupture."""
-        if self._ach_group is None:
-            self._ach_group = self._new_ach_group()
-        group = self._ach_group
         if empty:
+            if self._ach_group is None:
+                self._ach_group = self._new_ach_group()
+            group = self._ach_group
             row = Adw.ActionRow(title=tr("Synchronise RetroAchievements to see them"))
             row.set_activatable(False)
             # Attention : `row.get_last_child()` renvoie la Gtk.Box INTERNE de
@@ -434,10 +463,21 @@ class AchievementsMixin:
             row.add_suffix(sync_btn)
             group.append(row)
             return
-        for a in rows:
-            group.append(self._ra_row(a))
+        self._append_cached_rows(rows)
 
-    def _ra_row(self, a):
+    def _append_cached_rows(self, rows):
+        """Ajoute des succès téléchargés (RetroAchievements, Steam) au groupe courant."""
+        if self._ach_group is None:
+            self._ach_group = self._new_ach_group()
+        for a in rows:
+            self._ach_group.append(self._source_row(a))
+
+    def _source_row(self, a):
+        """Ligne d'un succès téléchargé (RetroAchievements ou Steam).
+
+        Trait pour trait identique, sauf la mention des points : Steam n'en
+        attribue pas, et afficher « 0 pts » serait mensonger — la ligne se
+        contente alors de son cadenas."""
         done = bool(a["earned_at"])
         row = Adw.ActionRow(title=GLib.markup_escape_text(a["title"]))
         row.set_activatable(False)
@@ -448,23 +488,30 @@ class AchievementsMixin:
         if done:
             date = datetime.datetime.fromtimestamp(a["earned_at"]).strftime("%d/%m/%Y")
             row.add_suffix(Gtk.Label(label=tr("Unlocked {date}", date=date), css_classes=["accent"]))
-        else:
+        elif a.get("points") is not None:
             row.add_suffix(Gtk.Label(label=tr("{points} pts", points=a["points"]),
                                      css_classes=["dim-label"]))
         return row
 
     def _resync_game(self, gid):
-        """Bouton 🔄 unique : relit le log local ET synchronise RetroAchievements.
+        """Bouton 🔄 unique : relit le log local ET synchronise les sources
+        téléchargées (RetroAchievements, Steam).
 
-        Synchronisation RA uniquement si le jeu est lié au compte (sinon c'est un
-        appel API inutile) ET si RetroAchievements est activé dans les réglages.
-        Une erreur RA n'empêche pas le rechargement local."""
+        Chaque synchro n'a lieu que si la source est activée dans les réglages
+        et concerne réellement le jeu (lié au compte, ou d'origine Steam) —
+        sinon ce serait un appel API inutile. Une erreur n'empêche pas le
+        rechargement des autres sources."""
         if gid is None:
             return
         if P.ra_enabled(self.con) and P.linked(self.con, gid) is not None:
             try:
                 P.sync_game(self.con, gid)
             except (P.RaError, OSError) as e:
+                self.toasts.add_toast(Adw.Toast.new(str(e)))
+        if P.steam_enabled(self.con) and P.steam_appid(self.con, gid) is not None:
+            try:
+                P.sync_steam_game(self.con, gid)
+            except (P.SteamError, OSError) as e:
                 self.toasts.add_toast(Adw.Toast.new(str(e)))
         self._show_ach_game(gid)
 
@@ -511,39 +558,38 @@ class AchievementsMixin:
     def _reset_achievements(self):
         """Demande confirmation, puis efface la progression ou retire le jeu de la liste.
 
-        Un jeu suivi uniquement par RetroAchievements n'a pas de progression
-        locale à effacer : le bouton le retire donc de la liste (dissociation du
-        compte + purge du cache), ce qui est la seule action qui a du sens."""
+        Un jeu suivi uniquement par une source TÉLÉCHARGÉE (RetroAchievements ou
+        Steam) n'a pas de progression locale à effacer : le bouton le retire
+        donc de la liste (purge du cache téléchargé), seule action qui ait du
+        sens — l'effacer ne changerait rien et le laisserait affiché."""
         gid = self.ach_game_id
         if gid is None:
             return
         g = self.con.execute("SELECT name FROM games WHERE id=?", (gid,)).fetchone()
         name = g["name"] if g else ""
-        has_local = P.tracker_paths(self.con, gid) is not None
-        if not has_local and P.linked(self.con, gid) is not None:
-            dlg = Adw.AlertDialog(
-                heading=tr("Remove from list?"),
-                body=tr('"{name}" is only followed through RetroAchievements. It will be '
-                        'unlinked from the account and removed from this list.', name=name))
-            dlg.add_response("cancel", tr("Cancel"))
-            dlg.add_response("remove", tr("Remove"))
-            dlg.set_response_appearance("remove", Adw.ResponseAppearance.DESTRUCTIVE)
-            dlg.set_default_response("cancel")
-            dlg.set_close_response("cancel")
-            dlg.connect("response", self._on_remove_response, gid)
-            self._reset_dlg = dlg
-            dlg.present(self)
-            return
-        dlg = Adw.AlertDialog(
-            heading=tr("Reset achievements?"),
-            body=tr('All progress for "{name}" will be cleared. Lines already read in the '
-                    'log will not be counted again.', name=name))
+        corps_reset = tr('All progress for "{name}" will be cleared. Lines already read in '
+                         'the log will not be counted again.', name=name)
+        if P.tracker_paths(self.con, gid) is not None:
+            retirer, corps = False, corps_reset
+        elif P.linked(self.con, gid) is not None:
+            retirer, corps = True, tr('"{name}" is only followed through RetroAchievements. '
+                                      'It will be unlinked from the account and removed from '
+                                      'this list.', name=name)
+        elif P.has_steam(self.con, gid):
+            retirer, corps = True, tr('"{name}" is only followed through Steam. Its '
+                                      'achievements will be removed from this list.', name=name)
+        else:
+            retirer, corps = False, corps_reset    # ni log ni cache : rien à retirer
+        action = "remove" if retirer else "reset"
+        dlg = Adw.AlertDialog(heading=tr("Remove from list?") if retirer
+                              else tr("Reset achievements?"), body=corps)
         dlg.add_response("cancel", tr("Cancel"))
-        dlg.add_response("reset", tr("Reset"))
-        dlg.set_response_appearance("reset", Adw.ResponseAppearance.DESTRUCTIVE)
+        dlg.add_response(action, tr("Remove") if retirer else tr("Reset"))
+        dlg.set_response_appearance(action, Adw.ResponseAppearance.DESTRUCTIVE)
         dlg.set_default_response("cancel")
         dlg.set_close_response("cancel")
-        dlg.connect("response", self._on_reset_response, gid)
+        dlg.connect("response", self._on_remove_response if retirer
+                    else self._on_reset_response, gid)
         self._reset_dlg = dlg
         dlg.present(self)
 
@@ -556,11 +602,12 @@ class AchievementsMixin:
         self.toasts.add_toast(Adw.Toast.new(tr("Achievements reset")))
 
     def _on_remove_response(self, _dlg, response, gid):
-        """Retire de la liste un jeu suivi uniquement par RetroAchievements."""
+        """Retire de la liste un jeu suivi uniquement par une source téléchargée."""
         self._reset_dlg = None
         if response != "remove":
             return
-        P.unlink(self.con, gid)   # dissocie du compte ET purge le cache téléchargé
+        P.unlink(self.con, gid)         # dissocie du compte ET purge le cache RA
+        P.forget_steam(self.con, gid)   # et le cache Steam téléchargé, s'il y en a un
         if self.ach_game_id == gid:
             self.ach_game_id = None
         self._refresh_achievements()

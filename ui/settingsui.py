@@ -31,6 +31,8 @@ class SettingsMixin:
         self._show_hidden_chk = self._show_not_installed_chk = None
         self._ach_show_hidden_chk = self._ra_user_row = self._ra_key_row = None
         self._ra_sync_row = self._ra_enabled_sw = None   # groupes réouvrables à l'identique
+        self._steam_key_row = self._steam_id_row = None
+        self._steam_sync_row = self._steam_enabled_sw = None
         self._notes_group = self._notes_font_spin = None   # curseur de la page précédente
         page = Adw.PreferencesPage()
 
@@ -182,6 +184,44 @@ class SettingsMixin:
             self._ra_user_row, self._ra_key_row, self._ra_sync_row = user_row, key_row, sync_row
             page.add(ra_group)
 
+            # Même chose pour Steam : une troisième source de succès, coupable
+            # d'un trait. « Steam » est une marque : comme « RetroAchievements »,
+            # le titre de groupe n'est pas traduit.
+            st_group = Adw.PreferencesGroup(
+                title="Steam",
+                description=tr("The key can be generated on steamcommunity.com/dev/apikey."))
+            st_enabled = P.steam_enabled(self.con)
+            st_sw = Adw.SwitchRow(title=tr("Use Steam achievements"),
+                                  subtitle=tr("Show and sync achievements from your Steam account"),
+                                  active=st_enabled)
+            st_sw.connect("notify::active", self._on_steam_enabled)
+            st_group.add(st_sw)
+            self._steam_enabled_sw = st_sw  # référence pour les tests
+            # Pas de `subtitle` sur une Adw.EntryRow : l'indication sur l'ID va
+            # donc dans le titre de la ligne — une seule ligne, une seule lecture.
+            st_key_row = Adw.PasswordEntryRow(title=tr("Web API key"),
+                                              text=P.steam_api_key(self.con),
+                                              show_apply_button=True)
+            st_key_row.connect("apply", self._on_steam_credentials)
+            st_group.add(st_key_row)
+            st_id_row = Adw.EntryRow(title=tr("Steam ID (in your profile URL)"),
+                                     text=P.steam_id64(self.con), show_apply_button=True)
+            st_id_row.connect("apply", self._on_steam_credentials)
+            st_group.add(st_id_row)
+            st_sync_row = Adw.ActionRow(title=tr("Sync my games"),
+                                        subtitle=tr("Download the achievements of your games "
+                                                    "on Steam"))
+            st_sync_btn = Gtk.Button(label=tr("Sync account"), valign=Gtk.Align.CENTER,
+                                     css_classes=["suggested-action"])
+            st_sync_btn.connect("clicked", self._on_steam_sync)
+            st_sync_row.add_suffix(st_sync_btn)
+            st_group.add(st_sync_row)
+            for w in (st_key_row, st_id_row, st_sync_row):
+                w.set_sensitive(st_enabled)
+            self._steam_key_row, self._steam_id_row, self._steam_sync_row = \
+                st_key_row, st_id_row, st_sync_row
+            page.add(st_group)
+
         # --- suite des réglages généraux ---
         imp_group = Adw.PreferencesGroup(
             title=tr("Platforms to import"),
@@ -298,6 +338,38 @@ class SettingsMixin:
         if hasattr(self, "_refresh_achievements"):
             self._refresh_achievements()
         self._toast_settings(tr("{n} game(s) linked to RetroAchievements", n=n))
+
+    def _on_steam_enabled(self, row, _p):
+        """Couche/ramène les succès Steam depuis les réglages des succès.
+
+        À OFF, aucun succès Steam ne s'affiche plus nulle part, les jeux qui
+        n'ont que cette source quittent la liste de gauche, et plus aucun appel
+        réseau n'est lancé (synchro manuelle ou actualisation à la partie). Le
+        scan YAML, lui, ne dépend pas de ce réglage et continue de tourner."""
+        on = row.get_active()
+        P.set_steam_enabled(self.con, on)
+        for w in (self._steam_key_row, self._steam_id_row, self._steam_sync_row):
+            if w is not None:
+                w.set_sensitive(on)
+        if hasattr(self, "_refresh_achievements"):
+            self._refresh_achievements()
+
+    def _on_steam_credentials(self, *_row):
+        """Enregistre clé Web API + SteamID64 (chaque ligne confirme la sienne ;
+        on lit les deux pour ne jamais écraser la valeur de l'autre par vide)."""
+        P.set_steam_credentials(self.con, self._steam_key_row.get_text(),
+                                self._steam_id_row.get_text())
+        self._toast_settings(tr("Steam settings saved"))
+
+    def _on_steam_sync(self, *_btn):
+        self._on_steam_credentials()   # on enregistre d'abord ce qui est saisi
+        try:
+            n = P.sync_steam_games(self.con)
+        except (P.SteamError, OSError) as e:
+            return self._toast_settings(str(e))
+        if hasattr(self, "_refresh_achievements"):
+            self._refresh_achievements()
+        self._toast_settings(tr("{n} game(s) synced", n=n))
 
     def _on_covers(self, *_):
         if not P.sgdb_key():

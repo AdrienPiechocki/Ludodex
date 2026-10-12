@@ -65,6 +65,15 @@ CREATE TABLE IF NOT EXISTS ra_achievements (
     earned_at INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (game_id, ach_id)
 );
+CREATE TABLE IF NOT EXISTS steam_achievements (
+    game_id INTEGER NOT NULL,
+    ach_id TEXT NOT NULL,            -- apiname Steam (ex. FIRST_BLOOD)
+    title TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    icon TEXT NOT NULL DEFAULT '',
+    earned_at INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (game_id, ach_id)
+);
 """
 
 # Base des autres sources (Lutris / itch.io / Flatpak / RetroArch) : selon l'OS (vide si la plateforme n'existe pas).
