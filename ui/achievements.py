@@ -60,6 +60,7 @@ class AchievementsMixin:
         self.ach_filter = "all"       # tri/filtre appliqués au volet droit (persistants)
         self.ach_sort = "origin"
         self.ach_query = ""
+        self.ach_game_query = ""      # recherche appliquée au volet GAUCHE (liste des jeux)
         self._ach_state = []          # succès du jeu courant AVANT tri/filtre
         self._ra_state = []           # idem pour les succès RetroAchievements
         self._ach_ra_linked = False
@@ -80,8 +81,15 @@ class AchievementsMixin:
         self.ach_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE,
                                     css_classes=["navigation-sidebar"])
         self.ach_list.connect("row-selected", self._on_ach_game_selected)
+        # Recherche : même implantation que la page Notes — une barre entre
+        # l'en-tête et la liste. Elle ne filtre QUE la liste de gauche.
+        self.ach_game_search = Gtk.SearchEntry()
+        if hasattr(self.ach_game_search, "set_placeholder_text"):  # GTK >= 4.10
+            self.ach_game_search.set_placeholder_text(tr("Search games…"))
+        self.ach_game_search.connect("search-changed", self._on_ach_game_filter)
         left = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         left.append(head)
+        left.append(self.ach_game_search)
         left.append(Gtk.ScrolledWindow(child=self.ach_list, vexpand=True,
                                        hscrollbar_policy=Gtk.PolicyType.NEVER))
 
@@ -221,20 +229,37 @@ class AchievementsMixin:
             while (child := self.ach_list.get_first_child()) is not None:
                 self.ach_list.remove(child)
             self._ach_row_by_gid = {}
-            games = P.achievement_games(self.con)  # suivi YAML et/ou lien RetroAchievements
+            tous = P.achievement_games(self.con)  # suivi YAML et/ou lien RetroAchievements
+            # Filtre insensible à la casse sur le nom du jeu.
+            q = self.ach_game_query.strip().casefold()
+            games = [g for g in tous if not q or q in g[1].casefold()]
             for gid, name, _has_tracker, _has_ra in games:
                 row = Adw.ActionRow(title=GLib.markup_escape_text(name))
                 row._gid = gid
                 self.ach_list.append(row)
                 self._ach_row_by_gid[gid] = row
             if self.ach_game_id not in self._ach_row_by_gid:
-                # premier jeu (ou sélection disparue) : on montre le premier de la liste
-                self.ach_game_id = games[0][0] if games else None
+                # Un jeu suivi que la recherche MASQUE ne fait pas changer de jeu :
+                # le volet droit reste sur la partie en cours, seule la liste reflète
+                # la recherche. C'est la perte du suivi (recherche vide) qui bascule
+                # sur le premier jeu, comme auparavant.
+                if not (q and any(g[0] == self.ach_game_id for g in tous)):
+                    self.ach_game_id = games[0][0] if games else None
             row = self._ach_row_by_gid.get(self.ach_game_id)
             if row is not None:
                 self.ach_list.select_row(row)
         finally:
             self._ach_filling = False
+
+    def _on_ach_game_filter(self, entry):
+        """Recherche dans la liste de gauche : seul le volet gauche est filtré.
+
+        Écrire ne doit JAMAIS changer de jeu — on ne bascule qu'au clic. Un jeu
+        masqué par la recherche reste donc le jeu affiché (aucune ligne n'est
+        alors sélectionnée), et il reparaît sélectionné dès qu'on efface.
+        """
+        self.ach_game_query = entry.get_text()
+        self._fill_ach_list()
 
     def _on_ach_game_selected(self, _lb, row):
         if row is None or self._ach_filling:
