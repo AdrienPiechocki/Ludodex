@@ -29,6 +29,7 @@ class SettingsMixin:
         self._lib_group = self._auto_group = self._retro_group = self._pick_group = None
         self._pick_owned_chk = None
         self._show_hidden_chk = self._show_not_installed_chk = None
+        self._ach_show_hidden_chk = self._ra_user_row = self._ra_key_row = None
         page = Adw.PreferencesPage()
 
         # --- réglages généraux (toutes pages) ---
@@ -129,6 +130,43 @@ class SettingsMixin:
             page.add(notes_group)
             self._notes_group = notes_group   # référence pour les tests
             self._notes_font_spin = spin
+        elif scope == "achievements":
+            # Réglages des succès : le masquage des succès secrets, puis le
+            # compte RetroAchievements (source unique avec le dialogue de la page).
+            ach_group = Adw.PreferencesGroup(title=tr("Achievements"))
+            chk = Gtk.CheckButton(active=P.show_hidden(self.con), valign=Gtk.Align.CENTER)
+            chk.connect("toggled", self._on_ach_show_hidden)
+            chk_row = Adw.ActionRow(title=tr("Reveal hidden achievements"),
+                                    subtitle=tr("Names and descriptions shown, even while locked"),
+                                    activatable_widget=chk)
+            chk_row.add_prefix(chk)
+            ach_group.add(chk_row)
+            self._ach_show_hidden_chk = chk  # référence pour les tests
+            self._ach_show_hidden_row = chk_row  # référence pour les tests
+            page.add(ach_group)
+
+            ra_group = Adw.PreferencesGroup(
+                title="RetroAchievements",
+                description=tr("The key is on your account's control panel page "
+                               "(retroachievements.org/controlpanel.php)."))
+            user_row = Adw.EntryRow(title=tr("Username"), text=P.ra_user(self.con),
+                                    show_apply_button=True)
+            user_row.connect("apply", self._on_ra_credentials)
+            ra_group.add(user_row)
+            key_row = Adw.PasswordEntryRow(title=tr("Web API key"), text=P.ra_key(self.con),
+                                           show_apply_button=True)
+            key_row.connect("apply", self._on_ra_credentials)
+            ra_group.add(key_row)
+            self._ra_user_row, self._ra_key_row = user_row, key_row
+            sync_row = Adw.ActionRow(title=tr("Link my games"),
+                                     subtitle=tr("Match your played games and download "
+                                                 "their achievements"))
+            sync_btn = Gtk.Button(label=tr("Sync account"), valign=Gtk.Align.CENTER,
+                                  css_classes=["suggested-action"])
+            sync_btn.connect("clicked", self._on_ra_sync)
+            sync_row.add_suffix(sync_btn)
+            ra_group.add(sync_row)
+            page.add(ra_group)
 
         # --- suite des réglages généraux ---
         imp_group = Adw.PreferencesGroup(
@@ -202,6 +240,30 @@ class SettingsMixin:
     def _on_key(self, row):
         P.save_sgdb_key(row.get_text())
         self._toast_settings(tr("Key saved") if row.get_text().strip() else tr("Key cleared"))
+
+    def _on_ach_show_hidden(self, chk):
+        """Affiche/masque les succès secrets (verrouillés) partout dans l'app."""
+        P.set_setting(self.con, "ach_show_hidden", "1" if chk.get_active() else "0")
+        if hasattr(self, "_refresh_achievements"):
+            self._refresh_achievements()   # le volet droit est sur la même page
+
+    def _on_ra_credentials(self, *_row):
+        """Enregistre identifiant + clé (chaque ligne confirme la sienne ; on lit
+        les deux pour ne jamais écraser la valeur de l'autre par une chaîne vide)."""
+        P.set_ra_credentials(self.con, self._ra_user_row.get_text(),
+                             self._ra_key_row.get_text())
+        self._toast_settings(tr("RetroAchievements account saved: {user}",
+                                user=self._ra_user_row.get_text().strip()))
+
+    def _on_ra_sync(self, *_btn):
+        self._on_ra_credentials()   # on enregistre d'abord ce qui est saisi
+        try:
+            n = P.sync_account(self.con)
+        except (P.RaError, OSError) as e:
+            return self._toast_settings(str(e))
+        if hasattr(self, "_refresh_achievements"):
+            self._refresh_achievements()
+        self._toast_settings(tr("{n} game(s) linked to RetroAchievements", n=n))
 
     def _on_covers(self, *_):
         if not P.sgdb_key():

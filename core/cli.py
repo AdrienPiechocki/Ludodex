@@ -15,7 +15,10 @@ from .game_collections import find_collection, list_collections, add_collection,
 from .importers import import_all, add_custom
 from .pick import excluded_tags, pick, STATUS_WEIGHT
 from .sources import source_cond
-from .tracker import tracked_games, tracker_paths, set_tracker, clear_tracker, scan
+from .tracker import (tracked_games, tracker_paths, set_tracker, clear_tracker, scan, reset,
+                      show_hidden)
+from .ra import (ra_user, ra_key, set_ra_credentials, sync_account, sync_game, ra_achievements,
+                 ra_linked_games, link, RaError, account_games)
 
 
 # ---------- gestion ----------
@@ -72,10 +75,15 @@ def main():
     c1 = sub.add_parser("cover")  # forcer l'id SteamGridDB d'un jeu (quand la recherche par nom échoue)
     c1.add_argument("name"); c1.add_argument("sgdb_id", type=int)
     tk = sub.add_parser("tracker")  # succès définis par l'utilisateur, détectés dans les logs d'un jeu moddé
-    tk.add_argument("action", choices=["list", "attach", "status", "scan", "clear"])
+    tk.add_argument("action", choices=["list", "attach", "status", "scan", "clear", "reset"])
     tk.add_argument("name", nargs="?", help=tr("game name"))
     tk.add_argument("yaml", nargs="?", help=tr("achievements file (YAML)"))
     tk.add_argument("log", nargs="?", help=tr("game log file"))
+    ra = sub.add_parser("ra")  # synchronisation du compte RetroAchievements (API Web)
+    ra.add_argument("action", choices=["login", "status", "sync", "show", "link", "games"])
+    ra.add_argument("name", nargs="?", help=tr("game name (login: username)"))
+    ra.add_argument("key", nargs="?", help=tr("login: Web API key"))
+    ra.add_argument("--game", type=int, help=tr("RetroAchievements game id (link)"))
     args = ap.parse_args()
     if args.cmd != "import":
         auto_tidy(con)
@@ -280,6 +288,9 @@ def main():
             elif args.action == "clear":
                 clear_tracker(con, g["id"])
                 print(tr("tracker removed for {name}", name=g["name"]))
+            elif args.action == "reset":
+                reset(con, g["id"])
+                print(tr("progress reset for {name}", name=g["name"]))
             else:  # status / scan
                 if tracker_paths(con, g["id"]) is None:
                     raise SystemExit(tr("no tracker configured for {name}", name=g["name"]))
@@ -297,6 +308,9 @@ def main():
                         if a["done"]:
                             date = datetime.datetime.fromtimestamp(a["unlocked_at"]).strftime("%d/%m/%Y")
                             print(f"✓ {a['name']} · {date}")
+                        elif a["hidden"] and not show_hidden(con):
+                            # réglage global « Reveal hidden achievements » (UI réglages → Succès)
+                            print(f"· {tr('Hidden achievement')}")
                         elif a["target"] > 1:
                             print(f"· {a['name']} ({a['progress']}/{a['target']})")
                         else:
@@ -310,6 +324,50 @@ def main():
                     if not new:
                         print(tr("scan: nothing new"))
                     print(tr("{u}/{t} unlocked", u=unlocked, t=len(state)))
+    elif args.cmd == "ra":
+        if args.action == "login":
+            if not (args.name and args.key):
+                raise SystemExit(tr("usage: ra login <username> <api_key>"))
+            set_ra_credentials(con, args.name, args.key)
+            print(tr("RetroAchievements account saved: {user}", user=args.name))
+        elif args.action == "status":
+            print(tr("RetroAchievements: {state} | API key: {key} | {n} linked game(s)",
+                     state=ra_user(con) or tr("not configured"),
+                     key=tr("present") if ra_key(con) else tr("MISSING"),
+                     n=len(ra_linked_games(con))))
+        elif args.action == "sync":
+            try:
+                n = sync_account(con)
+            except RaError as e:
+                raise SystemExit(str(e))
+            print(tr("{n} game(s) linked to RetroAchievements", n=n))
+        elif args.action == "games":
+            try:
+                games = account_games(con)
+            except RaError as e:
+                raise SystemExit(str(e))
+            print(tr("{n} game(s) on RetroAchievements", n=len(games)))
+            for g in games[:30]:
+                print(f"- {g['title']} ({g['console']})")
+        else:  # show / link
+            if not args.name:
+                raise SystemExit(tr("game name required"))
+            g = find(con, args.name)
+            if args.action == "link":
+                if not args.game:
+                    raise SystemExit(tr("usage: ra link <game> --game <ra_game_id>"))
+                link(con, g["id"], args.game, g["name"])
+                print("OK:", g["name"])
+            else:
+                try:
+                    n = sync_game(con, g["id"])
+                except RaError as e:
+                    raise SystemExit(str(e))
+                print(tr("{name}: {n} RetroAchievements", name=g["name"], n=n))
+                for a in ra_achievements(con, g["id"]):
+                    mark = "✓" if a["earned_at"] else "·"
+                    date = datetime.datetime.fromtimestamp(a["earned_at"]).strftime("%d/%m/%Y") if a["earned_at"] else ""
+                    print(f"{mark} {a['title']} ({a['points']})" + (f" · {date}" if date else ""))
 
 
 if __name__ == "__main__":

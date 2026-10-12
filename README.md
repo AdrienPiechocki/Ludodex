@@ -34,8 +34,15 @@ Launch the picked game directly, or launch from the library.
 ### Achievements
 - bring your own achievements for **modded games**: pick a game on the left, then attach a **YAML file** and the game's **log file** to it;
 - each achievement tests the **log lines** with regular expressions: `match` (one pattern), `any` (at least one), or `all` (every pattern), with an optional `count` (e.g. "defeat 50 bandits");
+- `hidden: true` marks an achievement as secret: its name, description and icon stay masked until it is unlocked;
 - the log is read **incrementally** (each line is counted once); a truncated or rewritten log is detected and re-scanned from the start;
-- per-game panel with progress (`x/N`), unlock dates, a rescan button and a tracker dialog; a ready-to-adapt example lives in `examples/openmw-achievements.yaml`.
+- per-game panel with progress (`x/N`) and unlock dates — the counter under the title always shows **both sources combined** (YAML-tracked *and* RetroAchievements), in the same place; a ready-to-adapt example lives in `examples/openmw-achievements.yaml`;
+- the achievements of a game can be **filtered** (all / unlocked / locked, plus an accent-insensitive search over titles and descriptions) and **sorted** (original order, A→Z, Z→A, unlocked first, locked first); the settings persist across games;
+- a single **refresh** button re-reads the log *and* syncs that game with RetroAchievements (when it is linked) — no separate buttons;
+- **auto-refresh**: every 5 seconds the app checks the log file of each tracked game, and re-reads it automatically when it changes — so the achievements update on their own **while you play**; one final re-read happens when the writing stops (the game just closed), and a toast announces any newly unlocked achievements. Nothing runs when no game is writing: the check is a single `stat()` per tracked game.
+- a **reset** button (with confirmation) clears a game's progress without recounting the log lines already read; on a game followed *only* through RetroAchievements it instead **removes the game from the list** (unlinks the account and purges the downloaded cache);
+- **RetroAchievements sync**: your username and Web API key live in the global app settings (Settings → Achievements), where "Sync account" links your games to their RetroAchievements entries by title and stores their achievements (badges, points, unlock dates). This is how RetroArch achievements show up, since RetroArch keeps them on the RetroAchievements servers. RetroAchievements are listed **inline with the tracked ones** (no separate section header): the counter under the game title is the combined total, above the search bar;
+- **secret achievements** are masked by default (name, description and icon replaced by a generic label until unlocked); the global setting *Reveal hidden achievements* (Settings → Achievements) reveals them everywhere, including in `ludodex tracker status`. The search bar can **not** find a masked achievement by its real name or description — otherwise typing a guess and seeing a row appear would give the spoiler away.
 
 ### Play time tracking
 Every launch through Ludodex opens a **session**; its duration is recorded when it closes. Steam history (minutes played, last launch) is imported locally with `backfill`, no API needed. Both the interface and the CLI show total play time, the timelines, and rankings.
@@ -88,7 +95,8 @@ python3 picker.py <command> [options]
 | `diag` | Game diagnostic (name, status, tags, launch…) |
 | `covers` | SteamGridDB covers (`-n`, `--retry`, `--status`) |
 | `cover` | Forces a game's SteamGridDB ID |
-| `tracker` | Achievements from a game log: `list`, `attach <game> <yaml> <log>`, `status`, `scan`, `clear` |
+| `tracker` | Achievements from a game log: `list`, `attach <game> <yaml> <log>`, `status`, `scan`, `clear`, `reset` |
+| `ra` | RetroAchievements: `login <user> <api_key>`, `status`, `sync`, `show <game>`, `link <game> --game <id>` |
 
 Examples:
 
@@ -120,7 +128,7 @@ gui.py        graphical entry (re-exports Win/App, run python3 gui.py)
 picker.py     facade: re-exports core/* (used by gui and the CLI) and the CLI entry
 i18n.py       translation engine (tr, detection, set_lang)
 core/         logic: db, platform, sources, importers, steam, tags, covers,
-              launch, stats, pick, game_collections, tracker, cli
+              launch, stats, pick, game_collections, tracker, ra, cli
 ui/           GTK4 interface: main, theme, pickview, library, retrospec,
               notes, markdown, achievements, settingsui
 lang/         translations (en = base, fr)

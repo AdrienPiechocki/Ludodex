@@ -15,6 +15,8 @@ import unicodedata
 
 import yaml
 
+from i18n import tr
+
 from .db import get_setting, set_setting
 
 
@@ -29,7 +31,7 @@ def _slug(name):
 def load_tracker(path):
     """Lit et valide un fichier de succès ; renvoie la liste des définitions.
 
-    Chaque définition : id, name, description, icon, op (match|any|all),
+    Chaque définition : id, name, description, icon, hidden, op (match|any|all),
     patterns, regexes (compilées), target (= `count`, 1 par défaut).
     """
     try:
@@ -81,6 +83,7 @@ def load_tracker(path):
         defs.append({"id": ach_id, "name": name,
                      "description": str(a.get("description") or ""),
                      "icon": str(a.get("icon") or ""),
+                     "hidden": bool(a.get("hidden")),
                      "op": op, "patterns": patterns, "regexes": compiled,
                      "target": count})
     return defs
@@ -106,6 +109,37 @@ def clear_tracker(con, gid):
     set_setting(con, f"tracker_log_{gid}", "")
 
 
+def reset(con, gid):
+    """Efface la progression des succès d'un jeu.
+
+    Le log est marqué comme lu jusqu'à sa fin courante : les lignes déjà
+    présentes ne sont pas recomptées (on repart « à partir de maintenant »,
+    sinon le scan suivant re-débloquerait tout). Renvoie le nombre d'états
+    de succès effacés.
+    """
+    n = con.execute("SELECT COUNT(*) AS n FROM achievements WHERE game_id=?",
+                    (gid,)).fetchone()["n"]
+    con.execute("DELETE FROM achievements WHERE game_id=?", (gid,))
+    cfg = tracker_paths(con, gid)
+    if cfg is not None:
+        log_path = cfg[1]
+        try:
+            with open(log_path, "rb") as f:
+                size = os.fstat(f.fileno()).st_size
+                f.seek(0)
+                prefix = f.read(min(4096, size)).decode("latin-1")
+        except OSError:
+            pass  # log absent : on n'avance pas la position
+        else:
+            con.execute(
+                "INSERT INTO tracker_logs (game_id, log_path, offset, size, prefix) VALUES (?,?,?,?,?) "
+                "ON CONFLICT(game_id, log_path) DO UPDATE SET offset=excluded.offset, size=excluded.size, "
+                "prefix=excluded.prefix",
+                (gid, str(log_path), size, size, prefix))
+    con.commit()
+    return n
+
+
 def tracked_games(con):
     """[(id, nom, yaml, log)] des jeux avec un suivi configuré."""
     out = []
@@ -114,6 +148,100 @@ def tracked_games(con):
         if p:
             out.append((r["id"], r["name"], *p))
     return out
+
+
+def achievement_games(con):
+    """[(id, nom, has_tracker, has_ra)] des jeux ayant un suivi YAML et/ou des succès RA.
+
+    Sert à la liste de gauche de la page « Achievements » : un jeu apparaît s'il a un
+    fichier de log suivi et/ou un lien vers un jeu RetroAchievements."""
+    from .ra import ra_linked_games  # import local : évite un cycle de chargement
+    info = {}
+    for gid, name, _yaml, _log in tracked_games(con):
+        info[gid] = [name, True, False]
+    for gid, _ra in ra_linked_games(con):
+        row = con.execute("SELECT name FROM games WHERE id=?", (gid,)).fetchone()
+        if row is None:
+            continue
+        entry = info.setdefault(gid, [row["name"], False, False])
+        entry[2] = True
+    return sorted(((gid, v[0], v[1], v[2]) for gid, v in info.items()),
+                  key=lambda t: t[1].lower())
+
+
+def show_hidden(con):
+    """Réglage global « Reveal hidden achievements » : faut-il afficher les succès `hidden`.
+
+    Sémantique de la valeur en base, écritue par la case des réglages :
+      - `'1'`  → les succès secrets sont AFFICHÉS même verrouillés ;
+      - `'0'`  → ils sont MASQUÉS ;
+      - absent → ils sont MASQUÉS (c'est le comportement par défaut).
+
+    ⚠️ Attention : le réglage `show_hidden` (sans préfixe) existe déjà mais
+    concerne les JEUX masqués de la bibliothèque — d'où le préfixe `ach_`.
+
+    Ne pas écrire `== "0"` ici : cela inverserait le sens de la case (cocher
+    masquerait les succès). Le `'1'` de cette ligne correspond au `'1'` écrit
+    par `_on_ach_show_hidden` quand la case est cochée."""
+    return get_setting(con, "ach_show_hidden") == "1"
+
+
+def log_fingerprint(con, gid):
+    """(taille, mtime_ns) du log du jeu ; (0, 0) s'il n'est pas suivi ou a disparu.
+
+    Sert à repérer une écriture sans ouvrir le fichier — bien plus cheap qu'un
+    scan, et suffisant pour savoir si le jeu tourne encore."""
+    p = tracker_paths(con, gid)
+    if not p:
+        return (0, 0)
+    try:
+        st = os.stat(p[1])
+    except OSError:
+        return (0, 0)
+    return (st.st_size, st.st_mtime_ns)
+
+
+class LogWatcher:
+    """Détecte les logs en cours d'écriture pour actualiser les succès sans permission.
+
+    On repère l'écriture du fichier de log plutôt qu'un processus : le chemin est
+    déjà connu, et ça marche avec n'importe quel jeu.
+
+    Politique, une seule passe par sonde :
+      - le log a changé depuis la sonde précédente → le jeu écrit → « write » ;
+      - il ne change plus alors qu'il écrivait encore → fermeture → « closed »
+        (une seule fois, pour récupérer les dernières lignes écrites) ;
+      - rien ne bouge → aucune notification, aucun travail.
+
+    La première sonde établit la base sans rien renvoyer, sinon tous les jeux
+    seraient rescannés au démarrage."""
+
+    def __init__(self):
+        self._prev = {}
+        self._writing = set()
+
+    def poll(self, con):
+        """[(gid, raison)] des jeux à re-scanner : « write » ou « closed »."""
+        out, alive = [], set()
+        for gid, _name, _yaml, _log in tracked_games(con):
+            alive.add(gid)
+            fp = log_fingerprint(con, gid)
+            prev = self._prev.get(gid)
+            self._prev[gid] = fp
+            if prev is None:
+                continue                       # premier relevé : base établie
+            if fp != prev:
+                self._writing.add(gid)
+                out.append((gid, "write"))
+            elif gid in self._writing:         # les écritures viennent de s'arrêter
+                self._writing.discard(gid)
+                out.append((gid, "closed"))
+        # un jeu retiré du suivi ne doit pas garder un état fantôme
+        for gid in list(self._prev):
+            if gid not in alive:
+                del self._prev[gid]
+                self._writing.discard(gid)
+        return out
 
 
 def _hits(d, line):
@@ -193,5 +321,84 @@ def scan(con, gid, now=None):
         st = state.get(d["id"]) or {"ach_id": d["id"], "count": 0, "unlocked_at": 0}
         out.append({"id": d["id"], "name": d["name"], "description": d["description"],
                     "icon": d["icon"], "target": d["target"], "progress": st["count"],
+                    "hidden": d["hidden"],
                     "unlocked_at": st["unlocked_at"], "done": bool(st["unlocked_at"])})
     return out
+
+# ---------- tri et filtre des succès (partagé par les succès YAML et RetroAchievements) ----------
+ACHIEVEMENT_FILTERS = ("all", "unlocked", "locked")
+ACHIEVEMENT_SORTS = ("origin", "title-asc", "title-desc", "unlocked", "locked")
+
+
+def _norm(s):
+    """Texte ramené à sa racine (sans accents ni ponctuation) pour la recherche/tri."""
+    s = unicodedata.normalize("NFKD", str(s))
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9]+", "", s.lower())
+
+
+def is_unlocked(a):
+    """Un succès est débloqué selon sa source : `done` (YAML) ou `earned_at` (RetroAchievements)."""
+    return bool(a.get("done") or a.get("earned_at"))
+
+
+def _title(a):
+    """Nom d'affichage : `name` pour les succès YAML, `title` pour RetroAchievements."""
+    return a.get("name") or a.get("title") or ""
+
+
+def _description(a):
+    return a.get("description") or ""
+
+
+def is_masked(a, show_hidden=False):
+    """Le succès est-il affiché sous un libellé générique (spoiler protégé) ?
+
+    Source unique de vérité du masquage : le rendu de l'UI et la recherche des
+    succès doivent donner le même verdict, sinon la barre de recherche sert
+    d'oracle — on tape un nom au hasard et l'apparition d'une ligne confirme le
+    spoiler. `hidden` n'existe que dans le YAML local : les succès
+    RetroAchievements (sans cette clé) ne sont jamais masqués."""
+    return bool(a.get("hidden")) and not bool(a.get("done")) and not show_hidden
+
+
+def filter_achievements(rows, status="all", query="", show_hidden=False):
+    """Sous-liste de `rows` selon le statut et la recherche (insensible aux accents).
+
+    La recherche porte sur le titre ET la description **de ce qui s'affiche** :
+    un succès masqué n'est retrouvable que par son libellé générique, jamais par
+    son vrai nom ni par sa description (sinon la recherche trahirait le
+    spoiler). `rows` est retourné tel quel quand aucun filtre n'est appliqué
+    (la liste d'origine n'est pas copiée)."""
+    if status not in ACHIEVEMENT_FILTERS:
+        status = "all"
+    if status != "all":
+        want = status == "unlocked"
+        rows = [a for a in rows if is_unlocked(a) == want]
+    q = _norm(query)
+    if q:
+        generic = _norm(tr("Hidden achievement"))
+
+        def matches(a):
+            if is_masked(a, show_hidden):
+                return q in generic
+            return q in _norm(_title(a)) or q in _norm(_description(a))
+
+        rows = [a for a in rows if matches(a)]
+    return rows
+
+
+def sort_achievements(rows, mode="origin"):
+    """Copie triée de `rows` selon `mode` (cf. ACHIEVEMENT_SORTS).
+
+    Les tris par statut sont stables : à part égalité, l'ordre d'origine est
+    conservé (prévisible, et identique à l'ordre du fichier YAML)."""
+    if mode == "title-asc":
+        return sorted(rows, key=lambda a: _norm(_title(a)))
+    if mode == "title-desc":
+        return sorted(rows, key=lambda a: _norm(_title(a)), reverse=True)
+    if mode == "unlocked":
+        return sorted(rows, key=lambda a: not is_unlocked(a))
+    if mode == "locked":
+        return sorted(rows, key=lambda a: is_unlocked(a))
+    return list(rows)

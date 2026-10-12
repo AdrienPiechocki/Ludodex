@@ -1,63 +1,2054 @@
-# Exemple de fichier de succès pour Ludodex (module « Achievements »).
+# Succès Morrowind + extensions + Tamriel Rebuilt pour Ludodex (module « Achievements »).
 #
-# Ce fichier s'attache à un jeu dans l'application : page « Achievements » →
-# bouton « + » → choisir ce YAML et le fichier de log du mod.
+# À utiliser avec le mod OpenMW « Ludodex Logger » (LudodexLogger.zip) : le tracker lit
+# openmw.log. Chaque motif est une expression régulière en recherche libre, appliquée
+# ligne par ligne. Format des lignes produites par le mod :
+#   QUEST STARTED: <id>            QUEST UPDATE: <id> | stage=N      QUEST COMPLETE: <id>
+#   NPC KILLED: <nom> | id=...     CREATURE KILLED: <nom> | id=...   ENEMY ENCOUNTER: <nom> | id=...
+#   LEVEL UP: N                    SKILL UP: <skill> | level=N       ATTRIBUTE UP: <attr> | value=N
+#   ITEM ACQUIRED: <nom> | xN | id=...                              SPELL LEARNED: <nom> | id=...
+#   FACTION JOINED: <nom> | id=<faction>   FACTION RANK: <nom> | rank=N | title=...
+#   LOCATION / REGION / INTERIOR DISCOVERED: <nom>                  CELL ENTERED: <nom> | exterior|interior
+#   NPC TALKED / BARTER OPENED / TRAINING OPENED / TRAVEL SERVICE OPENED: <nom>
+#   BOOK READ / SCROLL READ: <nom>   BOUNTY INCREASED|DECREASED: N   PLAYER DIED: Player   REST: started
 #
-# Chaque succès teste les LIGNES du log. Les motifs sont des EXPRESSIONS
-# RÉGULIÈRES appliquées en recherche libre sur chaque ligne (aucun ancrage
-# implicite : le motif peut correspondre à un fragment de ligne).
-#
-# Ce qui suit suppose que le mod écrit des lignes de la forme :
-#   [12:04:11] QUEST COMPLETE: A1_RescueSynette
-#   [12:05:32] NPC KILLED: Bandit
-#   [12:06:00] LEVEL UP: 12
-#   [12:07:10] LOCATION DISCOVERED: Balmora
-#   [12:08:00] ITEM ACQUIRED: Sunder
-# Adapte les motifs au format réel de ton log.
+# Notes :
+# - OpenMW met les ids de quêtes en minuscules : tous les succès sont en case_insensitive.
+# - Les stages « QUEST UPDATE » sont des correspondances exactes (stage=N) ou « >= N » (regex numérique).
+# - Les noms de lieux (villes, tombeaux...) sont ceux des cellules : motif en sous-chaîne, donc tolérant.
+# - Les préfixes d'ids Tamriel Rebuilt suivent la convention TR_m<carte>_<initiales>_<nom> :
+#   FG, MT, TT, IL confirmés ; MG, TG, HH, HT déduits de la convention, à vérifier dans ton log.
+# - Les motifs avec « . » à la place d'une apostrophe évitent les soucis de guillemets.
 
 achievements:
-  - name: First Steps
-    description: Complete your first quest.
+
+  # ======================================================================
+  # PROGRESSION GÉNÉRALE — quêtes (Morrowind + extensions + Tamriel Rebuilt)
+  # ======================================================================
+  - name: "First Steps"
+    description: "Complete your first quest."
     icon: "🌟"
-    match: "QUEST COMPLETE:"
-    # « match » : un seul motif, débloqué dès la première ligne correspondante.
-
-  - name: Bandit Slayer
-    description: Defeat 10 bandits.
-    icon: "⚔️"
-    match: "NPC KILLED: Bandit"
-    count: 10            # 10 occurrences requises (au plus une par ligne)
-
-  - name: Explorer of Vvardenfell
-    description: Discover 5 locations.
-    icon: "🗺️"
-    match: "LOCATION DISCOVERED:"
-    count: 5
-
-  - name: Legendary
-    description: Reach level 10 or higher.
-    icon: "🏅"
-    match: "LEVEL UP: (1[0-9]|[2-9][0-9])"   # regex : niveaux ≥ 10
+    match: 'QUEST COMPLETE:'
     case_insensitive: true
 
-  - name: Wielder of the Tools
-    description: Obtain Sunder, Keening and Wraithguard.
-    icon: "🔨"
-    all:                 # chaque motif doit apparaître ; débloqué quand les 3 sont vus
-      - "ITEM ACQUIRED: Sunder"
-      - "ITEM ACQUIRED: Keening"
-      - "ITEM ACQUIRED: Wraithguard"
+  - name: "Errand Runner"
+    description: "Complete 10 quests."
+    icon: "📜"
+    match: 'QUEST COMPLETE:'
+    count: 10
+    case_insensitive: true
 
-  - name: Troubleshooter
-    description: Complete any one of the main quest branches.
+  - name: "Seasoned Adventurer"
+    description: "Complete 25 quests."
     icon: "🧭"
-    any:                 # au moins un des motifs suffit
-      - "QUEST COMPLETE: A2_"
-      - "QUEST COMPLETE: B1_"
-      - "QUEST COMPLETE: C0_"
-
-  - name: Survivor
-    description: Survive 25 enemy encounters.
-    icon: "🛡️"
-    match: "ENEMY ENCOUNTER:"
+    match: 'QUEST COMPLETE:'
     count: 25
+    case_insensitive: true
+
+  - name: "Hired Hero"
+    description: "Complete 50 quests."
+    icon: "🛡️"
+    match: 'QUEST COMPLETE:'
+    count: 50
+    case_insensitive: true
+
+  - name: "Local Legend"
+    description: "Complete 100 quests."
+    icon: "🏅"
+    match: 'QUEST COMPLETE:'
+    count: 100
+    case_insensitive: true
+
+  - name: "Living Legend"
+    description: "Complete 250 quests."
+    icon: "👑"
+    match: 'QUEST COMPLETE:'
+    count: 250
+    case_insensitive: true
+
+  - name: "Champion of Tamriel"
+    description: "Complete 500 quests."
+    icon: "🏆"
+    match: 'QUEST COMPLETE:'
+    count: 500
+    case_insensitive: true
+
+  - name: "Completionist at Heart"
+    description: "Complete 1000 quests. Vanilla and Tamriel Rebuilt together offer well over 1,400."
+    icon: "💎"
+    match: 'QUEST COMPLETE:'
+    count: 1000
+    case_insensitive: true
+
+  - name: "Journal Keeper"
+    description: "Start 25 different quests."
+    icon: "📖"
+    match: 'QUEST STARTED:'
+    count: 25
+    case_insensitive: true
+
+  - name: "Overbooked"
+    description: "Start 100 different quests."
+    icon: "🗂️"
+    match: 'QUEST STARTED:'
+    count: 100
+    case_insensitive: true
+
+  - name: "Quest Magnet"
+    description: "Start 300 different quests."
+    icon: "🧲"
+    match: 'QUEST STARTED:'
+    count: 300
+    case_insensitive: true
+
+  # ======================================================================
+  # TAMRIEL REBUILT — quêtes de la terre ferme (ids TR_m<n>_...)
+  # ======================================================================
+  - name: "Mainland Mercenary"
+    description: "Complete 10 Tamriel Rebuilt quests."
+    icon: "⚓"
+    match: 'QUEST COMPLETE: tr_m\d_'
+    count: 10
+    case_insensitive: true
+
+  - name: "Mainland Veteran"
+    description: "Complete 50 Tamriel Rebuilt quests."
+    icon: "🗺️"
+    match: 'QUEST COMPLETE: tr_m\d_'
+    count: 50
+    case_insensitive: true
+
+  - name: "Mainland Legend"
+    description: "Complete 150 Tamriel Rebuilt quests."
+    icon: "🏯"
+    match: 'QUEST COMPLETE: tr_m\d_'
+    count: 150
+    case_insensitive: true
+
+  - name: "Mainland Completionist"
+    description: "Complete 300 Tamriel Rebuilt quests."
+    icon: "🌍"
+    match: 'QUEST COMPLETE: tr_m\d_'
+    count: 300
+    case_insensitive: true
+
+  - name: "Mainland Quest Hunter"
+    description: "Start 50 Tamriel Rebuilt quests."
+    icon: "🔎"
+    match: 'QUEST STARTED: tr_m\d_'
+    count: 50
+    case_insensitive: true
+
+  - name: "Mainland Fighter"
+    description: "Complete 10 Fighters Guild quests on the mainland."
+    icon: "⚔️"
+    match: 'QUEST COMPLETE: tr_m\d_fg_'
+    count: 10
+    case_insensitive: true
+
+  - name: "Mainland Assassin"
+    description: "Complete 5 Morag Tong quests on the mainland."
+    icon: "🗡️"
+    match: 'QUEST COMPLETE: tr_m\d_mt_'
+    count: 5
+    case_insensitive: true
+
+  - name: "Mainland Pilgrim"
+    description: "Complete 10 Tribunal Temple quests on the mainland."
+    icon: "🕯️"
+    match: 'QUEST COMPLETE: tr_m\d_tt_'
+    count: 10
+    case_insensitive: true
+
+  - name: "Mainland Legionnaire"
+    description: "Complete 5 Imperial Legion quests on the mainland."
+    icon: "🦅"
+    match: 'QUEST COMPLETE: tr_m\d_il_'
+    count: 5
+    case_insensitive: true
+
+  - name: "Mainland Mage"
+    description: "Complete 10 Mages Guild quests on the mainland."
+    icon: "🔮"
+    match: 'QUEST COMPLETE: tr_m\d_mg_'
+    count: 10
+    case_insensitive: true
+
+  - name: "Mainland Thief"
+    description: "Complete 10 Thieves Guild quests on the mainland."
+    icon: "🗝️"
+    match: 'QUEST COMPLETE: tr_m\d_tg_'
+    count: 10
+    case_insensitive: true
+
+  - name: "Hlaalu Heavyweight"
+    description: "Complete 15 House Hlaalu quests on the mainland."
+    icon: "💰"
+    match: 'QUEST COMPLETE: tr_m\d_hh_'
+    count: 15
+    case_insensitive: true
+
+  - name: "Telvanni Errand Boy"
+    description: "Complete 10 House Telvanni quests on the mainland."
+    icon: "🍄"
+    match: 'QUEST COMPLETE: tr_m\d_ht_'
+    count: 10
+    case_insensitive: true
+
+  - name: "Felt Instead of Tiles"
+    description: "Help Docelle Bien with her Tamriel map in Old Ebonheart, only to learn the project changed direction."
+    icon: "🧩"
+    match: 'QUEST UPDATE: tr_m3_oe_tamrielrebuilt \| stage=30\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Castaway Rescue"
+    description: "Rescue Lleros Drothan, the sailor stranded on a tiny island near Sailen."
+    icon: "🏝️"
+    match: 'QUEST COMPLETE: tr_m3_stranded'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Ghostbuster of Old Ebonheart"
+    description: "Defeat the ghost in Aurelia Draconis's house and escort her to Hetman Nalis Varo in Dondril."
+    icon: "👻"
+    match: 'QUEST COMPLETE: tr_m3_fg_oe_ghosts'
+    case_insensitive: true
+    hidden: true
+
+  - name: "A Reluctant Execution"
+    description: "Settle the matter of Gulmon Nulen for the Morag Tong in Bal Foyen."
+    icon: "🗡️"
+    match: 'QUEST COMPLETE: tr_m4_mt_sp_gulmon'
+    case_insensitive: true
+    hidden: true
+
+  - name: "The Past We Left Behind"
+    description: "Deal with the Camonna Tong enforcers for Dram Marvos at the Monastery of St. Aralor."
+    icon: "⛪"
+    match: 'QUEST COMPLETE: tr_m4_tt_staralor_q3'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Nuccius's Misadventures"
+    description: "Follow Vodunius Nuccius from Teyn all the way to his fate in Narsis."
+    icon: "🎰"
+    match: 'QUEST COMPLETE: tr_m\d_\w*nuccius'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Regime Change"
+    description: "Kill a Telvanni leader: Rilvin Dral or Gothren."
+    icon: "🪄"
+    match: 'NPC KILLED: (Rilvin Dral|Gothren)'
+    case_insensitive: true
+    hidden: true
+
+  # ======================================================================
+  # QUÊTE PRINCIPALE — Morrowind
+  # ======================================================================
+  - name: "Find the Spymaster"
+    description: "Begin the main quest and set out for Balmora."
+    icon: "📦"
+    match: 'QUEST UPDATE: a1_1_findspymaster \| stage=([2-9]|1|[1-9][0-9]{1,})\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "The Blades' Contact"
+    description: "Reach the second milestone of 'Find the Spymaster'."
+    icon: "🕵️"
+    match: 'QUEST UPDATE: a1_1_findspymaster \| stage=([2-9][0-9]|1[5-9]|14|[1-9][0-9]{2,})\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Sul-Matuul's Word"
+    description: "Complete the main quest step 'Meet Sul-Matuul'."
+    icon: "⛺"
+    match: 'QUEST UPDATE: a2_1_meetsulmatuul \| stage=([7-9][0-9]|6[1-9]|60|[1-9][0-9]{2,})\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Sixth House Secrets"
+    description: "Complete the main quest step about the Sixth House."
+    icon: "🔥"
+    match: 'QUEST UPDATE: a2_2_6thhouse \| stage=([6-9][0-9]|5[1-9]|50|[1-9][0-9]{2,})\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Cure for Corprus"
+    description: "Complete the main quest step about curing corprus."
+    icon: "🧪"
+    match: 'QUEST UPDATE: a2_3_corpruscure \| stage=([5-9][0-9]|4[1-9]|40|[1-9][0-9]{2,})\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Hortator"
+    description: "Win the support of the three Great Houses: Redoran, Hlaalu and Telvanni."
+    icon: "🏛️"
+    all:
+      - 'QUEST UPDATE: b5_redoranhort \| stage=([6-9][0-9]|5[1-9]|50|[1-9][0-9]{2,})\b'
+      - 'QUEST UPDATE: b6_hlaaluhort \| stage=([6-9][0-9]|5[1-9]|50|[1-9][0-9]{2,})\b'
+      - 'QUEST UPDATE: b7_telvannihort \| stage=([6-9][0-9]|5[1-9]|50|[1-9][0-9]{2,})\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Nerevarine"
+    description: "Unify the Ashlander tribes: complete all four Ashlander trials."
+    icon: "🌅"
+    all:
+      - 'QUEST UPDATE: b1_unifyurshilaku \| stage=([6-9][0-9]|5[1-9]|50|[1-9][0-9]{2,})\b'
+      - 'QUEST UPDATE: b2_ahemmusasafe \| stage=([6-9][0-9]|5[1-9]|50|[1-9][0-9]{2,})\b'
+      - 'QUEST UPDATE: b3_zainabbride \| stage=([6-9][0-9]|5[1-9]|50|[1-9][0-9]{2,})\b'
+      - 'QUEST UPDATE: b4_killwarlovers \| stage=([6-9][0-9]|5[6-9]|55|[1-9][0-9]{2,})\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Audience with a God"
+    description: "Meet Vivec in his palace."
+    icon: "🙏"
+    match: 'QUEST UPDATE: b8_meetvivec \| stage=([4-9][0-9]|3[5-9]|34|[1-9][0-9]{2,})\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "The Back Path"
+    description: "Complete the main quest step 'The Back Path'."
+    icon: "🚪"
+    match: 'QUEST UPDATE: cx_backpath \| stage=([6-9][0-9]|5[1-9]|50|[1-9][0-9]{2,})\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Heart of the Mountain"
+    description: "Destroy Dagoth Ur and end the Blight."
+    icon: "🌋"
+    match: 'QUEST UPDATE: c3_destroydagoth \| stage=([3-9][0-9]|2[1-9]|20|[1-9][0-9]{2,})\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Dagoth's Kin"
+    description: "Kill 5 Dagoth Ur's ash vampires or Dagoth Ur himself."
+    icon: "☠️"
+    match: 'NPC KILLED: Dagoth \w+'
+    count: 5
+    case_insensitive: true
+    hidden: true
+
+  # ======================================================================
+  # TRIBUNAL
+  # ======================================================================
+  - name: "Dark Brotherhood Trouble"
+    description: "Complete the Tribunal quest 'tr_dbattack'."
+    icon: "🔪"
+    match: 'QUEST UPDATE: tr_dbattack \| stage=([7-9][0-9]|6[1-9]|60|[1-9][0-9]{2,})\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Hunting the Assassins"
+    description: "Complete the Tribunal quest 'tr_dbhunt'."
+    icon: "🏹"
+    match: 'QUEST UPDATE: tr_dbhunt \| stage=([7-9][0-9]|6[1-9]|60|[1-9][0-9]{2,})\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Mournhold Under Attack"
+    description: "Complete the Tribunal quest 'tr_mhattack'."
+    icon: "🏰"
+    match: 'QUEST UPDATE: tr_mhattack \| stage=([2-9][0-9][0-9]|1[2-9][0-9]|11[1-9]|110|[1-9][0-9]{3,})\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Blades in Mournhold"
+    description: "Complete the Tribunal quest 'tr_blade'."
+    icon: "🗡️"
+    match: 'QUEST UPDATE: tr_blade \| stage=([2-9][0-9][0-9]|1[1-9][0-9]|10[1-9]|100|[1-9][0-9]{3,})\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Tribunal Complete"
+    description: "Finish the Tribunal main quest."
+    icon: "⚙️"
+    match: 'QUEST UPDATE: tr_sothasil \| stage=([2-9][0-9][0-9]|1[1-9][0-9]|10[1-9]|100|[1-9][0-9]{3,})\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Fall of a Goddess"
+    description: "Kill Almalexia."
+    icon: "💀"
+    match: 'NPC KILLED: Almalexia'
+    case_insensitive: true
+    hidden: true
+
+  # ======================================================================
+  # BLOODMOON
+  # ======================================================================
+  - name: "Rumors of War"
+    description: "Complete the Bloodmoon quest 'Rumors' and set sail for Solstheim."
+    icon: "⛵"
+    match: 'QUEST UPDATE: bm_rumors \| stage=([2-9][0-9][0-9]|1[1-9][0-9]|10[1-9]|100|[1-9][0-9]{3,})\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Meet the Skaal"
+    description: "Reach the Skaal after the departure of Carius."
+    icon: "🏔️"
+    match: 'QUEST UPDATE: bm_cariusgone \| stage=([4-9][0-9]|3[1-9]|30|[1-9][0-9]{2,})\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Defender of the Skaal"
+    description: "Defend the Skaal village from the attack."
+    icon: "🛡️"
+    match: 'QUEST UPDATE: bm_skaalattack \| stage=([4-9][0-9]|3[1-9]|30|[1-9][0-9]{2,})\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Giant Slayer"
+    description: "Defeat Karstaag the frost giant."
+    icon: "🧊"
+    any:
+      - 'QUEST UPDATE: bm_frostgiant1 \| stage=([2-9][0-9][0-9]|1[1-9][0-9]|10[1-9]|100|[1-9][0-9]{3,})\b'
+      - 'QUEST UPDATE: bm_frostgiant2 \| stage=([2-9][0-9][0-9]|1[1-9][0-9]|10[1-9]|100|[1-9][0-9]{3,})\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "The Wild Hunt"
+    description: "Finish the Bloodmoon main quest."
+    icon: "🌕"
+    match: 'QUEST UPDATE: bm_wildhunt \| stage=([2-9][0-9][0-9]|1[1-9][0-9]|10[1-9]|100|[1-9][0-9]{3,})\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Solstheim Tour"
+    description: "Visit Raven Rock, Skaal Village, Fort Frostmoth and Thirsk."
+    icon: "❄️"
+    all:
+      - 'CELL ENTERED: Raven Rock\b'
+      - 'CELL ENTERED: Skaal Village\b'
+      - 'CELL ENTERED: Fort Frostmoth\b'
+      - 'CELL ENTERED: Thirsk\b'
+    case_insensitive: true
+
+  - name: "Triple Crown"
+    description: "Finish the main quests of Morrowind, Tribunal and Bloodmoon."
+    icon: "🎖️"
+    all:
+      - 'QUEST UPDATE: c3_destroydagoth \| stage=([3-9][0-9]|2[1-9]|20|[1-9][0-9]{2,})\b'
+      - 'QUEST UPDATE: tr_sothasil \| stage=([2-9][0-9][0-9]|1[1-9][0-9]|10[1-9]|100|[1-9][0-9]{3,})\b'
+      - 'QUEST UPDATE: bm_wildhunt \| stage=([2-9][0-9][0-9]|1[1-9][0-9]|10[1-9]|100|[1-9][0-9]{3,})\b'
+    case_insensitive: true
+    hidden: true
+
+  # ======================================================================
+  # QUÊTES SECONDAIRES
+  # ======================================================================
+  - name: "Fargoth's Ring"
+    description: "Return Fargoth's ring."
+    icon: "💍"
+    match: 'QUEST UPDATE: ms_fargothring \| stage=([2-9][0-9][0-9]|1[1-9][0-9]|10[1-9]|100|[1-9][0-9]{3,})\b'
+    case_insensitive: true
+
+  - name: "Pilgrim of the Seven Trials"
+    description: "Complete all seven Ashlander pilgrimage trials."
+    icon: "🧘"
+    all:
+      - 'QUEST UPDATE: tt_fieldskummu \| stage=([2-9][0-9][0-9]|1[1-9][0-9]|10[1-9]|100|[1-9][0-9]{3,})\b'
+      - 'QUEST UPDATE: tt_stopmoon \| stage=([2-9][0-9][0-9]|1[1-9][0-9]|10[1-9]|100|[1-9][0-9]{3,})\b'
+      - 'QUEST UPDATE: tt_palacevivec \| stage=([2-9][0-9][0-9]|1[1-9][0-9]|10[1-9]|100|[1-9][0-9]{3,})\b'
+      - 'QUEST UPDATE: tt_puzzlecanal \| stage=([2-9][0-9][0-9]|1[1-9][0-9]|10[1-9]|100|[1-9][0-9]{3,})\b'
+      - 'QUEST UPDATE: tt_maskvivec \| stage=([2-9][0-9][0-9]|1[1-9][0-9]|10[1-9]|100|[1-9][0-9]{3,})\b'
+      - 'QUEST UPDATE: tt_ruddyman \| stage=([2-9][0-9][0-9]|1[1-9][0-9]|10[1-9]|100|[1-9][0-9]{3,})\b'
+      - 'QUEST UPDATE: tt_ghostgate \| stage=([2-9][0-9][0-9]|1[1-9][0-9]|10[1-9]|100|[1-9][0-9]{3,})\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "The Naked Nords"
+    description: "Help the three unfortunate Nords of Vvardenfell."
+    icon: "🥶"
+    all:
+      - 'QUEST UPDATE: mv_abusedhealer \| stage=([8-9][0-9]|7[6-9]|75|[1-9][0-9]{2,})\b'
+      - 'QUEST UPDATE: mv_recoverwidowmaker \| stage=([8-9][0-9]|7[1-9]|70|[1-9][0-9]{2,})\b'
+      - 'QUEST UPDATE: mv_paralyzedbarbarian \| stage=([2-9][0-9][0-9]|1[1-9][0-9]|10[1-9]|100|[1-9][0-9]{3,})\b'
+    case_insensitive: true
+
+  - name: "Glimpse of the Future"
+    description: "See the future through the eyes of a sad seer."
+    icon: "🔮"
+    match: 'QUEST UPDATE: bm_sadseer \| stage=110\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Matchmaker"
+    description: "Resolve the romantic troubles of Vvardenfell."
+    icon: "💕"
+    all:
+      - 'QUEST UPDATE: eb_unrequited \| stage=([2-9][0-9][0-9]|1[2-9][0-9]|11[1-9]|110|[1-9][0-9]{3,})\b'
+      - 'QUEST UPDATE: ms_matchmaker \| stage=120\b'
+      - 'QUEST UPDATE: mv_missingcompanion \| stage=60\b'
+      - 'QUEST UPDATE: mv_victimromance \| stage=(100|105)\b'
+    case_insensitive: true
+
+  - name: "Daedric Devotee"
+    description: "Complete the quest of any Daedric shrine."
+    icon: "😈"
+    any:
+      - 'QUEST UPDATE: da_azura \| stage=([5-9][0-9]|4[1-9]|40|[1-9][0-9]{2,})\b'
+      - 'QUEST UPDATE: da_boethiah \| stage=([8-9][0-9]|7[1-9]|70|[1-9][0-9]{2,})\b'
+      - 'QUEST UPDATE: da_malacath \| stage=([8-9][0-9]|7[1-9]|70|[1-9][0-9]{2,})\b'
+      - 'QUEST UPDATE: da_mehrunes \| stage=([5-9][0-9]|4[1-9]|40|[1-9][0-9]{2,})\b'
+      - 'QUEST UPDATE: da_mephala \| stage=60\b'
+      - 'QUEST UPDATE: da_molagbal \| stage=30\b'
+      - 'QUEST UPDATE: da_sheogorath \| stage=70\b'
+    case_insensitive: true
+
+  - name: "Seven Princes"
+    description: "Complete the quests of all seven Daedric shrines."
+    icon: "🔱"
+    all:
+      - 'QUEST UPDATE: da_azura \| stage=([5-9][0-9]|4[1-9]|40|[1-9][0-9]{2,})\b'
+      - 'QUEST UPDATE: da_boethiah \| stage=([8-9][0-9]|7[1-9]|70|[1-9][0-9]{2,})\b'
+      - 'QUEST UPDATE: da_malacath \| stage=([8-9][0-9]|7[1-9]|70|[1-9][0-9]{2,})\b'
+      - 'QUEST UPDATE: da_mehrunes \| stage=([5-9][0-9]|4[1-9]|40|[1-9][0-9]{2,})\b'
+      - 'QUEST UPDATE: da_mephala \| stage=60\b'
+      - 'QUEST UPDATE: da_molagbal \| stage=30\b'
+      - 'QUEST UPDATE: da_sheogorath \| stage=70\b'
+    case_insensitive: true
+
+  - name: "Web of Mephala"
+    description: "Complete all 26 Morag Tong sanction quests."
+    icon: "🕸️"
+    match: 'QUEST UPDATE: mt_s_\w+ \| stage=100\b'
+    count: 26
+    case_insensitive: true
+
+  - name: "Bloodline"
+    description: "Complete the questline of one of the vampire clans."
+    icon: "🧛"
+    any:
+      - 'QUEST UPDATE: va_vamphunter \| stage=([8-9][0-9]|7[1-9]|70|[1-9][0-9]{2,})\b'
+      - 'QUEST UPDATE: va_vampcountess \| stage=([5-9][0-9]|4[1-9]|40|[1-9][0-9]{2,})\b'
+      - 'QUEST UPDATE: va_vampamulet \| stage=([4-9][0-9]|3[1-9]|30|[1-9][0-9]{2,})\b'
+    case_insensitive: true
+
+  - name: "Cured of the Wolf"
+    description: "Cure yourself of lycanthropy."
+    icon: "🐺"
+    any:
+      - 'QUEST UPDATE: bm_wolfgiver \| stage=([2-9][0-9][0-9]|1[3-9][0-9]|12[1-9]|120|[1-9][0-9]{3,})\b'
+      - 'QUEST UPDATE: bm_wolfgiver_a \| stage=([3-9][0-9]|2[1-9]|20|[1-9][0-9]{2,})\b'
+    case_insensitive: true
+
+  - name: "Stronghold Owner"
+    description: "Build a stronghold for one of the Great Houses."
+    icon: "🏰"
+    any:
+      - 'QUEST UPDATE: hh_stronghold \| stage=300\b'
+      - 'QUEST UPDATE: hr_stronghold \| stage=300\b'
+      - 'QUEST UPDATE: ht_stronghold \| stage=300\b'
+    case_insensitive: true
+
+  # ======================================================================
+  # FACTIONS
+  # ======================================================================
+  - name: "Mage Apprentice"
+    description: "Join the Mages Guild."
+    icon: "🔮"
+    match: 'FACTION JOINED: [^|]*\| id=mages guild\b'
+    case_insensitive: true
+
+  - name: "Honor Among Thieves"
+    description: "Join the Thieves Guild."
+    icon: "🗝️"
+    match: 'FACTION JOINED: [^|]*\| id=thieves guild\b'
+    case_insensitive: true
+
+  - name: "Guild Fighter"
+    description: "Join the Fighters Guild."
+    icon: "⚔️"
+    match: 'FACTION JOINED: [^|]*\| id=fighters guild\b'
+    case_insensitive: true
+
+  - name: "Initiate of the Tong"
+    description: "Join the Morag Tong."
+    icon: "🗡️"
+    match: 'FACTION JOINED: [^|]*\| id=morag tong\b'
+    case_insensitive: true
+
+  - name: "Legionnaire"
+    description: "Join the Imperial Legion."
+    icon: "🦅"
+    match: 'FACTION JOINED: [^|]*\| id=imperial legion\b'
+    case_insensitive: true
+
+  - name: "Servant of the Cult"
+    description: "Join the Imperial Cult."
+    icon: "🕊️"
+    match: 'FACTION JOINED: [^|]*\| id=imperial cult\b'
+    case_insensitive: true
+
+  - name: "Temple Pilgrim"
+    description: "Join the Tribunal Temple."
+    icon: "🕯️"
+    match: 'FACTION JOINED: [^|]*\| id=temple\b'
+    case_insensitive: true
+
+  - name: "Company Man"
+    description: "Join the East Empire Company."
+    icon: "⚓"
+    match: 'FACTION JOINED: [^|]*\| id=east empire company\b'
+    case_insensitive: true
+
+  - name: "House Member"
+    description: "Join one of the Great Houses (Telvanni, Redoran or Hlaalu)."
+    icon: "🏛️"
+    any:
+      - 'FACTION JOINED: [^|]*\| id=telvanni\b'
+      - 'FACTION JOINED: [^|]*\| id=redoran\b'
+      - 'FACTION JOINED: [^|]*\| id=hlaalu\b'
+    case_insensitive: true
+
+  - name: "Guild Hopper"
+    description: "Join 3 factions."
+    icon: "🔀"
+    match: 'FACTION JOINED:'
+    count: 3
+    case_insensitive: true
+
+  - name: "Man of Many Hats"
+    description: "Join 6 factions."
+    icon: "🎩"
+    match: 'FACTION JOINED:'
+    count: 6
+    case_insensitive: true
+
+  - name: "Everywhere at Once"
+    description: "Join 10 factions."
+    icon: "🌐"
+    match: 'FACTION JOINED:'
+    count: 10
+    case_insensitive: true
+
+  - name: "Arch-Mage"
+    description: "Reach the highest rank of the Mages Guild."
+    icon: "🧙"
+    match: 'FACTION RANK: [^|]*Mages Guild[^|]*\| rank=10\b'
+    case_insensitive: true
+
+  - name: "Master Thief"
+    description: "Reach the highest rank of the Thieves Guild."
+    icon: "🥷"
+    match: 'FACTION RANK: [^|]*Thieves Guild[^|]*\| rank=10\b'
+    case_insensitive: true
+
+  - name: "Master of the Fighters Guild"
+    description: "Reach the highest rank of the Fighters Guild."
+    icon: "🛡️"
+    match: 'FACTION RANK: [^|]*Fighters Guild[^|]*\| rank=10\b'
+    case_insensitive: true
+
+  - name: "Grandmaster of the Morag Tong"
+    description: "Reach the highest rank of the Morag Tong."
+    icon: "🗡️"
+    match: 'FACTION RANK: [^|]*Morag Tong[^|]*\| rank=10\b'
+    case_insensitive: true
+
+  - name: "Commander of the Legion"
+    description: "Reach the highest rank of the Imperial Legion."
+    icon: "🦅"
+    match: 'FACTION RANK: [^|]*Imperial Legion[^|]*\| rank=10\b'
+    case_insensitive: true
+
+  - name: "Primate of the Cult"
+    description: "Reach the highest rank of the Imperial Cult."
+    icon: "🕊️"
+    match: 'FACTION RANK: [^|]*Imperial Cult[^|]*\| rank=10\b'
+    case_insensitive: true
+
+  - name: "Patriarch of the Temple"
+    description: "Reach the highest rank of the Temple."
+    icon: "⛪"
+    match: 'FACTION RANK: [^|]*Temple[^|]*\| rank=10\b'
+    case_insensitive: true
+
+  - name: "Factor of the Company"
+    description: "Reach the highest rank of the East Empire Company."
+    icon: "⚓"
+    match: 'FACTION RANK: [^|]*East Empire Company[^|]*\| rank=9\b'
+    case_insensitive: true
+
+  - name: "Archmagister"
+    description: "Reach the highest rank of the Telvanni."
+    icon: "🍄"
+    match: 'FACTION RANK: [^|]*Telvanni[^|]*\| rank=10\b'
+    case_insensitive: true
+
+  - name: "Hlaalu Grandmaster"
+    description: "Reach the highest rank of the Hlaalu."
+    icon: "💰"
+    match: 'FACTION RANK: [^|]*Hlaalu[^|]*\| rank=10\b'
+    case_insensitive: true
+
+  - name: "Redoran Archmaster"
+    description: "Reach the highest rank of the Redoran."
+    icon: "🛡️"
+    match: 'FACTION RANK: [^|]*Redoran[^|]*\| rank=10\b'
+    case_insensitive: true
+
+  - name: "Rising Star"
+    description: "Get promoted 10 times, in any faction."
+    icon: "⭐"
+    match: 'FACTION RANK:'
+    count: 10
+    case_insensitive: true
+
+  - name: "Corporate Ladder"
+    description: "Get promoted 30 times, in any faction."
+    icon: "🪜"
+    match: 'FACTION RANK:'
+    count: 30
+    case_insensitive: true
+
+  - name: "Burned Bridges"
+    description: "Leave or get expelled from a faction."
+    icon: "🔥"
+    match: 'FACTION LEFT:'
+    case_insensitive: true
+
+  # ======================================================================
+  # EXPLORATION — villes (CELL ENTERED, indépendant du type de cellule)
+  # ======================================================================
+  - name: "Grand Tour of Vvardenfell"
+    description: "Visit 21 towns and villages across Vvardenfell."
+    icon: "🗺️"
+    all:
+      - 'CELL ENTERED: Seyda Neen\b'
+      - 'CELL ENTERED: Balmora\b'
+      - 'CELL ENTERED: Caldera\b'
+      - 'CELL ENTERED: Ald.ruhn\b'
+      - 'CELL ENTERED: Vivec\b'
+      - 'CELL ENTERED: Suran\b'
+      - 'CELL ENTERED: Molag Mar\b'
+      - 'CELL ENTERED: Sadrith Mora\b'
+      - 'CELL ENTERED: Gnisis\b'
+      - 'CELL ENTERED: Pelagiad\b'
+      - 'CELL ENTERED: Ebonheart\b'
+      - 'CELL ENTERED: Khuul\b'
+      - 'CELL ENTERED: Maar Gan\b'
+      - 'CELL ENTERED: Dagon Fel\b'
+      - 'CELL ENTERED: Hla Oad\b'
+      - 'CELL ENTERED: Gnaar Mok\b'
+      - 'CELL ENTERED: Ald Velothi\b'
+      - 'CELL ENTERED: Vos\b'
+      - 'CELL ENTERED: Tel Branora\b'
+      - 'CELL ENTERED: Tel Aruhn\b'
+      - 'CELL ENTERED: Tel Mora\b'
+    case_insensitive: true
+
+  - name: "Welcome to Morrowind"
+    description: "Set foot in Seyda Neen."
+    icon: "⚓"
+    match: 'CELL ENTERED: Seyda Neen\b'
+    case_insensitive: true
+
+  - name: "City of Canals"
+    description: "Visit Vivec City."
+    icon: "🌉"
+    match: 'CELL ENTERED: Vivec\b'
+    case_insensitive: true
+
+  - name: "City of Mournhold"
+    description: "Visit Mournhold."
+    icon: "🏙️"
+    match: 'CELL ENTERED: Mournhold\b'
+    case_insensitive: true
+
+  - name: "Mainland Newcomer"
+    description: "Set foot in any Tamriel Rebuilt settlement."
+    icon: "🚢"
+    any:
+      - 'CELL ENTERED: Old Ebonheart\b'
+      - 'CELL ENTERED: Firewatch\b'
+      - 'CELL ENTERED: Helnim\b'
+      - 'CELL ENTERED: Almas Thirr\b'
+      - 'CELL ENTERED: Narsis\b'
+      - 'CELL ENTERED: Necrom\b'
+      - 'CELL ENTERED: Andothren\b'
+      - 'CELL ENTERED: Bal Foyen\b'
+      - 'CELL ENTERED: Teyn\b'
+      - 'CELL ENTERED: Sailen\b'
+      - 'CELL ENTERED: Omaynis\b'
+      - 'CELL ENTERED: Veranis\b'
+      - 'CELL ENTERED: Kragenmoor\b'
+      - 'CELL ENTERED: Blacklight\b'
+    case_insensitive: true
+
+  - name: "Old Ebonheart"
+    description: "Visit Old Ebonheart on the mainland."
+    icon: "🏯"
+    match: 'CELL ENTERED: Old Ebonheart\b'
+    case_insensitive: true
+
+  - name: "Embers of Empire"
+    description: "Visit the Imperial settlements of Firewatch and Helnim."
+    icon: "🔥"
+    all:
+      - 'CELL ENTERED: Firewatch\b'
+      - 'CELL ENTERED: Helnim\b'
+    case_insensitive: true
+
+  - name: "Dominions of Dust"
+    description: "Reach Andothren, the huge Hlaalu trade port on the Inner Sea."
+    icon: "⚓"
+    match: 'CELL ENTERED: Andothren\b'
+    case_insensitive: true
+
+  - name: "Grasping Fortune"
+    description: "Reach Narsis, capital of House Hlaalu and second-largest city of Morrowind."
+    icon: "💰"
+    match: 'CELL ENTERED: Narsis\b'
+    case_insensitive: true
+
+  - name: "Foul Murder"
+    description: "Reach Necrom, where the epilogue to the main quest begins."
+    icon: "💀"
+    match: 'CELL ENTERED: Necrom\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Almas Thirr"
+    description: "Visit Almas Thirr."
+    icon: "🏛️"
+    match: 'CELL ENTERED: Almas Thirr\b'
+    case_insensitive: true
+
+  - name: "Hlaalu Council Manor"
+    description: "Visit Bal Foyen, seat of a Hlaalu Council Manor."
+    icon: "🏠"
+    match: 'CELL ENTERED: Bal Foyen\b'
+    case_insensitive: true
+
+  - name: "Monastery of St. Aralor"
+    description: "Visit the Monastery of St. Aralor."
+    icon: "⛪"
+    match: 'CELL ENTERED: [^|]*Aralor'
+    case_insensitive: true
+
+  - name: "Sundered Scar"
+    description: "Discover the Sundered Scar region, east of Old Ebonheart."
+    icon: "🌋"
+    match: 'REGION DISCOVERED: [^|]*Sundered Scar'
+    case_insensitive: true
+
+  - name: "Mainland Tourist"
+    description: "Visit the eight great mainland settlements: Old Ebonheart, Firewatch, Helnim, Almas Thirr, Narsis, Necrom, Andothren and Bal Foyen."
+    icon: "🧳"
+    all:
+      - 'CELL ENTERED: Old Ebonheart\b'
+      - 'CELL ENTERED: Firewatch\b'
+      - 'CELL ENTERED: Helnim\b'
+      - 'CELL ENTERED: Almas Thirr\b'
+      - 'CELL ENTERED: Narsis\b'
+      - 'CELL ENTERED: Necrom\b'
+      - 'CELL ENTERED: Andothren\b'
+      - 'CELL ENTERED: Bal Foyen\b'
+    case_insensitive: true
+
+  - name: "Cartographer of the Mainland"
+    description: "Visit 25 mainland settlements, from Old Ebonheart to Althoa."
+    icon: "🧭"
+    all:
+      - 'CELL ENTERED: Old Ebonheart\b'
+      - 'CELL ENTERED: Firewatch\b'
+      - 'CELL ENTERED: Helnim\b'
+      - 'CELL ENTERED: Almas Thirr\b'
+      - 'CELL ENTERED: Narsis\b'
+      - 'CELL ENTERED: Necrom\b'
+      - 'CELL ENTERED: Andothren\b'
+      - 'CELL ENTERED: Bal Foyen\b'
+      - 'CELL ENTERED: Teyn\b'
+      - 'CELL ENTERED: Sailen\b'
+      - 'CELL ENTERED: Omaynis\b'
+      - 'CELL ENTERED: Veranis\b'
+      - 'CELL ENTERED: Kragenmoor\b'
+      - 'CELL ENTERED: Blacklight\b'
+      - 'CELL ENTERED: Almalexia\b'
+      - 'CELL ENTERED: Othmura\b'
+      - 'CELL ENTERED: Shipal.Sharai\b'
+      - 'CELL ENTERED: Hlan Oek\b'
+      - 'CELL ENTERED: Tel Oren\b'
+      - 'CELL ENTERED: Tel Rivus\b'
+      - 'CELL ENTERED: Dondril\b'
+      - 'CELL ENTERED: Meralag\b'
+      - 'CELL ENTERED: Hlerynhul\b'
+      - 'CELL ENTERED: Bal Oyra\b'
+      - 'CELL ENTERED: Althoa\b'
+    case_insensitive: true
+
+  # ======================================================================
+  # EXPLORATION — lieux découverts
+  # ======================================================================
+  - name: "Wanderer"
+    description: "Discover 10 named outdoor locations."
+    icon: "🥾"
+    match: 'LOCATION DISCOVERED:'
+    count: 10
+    case_insensitive: true
+
+  - name: "Explorer of Vvardenfell"
+    description: "Discover 5 locations."
+    icon: "🗺️"
+    match: 'LOCATION DISCOVERED:'
+    count: 5
+    case_insensitive: true
+
+  - name: "Pathfinder"
+    description: "Discover 25 named outdoor locations."
+    icon: "🧭"
+    match: 'LOCATION DISCOVERED:'
+    count: 25
+    case_insensitive: true
+
+  - name: "Cartographer"
+    description: "Discover 100 named outdoor locations."
+    icon: "📍"
+    match: 'LOCATION DISCOVERED:'
+    count: 100
+    case_insensitive: true
+
+  - name: "Master Cartographer"
+    description: "Discover 250 named outdoor locations."
+    icon: "🌍"
+    match: 'LOCATION DISCOVERED:'
+    count: 250
+    case_insensitive: true
+
+  - name: "Region Hopper"
+    description: "Discover 5 regions."
+    icon: "🌄"
+    match: 'REGION DISCOVERED:'
+    count: 5
+    case_insensitive: true
+
+  - name: "Region Collector"
+    description: "Discover 15 regions."
+    icon: "🏞️"
+    match: 'REGION DISCOVERED:'
+    count: 15
+    case_insensitive: true
+
+  - name: "Region Completionist"
+    description: "Discover 30 regions."
+    icon: "🌐"
+    match: 'REGION DISCOVERED:'
+    count: 30
+    case_insensitive: true
+
+  - name: "Dungeon Crawler"
+    description: "Discover 25 interiors."
+    icon: "🕯️"
+    match: 'INTERIOR DISCOVERED:'
+    count: 25
+    case_insensitive: true
+
+  - name: "Delver"
+    description: "Discover 100 interiors."
+    icon: "⛏️"
+    match: 'INTERIOR DISCOVERED:'
+    count: 100
+    case_insensitive: true
+
+  - name: "Spelunker"
+    description: "Discover 250 interiors."
+    icon: "🦇"
+    match: 'INTERIOR DISCOVERED:'
+    count: 250
+    case_insensitive: true
+
+  - name: "Underworld Resident"
+    description: "Discover 500 interiors."
+    icon: "🕳️"
+    match: 'INTERIOR DISCOVERED:'
+    count: 500
+    case_insensitive: true
+
+  - name: "Road Warrior"
+    description: "Cross 1,000 cell borders."
+    icon: "🛣️"
+    match: 'CELL ENTERED:'
+    count: 1000
+    case_insensitive: true
+
+  - name: "Never Sits Still"
+    description: "Cross 5,000 cell borders."
+    icon: "🏃"
+    match: 'CELL ENTERED:'
+    count: 5000
+    case_insensitive: true
+
+  - name: "Tomb Raider"
+    description: "Discover 10 ancestral tombs."
+    icon: "⚰️"
+    match: 'INTERIOR DISCOVERED: [^|]*Ancestral Tomb'
+    count: 10
+    case_insensitive: true
+
+  - name: "Echo of the Past"
+    description: "Discover 40 ancestral tombs."
+    icon: "🪦"
+    match: 'INTERIOR DISCOVERED: [^|]*Ancestral Tomb'
+    count: 40
+    case_insensitive: true
+
+  - name: "Ghost Fence"
+    description: "Discover 100 ancestral tombs."
+    icon: "👻"
+    match: 'INTERIOR DISCOVERED: [^|]*Ancestral Tomb'
+    count: 100
+    case_insensitive: true
+
+  - name: "Egg Hunter"
+    description: "Discover 5 egg mines."
+    icon: "🥚"
+    match: 'INTERIOR DISCOVERED: [^|]*Egg ?mine'
+    count: 5
+    case_insensitive: true
+
+  - name: "Under the Empire"
+    description: "Discover 20 egg mines."
+    icon: "⛏️"
+    match: 'INTERIOR DISCOVERED: [^|]*Egg ?mine'
+    count: 20
+    case_insensitive: true
+
+  - name: "Cave Dweller"
+    description: "Discover 10 caves or caverns."
+    icon: "🕳️"
+    match: 'INTERIOR DISCOVERED: [^|]*(Cave|Cavern)'
+    count: 10
+    case_insensitive: true
+
+  - name: "Troglodyte"
+    description: "Discover 40 caves or caverns."
+    icon: "🦇"
+    match: 'INTERIOR DISCOVERED: [^|]*(Cave|Cavern)'
+    count: 40
+    case_insensitive: true
+
+  - name: "Mine Inspector"
+    description: "Discover 5 mines (other than egg mines)."
+    icon: "⛏️"
+    match: 'INTERIOR DISCOVERED: [^|]*\bMine\b'
+    count: 5
+    case_insensitive: true
+
+  - name: "Tower Visitor"
+    description: "Discover 5 Telvanni towers."
+    icon: "🍄"
+    match: 'INTERIOR DISCOVERED: Tel \w+'
+    count: 5
+    case_insensitive: true
+
+  - name: "Fort Inspector"
+    description: "Discover 5 forts."
+    icon: "🏰"
+    match: 'INTERIOR DISCOVERED: Fort '
+    count: 5
+    case_insensitive: true
+
+  - name: "Shrine Seeker"
+    description: "Discover 5 shrines."
+    icon: "🛐"
+    match: 'INTERIOR DISCOVERED: [^|]*Shrine'
+    count: 5
+    case_insensitive: true
+
+  - name: "Pub Crawler"
+    description: "Discover 10 inns, taverns, cornerclubs or tradehouses."
+    icon: "🍺"
+    match: 'INTERIOR DISCOVERED: [^|]*(Inn|Tavern|Cornerclub|Lodge|Tradehouse)'
+    count: 10
+    case_insensitive: true
+
+  - name: "Night Owl"
+    description: "Discover 30 inns, taverns, cornerclubs or tradehouses."
+    icon: "🛏️"
+    match: 'INTERIOR DISCOVERED: [^|]*(Inn|Tavern|Cornerclub|Lodge|Tradehouse)'
+    count: 30
+    case_insensitive: true
+
+  - name: "Faithful Visitor"
+    description: "Discover 10 temples, cantons, chapels or monasteries."
+    icon: "⛪"
+    match: 'INTERIOR DISCOVERED: [^|]*(Temple|Canton|Chapel|Monastery)'
+    count: 10
+    case_insensitive: true
+
+  - name: "Hall Monitor"
+    description: "Discover a Mages Guild hall, a Fighters Guild hall and a Temple."
+    icon: "🏛️"
+    all:
+      - 'INTERIOR DISCOVERED: [^|]*Mages Guild'
+      - 'INTERIOR DISCOVERED: [^|]*Fighters Guild'
+      - 'INTERIOR DISCOVERED: [^|]*Temple'
+    case_insensitive: true
+
+  - name: "Echoes of the Dwemer"
+    description: "Visit all 24 Dwemer ruins of Vvardenfell."
+    icon: "⚙️"
+    all:
+      - 'CELL ENTERED: aleft \|'
+      - 'CELL ENTERED: arkngthand, hall of centrifuge \|'
+      - 'CELL ENTERED: arkngthunch-sturdumz \|'
+      - 'CELL ENTERED: gnisis, bethamez \|'
+      - 'CELL ENTERED: bthanchend \|'
+      - 'CELL ENTERED: bthuand \|'
+      - 'CELL ENTERED: bthungthumz \|'
+      - 'CELL ENTERED: dagoth ur, outer facility \|'
+      - 'CELL ENTERED: druscashti, upper level \|'
+      - 'CELL ENTERED: endusal, kagrenac.s study \|'
+      - 'CELL ENTERED: galom daeus, entry \|'
+      - 'CELL ENTERED: mudan, lost dwemer checkpoint \|'
+      - 'CELL ENTERED: mzahnch \|'
+      - 'CELL ENTERED: mzanchend \|'
+      - 'CELL ENTERED: mzuleft \|'
+      - 'CELL ENTERED: nchardahrk \|'
+      - 'CELL ENTERED: nchardumz \|'
+      - 'CELL ENTERED: nchuleft \|'
+      - 'CELL ENTERED: nchuleftingth, upper levels \|'
+      - 'CELL ENTERED: nchurdamz \|'
+      - 'CELL ENTERED: odrosal, dwemer training academy \|'
+      - 'CELL ENTERED: tureynulal, kagrenac.s library \|'
+      - 'CELL ENTERED: vemynal, outer fortress \|'
+      - 'CELL ENTERED: bamz-amschend, hearthfire hall \|'
+    case_insensitive: true
+
+  - name: "Dwemer Archaeologist"
+    description: "Visit 5 Dwemer ruins of Vvardenfell."
+    icon: "🔧"
+    match: 'CELL ENTERED: (aleft|arkngthand|arkngthunch|bthanchend|bthuand|bthungthumz|mzahnch|mzanchend|mzuleft|nchardahrk|nchardumz|nchuleft|nchurdamz|odrosal|tureynulal|vemynal|bamz.amschend)'
+    count: 5
+    case_insensitive: true
+
+  - name: "Dunmer Strongholds"
+    description: "Visit all 11 ruined Dunmer strongholds of Vvardenfell."
+    icon: "🏚️"
+    all:
+      - 'CELL ENTERED: andasreth\b'
+      - 'CELL ENTERED: berandas\b'
+      - 'CELL ENTERED: valenvaryon\b'
+      - 'CELL ENTERED: indoranyon\b'
+      - 'CELL ENTERED: kogoruhn\b'
+      - 'CELL ENTERED: marandus\b'
+      - 'CELL ENTERED: rotheran\b'
+      - 'CELL ENTERED: telasero\b'
+      - 'CELL ENTERED: falasmaryon\b'
+      - 'CELL ENTERED: falensarano\b'
+      - 'CELL ENTERED: hlormaren\b'
+    case_insensitive: true
+
+  # ======================================================================
+  # COMBAT — ennemis
+  # ======================================================================
+  - name: "First Blood"
+    description: "Kill your first NPC."
+    icon: "🩸"
+    match: 'NPC KILLED:'
+    case_insensitive: true
+
+  - name: "Bloodied Hands"
+    description: "Kill 10 NPCs."
+    icon: "🔪"
+    match: 'NPC KILLED:'
+    count: 10
+    case_insensitive: true
+
+  - name: "Cold Blooded"
+    description: "Kill 50 NPCs."
+    icon: "🗡️"
+    match: 'NPC KILLED:'
+    count: 50
+    case_insensitive: true
+
+  - name: "Death Dealer"
+    description: "Kill 100 NPCs."
+    icon: "💀"
+    match: 'NPC KILLED:'
+    count: 100
+    case_insensitive: true
+
+  - name: "Angel of Death"
+    description: "Kill 250 NPCs."
+    icon: "☠️"
+    match: 'NPC KILLED:'
+    count: 250
+    case_insensitive: true
+
+  - name: "Harbinger of the Reaper"
+    description: "Kill 500 NPCs."
+    icon: "⚰️"
+    match: 'NPC KILLED:'
+    count: 500
+    case_insensitive: true
+
+  - name: "Beast Hunter"
+    description: "Kill 10 creatures."
+    icon: "🐾"
+    match: 'CREATURE KILLED:'
+    count: 10
+    case_insensitive: true
+
+  - name: "Monster Slayer"
+    description: "Kill 100 creatures."
+    icon: "👹"
+    match: 'CREATURE KILLED:'
+    count: 100
+    case_insensitive: true
+
+  - name: "Bane of Beasts"
+    description: "Kill 500 creatures."
+    icon: "🏹"
+    match: 'CREATURE KILLED:'
+    count: 500
+    case_insensitive: true
+
+  - name: "Exterminator"
+    description: "Kill 1,000 creatures."
+    icon: "💥"
+    match: 'CREATURE KILLED:'
+    count: 1000
+    case_insensitive: true
+
+  - name: "Bandit Slayer"
+    description: "Defeat 10 bandits."
+    icon: "⚔️"
+    match: 'NPC KILLED: Bandit'
+    count: 10
+    case_insensitive: true
+
+  - name: "Bandit Bane"
+    description: "Defeat 50 bandits."
+    icon: "🛡️"
+    match: 'NPC KILLED: Bandit'
+    count: 50
+    case_insensitive: true
+
+  - name: "Smuggler Buster"
+    description: "Defeat 10 smugglers."
+    icon: "📦"
+    match: 'NPC KILLED: Smuggler'
+    count: 10
+    case_insensitive: true
+
+  - name: "Necromancer's Nemesis"
+    description: "Defeat 10 necromancers."
+    icon: "💀"
+    match: 'NPC KILLED: Necromancer'
+    count: 10
+    case_insensitive: true
+
+  - name: "Cult Breaker"
+    description: "Defeat 10 cultists."
+    icon: "🔥"
+    match: 'NPC KILLED: [^|]*Cultist'
+    count: 10
+    case_insensitive: true
+
+  - name: "Ordinator Slayer"
+    description: "Kill an Ordinator."
+    icon: "🪖"
+    match: 'NPC KILLED: [^|]*Ordinator'
+    case_insensitive: true
+
+  - name: "Treason"
+    description: "Kill a guard or legionnaire."
+    icon: "🚨"
+    match: 'NPC KILLED: [^|]*(Guard|Legionnaire)'
+    case_insensitive: true
+
+  - name: "Racer Hunter"
+    description: "Kill 25 cliff racers."
+    icon: "🦇"
+    match: 'CREATURE KILLED: Cliff Racer'
+    count: 25
+    case_insensitive: true
+
+  - name: "Racer Nemesis"
+    description: "Kill 100 cliff racers."
+    icon: "🦅"
+    match: 'CREATURE KILLED: Cliff Racer'
+    count: 100
+    case_insensitive: true
+
+  - name: "Crab Menace"
+    description: "Kill 10 mudcrabs."
+    icon: "🦀"
+    match: 'CREATURE KILLED: Mudcrab'
+    count: 10
+    case_insensitive: true
+
+  - name: "Kagouti Hunter"
+    description: "Kill 10 kagouti."
+    icon: "🦎"
+    match: 'CREATURE KILLED: Kagouti'
+    count: 10
+    case_insensitive: true
+
+  - name: "Alit Hunter"
+    description: "Kill 10 alits."
+    icon: "🐊"
+    match: 'CREATURE KILLED: Alit'
+    count: 10
+    case_insensitive: true
+
+  - name: "Kwama Exterminator"
+    description: "Kill 25 kwama."
+    icon: "🪲"
+    match: 'CREATURE KILLED: Kwama'
+    count: 25
+    case_insensitive: true
+
+  - name: "Fisherman"
+    description: "Kill 10 slaughterfish."
+    icon: "🐟"
+    match: 'CREATURE KILLED: Slaughterfish'
+    count: 10
+    case_insensitive: true
+
+  - name: "Nix-Hound Tamer"
+    description: "Kill 10 nix-hounds."
+    icon: "🐕"
+    match: 'CREATURE KILLED: Nix-Hound'
+    count: 10
+    case_insensitive: true
+
+  - name: "Daedra Banisher"
+    description: "Banish 25 Daedra."
+    icon: "😈"
+    match: 'CREATURE KILLED: (Dremora|Daedroth|Clannfear|Scamp|Winged Twilight|Golden Saint|Hunger|Atronach)'
+    count: 25
+    case_insensitive: true
+
+  - name: "Dwemer Automata Breaker"
+    description: "Destroy 10 Dwemer automata."
+    icon: "⚙️"
+    match: 'CREATURE KILLED: (Centurion|Fabricant|Sphere|Spider)'
+    count: 10
+    case_insensitive: true
+
+  - name: "Undead Cleanser"
+    description: "Put 25 undead to rest."
+    icon: "🪦"
+    match: 'CREATURE KILLED: [^|]*(Bonewalker|Skeleton|Ghost|Draugr|Wight|Lich|Zombie)'
+    count: 25
+    case_insensitive: true
+
+  - name: "Ash Creature Hunter"
+    description: "Kill 25 ash creatures."
+    icon: "🌋"
+    match: 'CREATURE KILLED: Ash '
+    count: 25
+    case_insensitive: true
+
+  - name: "Corprus Cleansing"
+    description: "Kill 10 corprus creatures."
+    icon: "🧟"
+    match: 'CREATURE KILLED: [^|]*(Corprus|Ascended Sleeper)'
+    count: 10
+    case_insensitive: true
+
+  - name: "Sea Monster Slayer"
+    description: "Kill 5 dreugh or netches."
+    icon: "🦑"
+    match: 'CREATURE KILLED: (Dreugh|Netch)'
+    count: 5
+    case_insensitive: true
+
+  - name: "Beastmaster of Solstheim"
+    description: "Kill 25 wolves, bears or other beasts of Solstheim."
+    icon: "🐻"
+    match: 'CREATURE KILLED: [^|]*(Wolf|Bear|Draugr|Troll|Spriggan|Horker)'
+    count: 25
+    case_insensitive: true
+
+  - name: "Werewolf Hunter"
+    description: "Kill 3 werewolves."
+    icon: "🐺"
+    match: 'CREATURE KILLED: [^|]*Werewolf'
+    count: 3
+    case_insensitive: true
+
+  - name: "Survivor"
+    description: "Survive 25 enemy encounters."
+    icon: "🛡️"
+    match: 'ENEMY ENCOUNTER:'
+    count: 25
+    case_insensitive: true
+
+  - name: "Battle-Hardened"
+    description: "Survive 100 enemy encounters."
+    icon: "⚔️"
+    match: 'ENEMY ENCOUNTER:'
+    count: 100
+    case_insensitive: true
+
+  - name: "Veteran of a Thousand Fights"
+    description: "Survive 500 enemy encounters."
+    icon: "🏴"
+    match: 'ENEMY ENCOUNTER:'
+    count: 500
+    case_insensitive: true
+
+  - name: "Never Back Down"
+    description: "Survive 1,500 enemy encounters."
+    icon: "🔥"
+    match: 'ENEMY ENCOUNTER:'
+    count: 1500
+    case_insensitive: true
+
+  - name: "Mortal Coil"
+    description: "Die for the first time."
+    icon: "💀"
+    match: 'PLAYER DIED:'
+    case_insensitive: true
+
+  - name: "Death Is Just a Setback"
+    description: "Die 10 times."
+    icon: "🔁"
+    match: 'PLAYER DIED:'
+    count: 10
+    case_insensitive: true
+
+  - name: "Reload Specialist"
+    description: "Load a game 25 times."
+    icon: "💾"
+    match: 'GAME LOADED:'
+    count: 25
+    case_insensitive: true
+
+  # ======================================================================
+  # NIVEAUX, COMPÉTENCES, ATTRIBUTS
+  # ======================================================================
+  - name: "Ding!"
+    description: "Gain a level."
+    icon: "⬆️"
+    match: 'LEVEL UP:'
+    case_insensitive: true
+
+  - name: "Journeyman"
+    description: "Reach level 5 or higher."
+    icon: "🌱"
+    match: 'LEVEL UP: ([6-9]|5|[1-9][0-9]{1,})\b'
+    case_insensitive: true
+
+  - name: "Legendary"
+    description: "Reach level 10 or higher."
+    icon: "🏅"
+    match: 'LEVEL UP: ([2-9][0-9]|1[1-9]|10|[1-9][0-9]{2,})\b'
+    case_insensitive: true
+
+  - name: "Veteran"
+    description: "Reach level 15 or higher."
+    icon: "🎖️"
+    match: 'LEVEL UP: ([2-9][0-9]|1[6-9]|15|[1-9][0-9]{2,})\b'
+    case_insensitive: true
+
+  - name: "Hero of the Land"
+    description: "Reach level 20 or higher."
+    icon: "🦸"
+    match: 'LEVEL UP: ([3-9][0-9]|2[1-9]|20|[1-9][0-9]{2,})\b'
+    case_insensitive: true
+
+  - name: "Champion"
+    description: "Reach level 30 or higher."
+    icon: "🏆"
+    match: 'LEVEL UP: ([4-9][0-9]|3[1-9]|30|[1-9][0-9]{2,})\b'
+    case_insensitive: true
+
+  - name: "Demigod"
+    description: "Reach level 40 or higher."
+    icon: "⚡"
+    match: 'LEVEL UP: ([5-9][0-9]|4[1-9]|40|[1-9][0-9]{2,})\b'
+    case_insensitive: true
+
+  - name: "Beyond Mortal"
+    description: "Reach level 50 or higher."
+    icon: "🌟"
+    match: 'LEVEL UP: ([6-9][0-9]|5[1-9]|50|[1-9][0-9]{2,})\b'
+    case_insensitive: true
+
+  - name: "Practice Makes Perfect"
+    description: "Raise skills 10 times."
+    icon: "📈"
+    match: 'SKILL UP:'
+    count: 10
+    case_insensitive: true
+
+  - name: "Student of the World"
+    description: "Raise skills 50 times."
+    icon: "📚"
+    match: 'SKILL UP:'
+    count: 50
+    case_insensitive: true
+
+  - name: "Dedicated Learner"
+    description: "Raise skills 100 times."
+    icon: "🎓"
+    match: 'SKILL UP:'
+    count: 100
+    case_insensitive: true
+
+  - name: "Lifelong Learner"
+    description: "Raise skills 250 times."
+    icon: "🧠"
+    match: 'SKILL UP:'
+    count: 250
+    case_insensitive: true
+
+  - name: "Master of Practice"
+    description: "Raise skills 500 times."
+    icon: "🏫"
+    match: 'SKILL UP:'
+    count: 500
+    case_insensitive: true
+
+  - name: "Half Way There"
+    description: "Bring 5 different skills to 50."
+    icon: "🪜"
+    match: 'SKILL UP: \w+ \| level=50\b'
+    count: 5
+    case_insensitive: true
+
+  - name: "Seasoned Craftsman"
+    description: "Bring 5 different skills to 75."
+    icon: "🔧"
+    match: 'SKILL UP: \w+ \| level=75\b'
+    count: 5
+    case_insensitive: true
+
+  - name: "Perfectionist"
+    description: "Bring a skill to 100."
+    icon: "💯"
+    match: 'SKILL UP: \w+ \| level=100\b'
+    case_insensitive: true
+
+  - name: "Jack of Many Trades"
+    description: "Bring 5 skills to 100."
+    icon: "🃏"
+    match: 'SKILL UP: \w+ \| level=100\b'
+    count: 5
+    case_insensitive: true
+
+  - name: "Polymath"
+    description: "Bring 10 skills to 100."
+    icon: "🎭"
+    match: 'SKILL UP: \w+ \| level=100\b'
+    count: 10
+    case_insensitive: true
+
+  - name: "Renaissance Hero"
+    description: "Bring all 27 skills to 100."
+    icon: "🌈"
+    match: 'SKILL UP: \w+ \| level=100\b'
+    count: 27
+    case_insensitive: true
+
+  - name: "Master of Arms"
+    description: "Master a weapon skill (blade, axe, blunt, spear, marksman or hand-to-hand)."
+    icon: "⚔️"
+    any:
+      - 'SKILL UP: longblade \| level=100\b'
+      - 'SKILL UP: shortblade \| level=100\b'
+      - 'SKILL UP: axe \| level=100\b'
+      - 'SKILL UP: bluntweapon \| level=100\b'
+      - 'SKILL UP: spear \| level=100\b'
+      - 'SKILL UP: marksman \| level=100\b'
+      - 'SKILL UP: handtohand \| level=100\b'
+    case_insensitive: true
+
+  - name: "Master of Magic"
+    description: "Master a magic skill."
+    icon: "🔮"
+    any:
+      - 'SKILL UP: destruction \| level=100\b'
+      - 'SKILL UP: alteration \| level=100\b'
+      - 'SKILL UP: illusion \| level=100\b'
+      - 'SKILL UP: conjuration \| level=100\b'
+      - 'SKILL UP: mysticism \| level=100\b'
+      - 'SKILL UP: restoration \| level=100\b'
+      - 'SKILL UP: alchemy \| level=100\b'
+      - 'SKILL UP: enchant \| level=100\b'
+    case_insensitive: true
+
+  - name: "Archmage of Arts"
+    description: "Master all six schools of magic."
+    icon: "🧙"
+    all:
+      - 'SKILL UP: destruction \| level=100\b'
+      - 'SKILL UP: alteration \| level=100\b'
+      - 'SKILL UP: illusion \| level=100\b'
+      - 'SKILL UP: conjuration \| level=100\b'
+      - 'SKILL UP: mysticism \| level=100\b'
+      - 'SKILL UP: restoration \| level=100\b'
+    case_insensitive: true
+
+  - name: "Master of Shadows"
+    description: "Master Sneak, Security or Acrobatics."
+    icon: "🥷"
+    any:
+      - 'SKILL UP: sneak \| level=100\b'
+      - 'SKILL UP: security \| level=100\b'
+      - 'SKILL UP: acrobatics \| level=100\b'
+    case_insensitive: true
+
+  - name: "Ironclad"
+    description: "Master an armor skill or Block."
+    icon: "🛡️"
+    any:
+      - 'SKILL UP: heavyarmor \| level=100\b'
+      - 'SKILL UP: mediumarmor \| level=100\b'
+      - 'SKILL UP: lightarmor \| level=100\b'
+      - 'SKILL UP: unarmored \| level=100\b'
+      - 'SKILL UP: block \| level=100\b'
+    case_insensitive: true
+
+  - name: "Silver-Tongued Merchant"
+    description: "Master both Speechcraft and Mercantile."
+    icon: "💬"
+    all:
+      - 'SKILL UP: speechcraft \| level=100\b'
+      - 'SKILL UP: mercantile \| level=100\b'
+    case_insensitive: true
+
+  - name: "Peak Physique"
+    description: "Bring an attribute to 100."
+    icon: "💪"
+    match: 'ATTRIBUTE UP: \w+ \| value=100\b'
+    case_insensitive: true
+
+  - name: "Superhuman"
+    description: "Bring 4 attributes to 100."
+    icon: "🦾"
+    match: 'ATTRIBUTE UP: \w+ \| value=100\b'
+    count: 4
+    case_insensitive: true
+
+  - name: "Maxed Out"
+    description: "Bring all 8 attributes to 100."
+    icon: "🌟"
+    match: 'ATTRIBUTE UP: \w+ \| value=100\b'
+    count: 8
+    case_insensitive: true
+
+  - name: "Stronger Than Ever"
+    description: "Raise attributes 10 times."
+    icon: "📈"
+    match: 'ATTRIBUTE UP:'
+    count: 10
+    case_insensitive: true
+
+  - name: "Heart of a Hero"
+    description: "Raise attributes 50 times."
+    icon: "❤️"
+    match: 'ATTRIBUTE UP:'
+    count: 50
+    case_insensitive: true
+
+  # ======================================================================
+  # MAGIE
+  # ======================================================================
+  - name: "Spellbook"
+    description: "Learn your first spell."
+    icon: "📕"
+    match: 'SPELL LEARNED:'
+    case_insensitive: true
+
+  - name: "Apprentice's Spellbook"
+    description: "Learn 10 spells."
+    icon: "📗"
+    match: 'SPELL LEARNED:'
+    count: 10
+    case_insensitive: true
+
+  - name: "Arcane Collection"
+    description: "Learn 25 spells."
+    icon: "📘"
+    match: 'SPELL LEARNED:'
+    count: 25
+    case_insensitive: true
+
+  - name: "Walking Library"
+    description: "Learn 50 spells."
+    icon: "📚"
+    match: 'SPELL LEARNED:'
+    count: 50
+    case_insensitive: true
+
+  - name: "Alchemist's Bench"
+    description: "Open the alchemy table 25 times."
+    icon: "⚗️"
+    match: 'ALCHEMY OPENED:'
+    count: 25
+    case_insensitive: true
+
+  - name: "Enchanter's Workshop"
+    description: "Open the enchanting menu 10 times."
+    icon: "✨"
+    match: 'ENCHANTING OPENED:'
+    count: 10
+    case_insensitive: true
+
+  - name: "Mending the Armor"
+    description: "Use the repair menu 25 times."
+    icon: "🔨"
+    match: 'REPAIR OPENED:'
+    count: 25
+    case_insensitive: true
+
+  # ======================================================================
+  # OBJETS, RICHESSE ET ARTEFACTS
+  # ======================================================================
+  - name: "Wielder of the Tools"
+    description: "Obtain Sunder, Keening and Wraithguard."
+    icon: "🔨"
+    all:
+      - 'ITEM ACQUIRED: Sunder'
+      - 'ITEM ACQUIRED: Keening'
+      - 'ITEM ACQUIRED: Wraithguard'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Star of Azura"
+    description: "Obtain Azura's Star."
+    icon: "⭐"
+    match: 'ITEM ACQUIRED: Azura.s Star'
+    case_insensitive: true
+
+  - name: "Artifact Hunter"
+    description: "Collect Azura's Star, Skull of Corruption, Mace of Molag Bal, Spear of Bitter Mercy, Boots of Blinding Speed and Cuirass of the Savior's Hide."
+    icon: "🏺"
+    all:
+      - 'ITEM ACQUIRED: Azura.s Star'
+      - 'ITEM ACQUIRED: Skull of Corruption'
+      - 'ITEM ACQUIRED: Mace of Molag Bal'
+      - 'ITEM ACQUIRED: Spear of Bitter Mercy'
+      - 'ITEM ACQUIRED: Boots of Blinding Speed'
+      - 'ITEM ACQUIRED: Cuirass of the Savior.s Hide'
+    case_insensitive: true
+
+  - name: "Daedric Collector"
+    description: "Pick up 5 pieces of Daedric equipment."
+    icon: "😈"
+    match: 'ITEM ACQUIRED: Daedric '
+    count: 5
+    case_insensitive: true
+
+  - name: "Ebony Collector"
+    description: "Pick up 5 pieces of ebony equipment."
+    icon: "🖤"
+    match: 'ITEM ACQUIRED: Ebony '
+    count: 5
+    case_insensitive: true
+
+  - name: "Glass Collector"
+    description: "Pick up 5 pieces of glass equipment."
+    icon: "💎"
+    match: 'ITEM ACQUIRED: Glass '
+    count: 5
+    case_insensitive: true
+
+  - name: "Jackpot"
+    description: "Find or earn 1,000 gold at once."
+    icon: "💰"
+    match: 'ITEM ACQUIRED: Gold \| x[0-9]{4,}\b'
+    case_insensitive: true
+
+  - name: "Dragon's Hoard"
+    description: "Find or earn 10,000 gold at once."
+    icon: "🐉"
+    match: 'ITEM ACQUIRED: Gold \| x[0-9]{5,}\b'
+    case_insensitive: true
+
+  - name: "Magpie"
+    description: "Pick up 100 items."
+    icon: "🐦"
+    match: 'ITEM ACQUIRED:'
+    count: 100
+    case_insensitive: true
+
+  - name: "Pack Rat"
+    description: "Pick up 500 items."
+    icon: "🎒"
+    match: 'ITEM ACQUIRED:'
+    count: 500
+    case_insensitive: true
+
+  - name: "Hoarder"
+    description: "Pick up 2,000 items."
+    icon: "📦"
+    match: 'ITEM ACQUIRED:'
+    count: 2000
+    case_insensitive: true
+
+  - name: "Skill Book Reader"
+    description: "Collect 10 skill books."
+    icon: "📔"
+    match: 'ITEM ACQUIRED: [^|]*\| x\d+ \| id=bookskill_'
+    count: 10
+    case_insensitive: true
+
+  - name: "Lessons of Vivec"
+    description: "Collect all 36 of Vivec's Lessons skill books."
+    icon: "📜"
+    all:
+      - 'id=bookskill_athletics3\b'
+      - 'id=bookskill_alchemy4\b'
+      - 'id=bookskill_blunt weapon4\b'
+      - 'id=bookskill_mysticism3\b'
+      - 'id=bookskill_axe4\b'
+      - 'id=bookskill_armorer3\b'
+      - 'id=bookskill_block4\b'
+      - 'id=bookskill_athletics4\b'
+      - 'id=bookskill_blunt weapon5\b'
+      - 'id=bookskill_short blade4\b'
+      - 'id=bookskill_unarmored3\b'
+      - 'id=bookskill_heavy armor5\b'
+      - 'id=bookskill_alteration4\b'
+      - 'id=bookskill_spear3\b'
+      - 'id=bookskill_unarmored4\b'
+      - 'id=bookskill_axe5\b'
+      - 'id=bookskill_long blade3\b'
+      - 'id=bookskill_alchemy5\b'
+      - 'id=bookskill_enchant4\b'
+      - 'id=bookskill_long blade4\b'
+      - 'id=bookskill_light armor4\b'
+      - 'id=bookskill_medium armor4\b'
+      - 'id=bookskill_long blade5\b'
+      - 'id=bookskill_spear4\b'
+      - 'id=bookskill_armorer4\b'
+      - 'id=bookskill_sneak5\b'
+      - 'id=bookskill_speechcraft5\b'
+      - 'id=bookskill_light armor5\b'
+      - 'id=bookskill_armorer5\b'
+      - 'id=bookskill_short blade5\b'
+      - 'id=bookskill_athletics5\b'
+      - 'id=bookskill_block5\b'
+      - 'id=bookskill_medium armor5\b'
+      - 'id=bookskill_unarmored5\b'
+      - 'id=bookskill_spear5\b'
+      - 'id=bookskill_mysticism4\b'
+    case_insensitive: true
+
+  - name: "Bookworm"
+    description: "Read 5 books."
+    icon: "📖"
+    match: 'BOOK READ:'
+    count: 5
+    case_insensitive: true
+
+  - name: "Scholar"
+    description: "Read 25 books."
+    icon: "🎓"
+    match: 'BOOK READ:'
+    count: 25
+    case_insensitive: true
+
+  - name: "Librarian"
+    description: "Read 100 books."
+    icon: "📚"
+    match: 'BOOK READ:'
+    count: 100
+    case_insensitive: true
+
+  - name: "Archivist of Tamriel"
+    description: "Read 250 books."
+    icon: "🏛️"
+    match: 'BOOK READ:'
+    count: 250
+    case_insensitive: true
+
+  - name: "Scroll Reader"
+    description: "Read 10 scrolls."
+    icon: "📜"
+    match: 'SCROLL READ:'
+    count: 10
+    case_insensitive: true
+
+  # ======================================================================
+  # SOCIAL, COMMERCE ET VOYAGES
+  # ======================================================================
+  - name: "Small Talk"
+    description: "Start 25 conversations."
+    icon: "💬"
+    match: 'NPC TALKED:'
+    count: 25
+    case_insensitive: true
+
+  - name: "Chatterbox"
+    description: "Start 100 conversations."
+    icon: "🗣️"
+    match: 'NPC TALKED:'
+    count: 100
+    case_insensitive: true
+
+  - name: "Social Butterfly"
+    description: "Start 500 conversations."
+    icon: "🦋"
+    match: 'NPC TALKED:'
+    count: 500
+    case_insensitive: true
+
+  - name: "Voice of Morrowind"
+    description: "Start 2,000 conversations."
+    icon: "📣"
+    match: 'NPC TALKED:'
+    count: 2000
+    case_insensitive: true
+
+  - name: "Meet Caius Cosades"
+    description: "Talk to Caius Cosades."
+    icon: "🕵️"
+    match: 'NPC TALKED: Caius Cosades'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Face to Face with a God"
+    description: "Talk to Vivec, Almalexia or Sotha Sil."
+    icon: "🙏"
+    match: 'NPC TALKED: (Vivec|Almalexia|Sotha Sil)'
+    case_insensitive: true
+    hidden: true
+
+  - name: "M'aiq the Liar"
+    description: "Talk to M'aiq the Liar."
+    icon: "🐱"
+    match: 'NPC TALKED: M.aiq'
+    case_insensitive: true
+
+  - name: "Savior of the Savior"
+    description: "Talk to Tarhiel."
+    icon: "🪶"
+    match: 'NPC TALKED: Tarhiel'
+    case_insensitive: true
+
+  - name: "First Sale"
+    description: "Open a merchant's trade window."
+    icon: "🛒"
+    match: 'BARTER OPENED:'
+    case_insensitive: true
+
+  - name: "Merchant"
+    description: "Trade with merchants 25 times."
+    icon: "💱"
+    match: 'BARTER OPENED:'
+    count: 25
+    case_insensitive: true
+
+  - name: "Haggler"
+    description: "Trade with merchants 100 times."
+    icon: "🤝"
+    match: 'BARTER OPENED:'
+    count: 100
+    case_insensitive: true
+
+  - name: "Tycoon"
+    description: "Trade with merchants 500 times."
+    icon: "🏦"
+    match: 'BARTER OPENED:'
+    count: 500
+    case_insensitive: true
+
+  - name: "Student"
+    description: "Open a trainer's menu."
+    icon: "🎒"
+    match: 'TRAINING OPENED:'
+    case_insensitive: true
+
+  - name: "Eager Pupil"
+    description: "Open a trainer's menu 10 times."
+    icon: "🏋️"
+    match: 'TRAINING OPENED:'
+    count: 10
+    case_insensitive: true
+
+  - name: "Spell Shopper"
+    description: "Visit a spell merchant."
+    icon: "🔮"
+    match: 'SPELL SERVICE OPENED:'
+    case_insensitive: true
+
+  - name: "First Ride"
+    description: "Use a travel service."
+    icon: "🚤"
+    match: 'TRAVEL SERVICE OPENED:'
+    case_insensitive: true
+
+  - name: "Frequent Traveler"
+    description: "Use travel services 10 times."
+    icon: "🦗"
+    match: 'TRAVEL SERVICE OPENED:'
+    count: 10
+    case_insensitive: true
+
+  - name: "Silt Strider Regular"
+    description: "Use travel services 50 times."
+    icon: "🗺️"
+    match: 'TRAVEL SERVICE OPENED:'
+    count: 50
+    case_insensitive: true
+
+  - name: "Nap Time"
+    description: "Rest or wait for the first time."
+    icon: "😴"
+    match: 'REST: started'
+    case_insensitive: true
+
+  - name: "Well Rested"
+    description: "Rest or wait 25 times."
+    icon: "🛏️"
+    match: 'REST: started'
+    count: 25
+    case_insensitive: true
+
+  - name: "Sleeps Like a Dunmer"
+    description: "Rest or wait 100 times."
+    icon: "🌙"
+    match: 'REST: started'
+    count: 100
+    case_insensitive: true
+
+  - name: "Troublemaker"
+    description: "Gain a bounty."
+    icon: "🚨"
+    match: 'BOUNTY INCREASED:'
+    case_insensitive: true
+
+  - name: "Repeat Offender"
+    description: "Gain a bounty 10 times."
+    icon: "⛓️"
+    match: 'BOUNTY INCREASED:'
+    count: 10
+    case_insensitive: true
+
+  - name: "Most Wanted"
+    description: "Reach a bounty of at least 1,000 gold."
+    icon: "📛"
+    match: 'BOUNTY INCREASED: [0-9]{4,}\b'
+    case_insensitive: true
+
+  - name: "Public Enemy"
+    description: "Reach a bounty of at least 10,000 gold."
+    icon: "☠️"
+    match: 'BOUNTY INCREASED: [0-9]{5,}\b'
+    case_insensitive: true
+
+  - name: "Clean Slate"
+    description: "Pay off or clear your bounty."
+    icon: "🧼"
+    match: 'BOUNTY DECREASED: 0\b'
+    case_insensitive: true
+
+  # Un succès caché : son nom, sa description et son icône restent masqués
+  # tant qu'il est verrouillé ; il est révélé une fois débloqué.
+  - name: "A Secret Meeting"
+    description: "A hidden achievement, revealed only once unlocked."
+    icon: "🤫"
+    match: 'SECRET ENCOUNTER:'
+    hidden: true
