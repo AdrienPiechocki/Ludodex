@@ -86,13 +86,26 @@ def set_launch_override(con, gid, text):
     con.commit()
 
 
+PROGRESS_MIN_MINUTES = 5  # une session doit durer ce temps-là pour qu'un jeu passe en 'en_cours'
+
+
 def close_open_sessions(con, now=None):
-    """Clôt les sessions encore ouvertes (ended=0) et enregistre leur durée."""
+    """Clôt les sessions encore ouvertes (ended=0) et enregistre leur durée.
+
+    C'est ICI que se décide le statut, et non plus au lancement : c'est le seul
+    moment où la durée est connue. Une session d'au moins PROGRESS_MIN_MINUTES
+    fait passer le jeu en « en cours » — un aperçu de trente secondes, lui, ne
+    doit pas le faire sauter de « To play » au premier rang de la bibliothèque.
+    Un statut choisi à la main (« Terminé », « Abandonné ») n'est jamais écrasé,
+    et un jeu déjà en cours n'est jamais rétrogradé."""
     now = int(time.time()) if now is None else now
-    rows = con.execute("SELECT id, started FROM sessions WHERE ended=0").fetchall()
+    rows = con.execute("SELECT id, game_id, started FROM sessions WHERE ended=0").fetchall()
     for r in rows:
-        con.execute("UPDATE sessions SET ended=?, minutes=? WHERE id=?",
-                    (now, max(0, (now - r["started"]) // 60), r["id"]))
+        minutes = max(0, (now - r["started"]) // 60)
+        con.execute("UPDATE sessions SET ended=?, minutes=? WHERE id=?", (now, minutes, r["id"]))
+        if minutes >= PROGRESS_MIN_MINUTES:
+            con.execute("UPDATE games SET status='en_cours' "
+                        "WHERE id=? AND status IN ('backlog','pause')", (r["game_id"],))
     con.commit()
     return len(rows)
 
@@ -109,8 +122,7 @@ def launch(con, g):
         return False
     now = int(time.time())
     close_open_sessions(con, now=now)  # lancer un jeu clôt la session précédente
-    con.execute("UPDATE games SET last_played=?, status=CASE WHEN status IN ('backlog','pause') THEN 'en_cours' ELSE status END WHERE id=?",
-                (now, g["id"]))
+    con.execute("UPDATE games SET last_played=? WHERE id=?", (now, g["id"]))
     con.execute("INSERT OR IGNORE INTO sessions (game_id, started, ended, minutes) VALUES (?, ?, 0, 0)", (g["id"], now))
     con.commit()
     print(f"▶ {g['name']}.")

@@ -16,7 +16,7 @@ Launch the picked game directly, or launch from the library.
 
 ### Library
 - imports installed games (Steam, itch.io, Flatpak, Lutris, RetroArch) and manual additions;
-- statuses (`In progress`, `To play`, `Paused`, `Dropped`, `Finished`) with automatic pause after 28 days without a session;
+- statuses (`In progress`, `To play`, `Paused`, `Dropped`, `Finished`) with automatic pause after 28 days without a session. A game only moves to `In progress` once a session has lasted **at least 5 minutes**: merely launching it — a 30-second try — no longer promotes it, and a status you set by hand (`Finished`, `Dropped`) is never overwritten;
 - personal tags + store tags (Steam genres, itch.io keywords, Lutris genres), fetchable with the `tags` command;
 - useful session length per game, SteamGridDB covers (optional API key, custom cover supported);
 - manual and automatic collections (per platform), filters, hidden / not installed games.
@@ -48,7 +48,7 @@ Launch the picked game directly, or launch from the library.
 - **secret achievements** are masked by default (name, description and icon replaced by a generic label until unlocked); the flag comes from the log (YAML) or from Steam's own `hidden` field, so a secret Steam achievement is masked too, and reveals itself as soon as it is earned. The global setting *Reveal hidden achievements* (Settings → Achievements) reveals them everywhere, including in `ludodex tracker status`. The search bar can **not** find a masked achievement by its real name or description — otherwise typing a guess and seeing a row appear would give the spoiler away.
 
 ### Play time tracking
-Every launch through Ludodex opens a **session**; its duration is recorded when it closes. Steam history (minutes played, last launch) is imported locally with `backfill`, no API needed. Both the interface and the CLI show total play time, the timelines, and rankings.
+Every launch through Ludodex opens a **session**; its duration is recorded when it closes. Closing a session is also the only moment that can move a game to `In progress`, since it is the first time its real length is known — and only if it reached 5 minutes. Steam history (minutes played, last launch) is imported locally with `backfill`, no API needed. Both the interface and the CLI show total play time, the timelines, and rankings.
 
 ## Installation
 

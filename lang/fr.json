@@ -140,8 +140,6 @@
   "Sat": "sam.",
   "Upcoming": "À venir",
   "Nothing played": "Rien joué",
-  "Streak": "Série",
-  "{current} d · record {best} d": "{current} j · record {best} j",
   "→ paused (inactive for {days} d): {names}": "→ mis en pause (inactifs depuis {days} j) : {names}",
   "! couldn't launch: {e}": "! lancement impossible : {e}",
   "No eligible game (filters too strict, or library empty).": "Aucun jeu éligible (filtres trop stricts ou bibliothèque vide).",

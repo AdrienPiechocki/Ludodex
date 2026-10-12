@@ -732,12 +732,6 @@ class LibraryMixin:
 
         group = Adw.PreferencesGroup(margin_top=6)
         rows = [nm, ex, st, tags, mn, sg, cover_row, hid]
-        streak_best = P.best_streak(self.con, gid)
-        if streak_best:
-            rows.append(Adw.ActionRow(
-                title=tr("Streak"),
-                subtitle=tr("{current} d · record {best} d",
-                            current=P.streak_for_game(self.con, gid), best=streak_best)))
         if g["store_tags"]:
             rows.append(Adw.ActionRow(title=tr("Store tags"),
                                       subtitle=GLib.markup_escape_text(", ".join(g["store_tags"].split(",")))))

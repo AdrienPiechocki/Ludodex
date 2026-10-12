@@ -51,45 +51,6 @@ def fmt_minutes(m):
     return f"{m // 60} h {m % 60:02d}" if m >= 60 else f"{m} min"
 
 
-def _day(value):
-    return datetime.date.fromisoformat(value)
-
-
-def play_days(con, gid=None):
-    """Jours (locaux) où une session a commencé : tous jeux confondus, ou un jeu donné."""
-    sql = "SELECT DISTINCT date(started,'unixepoch','localtime') AS d FROM sessions"
-    args = ()
-    if gid is not None:
-        sql += " WHERE game_id=?"
-        args = (gid,)
-    return {_day(r["d"]) for r in con.execute(sql, args)}
-
-
-def _run_length(days, start):
-    n, d = 0, start
-    while d in days:
-        n += 1
-        d -= datetime.timedelta(days=1)
-    return n
-
-
-def streak_for_game(con, gid, today=None):
-    """Jours consécutifs joués ; la série reste vivante si tu as joué hier."""
-    days = play_days(con, gid)
-    if not days:
-        return 0
-    d = today or datetime.date.today()
-    if d not in days:
-        d -= datetime.timedelta(days=1)
-    return _run_length(days, d)
-
-
-def best_streak(con, gid):
-    """Plus longue suite de jours consécutifs joués (record)."""
-    days = play_days(con, gid)
-    return max((_run_length(days, d) for d in days), default=0)
-
-
 def _timeline(con, period_start, period_end, bucket, today):
     """Entrées de la frise entre period_start et period_end (dates incluses).
 
