@@ -30,6 +30,7 @@ class SettingsMixin:
         self._pick_owned_chk = None
         self._show_hidden_chk = self._show_not_installed_chk = None
         self._ach_show_hidden_chk = self._ra_user_row = self._ra_key_row = None
+        self._notes_group = self._notes_font_spin = None   # curseur de la page précédente
         page = Adw.PreferencesPage()
 
         # --- réglages généraux (toutes pages) ---
@@ -211,6 +212,11 @@ class SettingsMixin:
 
     def _on_notes_font(self, spin, _p):
         v = int(spin.get_value())
+        # Mémoriser AVANT d'écrire : `notes_font_size` est la valeur que les réglages
+        # réaffichent en rouvrant. Tant qu'elle ne suit pas, on rouvre les réglages
+        # sur l'ancien chiffre — et une notification tardive du curseur réécrit même
+        # l'ancienne valeur par-dessus celle qu'on vient de choisir.
+        self.notes_font_size = v
         P.set_setting(self.con, "notes_font_size", str(v))
         self._apply_note_font(v)
 
