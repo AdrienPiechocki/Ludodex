@@ -384,15 +384,17 @@ class NotesMixin:
             return
         view, buf = self.note_view, self.note_buffer
         for start, end, checked in self._note_tasks:
-            # Hauteur LUE SUR LE `]`, jamais sur le tiret : celui-ci est dans
-            # `md-tasklead` (scale=0.01) où get_iter_location().height vaut 0, et
-            # max(12, h-3) retombait sur le plancher de 12 px — les cases
-            # paraissaient trop petites à côté du texte.
             r0 = view.get_iter_location(buf.get_iter_at_offset(start))
-            height = view.get_iter_location(buf.get_iter_at_offset(end - 1)).height
+            # Haut de ligne et hauteur LUS SUR LE `]`, jamais sur le tiret : celui-ci
+            # est dans `md-tasklead` (scale=0.01) où le glyphe est aplati sur la
+            # ligne de base — la case retombait SOUS le texte, et sa hauteur valait 0
+            # ce qui faisait tomber max(12, h-3) sur le plancher de 12 px.
+            mark = view.get_iter_location(buf.get_iter_at_offset(end - 1))
+            height = mark.height
             if height < 4.0:
                 continue
-            x, y = view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, r0.x, r0.y)
+            x, _ = view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, r0.x, r0.y)
+            _, y = view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, mark.x, mark.y)
             # Limite à droite : la 1re lettre du texte de la tâche, moins une
             # marge pour le trait du cadre (qui déborde d'un demi-trait).
             t = buf.get_iter_at_offset(end)
