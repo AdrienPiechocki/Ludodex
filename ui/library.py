@@ -99,6 +99,8 @@ class LibraryMixin:
             self._refresh_notes()  # la liste suit les jeux ajoutés / renommés ailleurs
         else:
             self._flush_note()     # quitter l'onglet enregistre la note en cours
+        if page == "achievements":
+            self._refresh_achievements()  # les logs du module succès sont relus à l'ouverture
         self._refresh_moods()
         self._refresh_pick_collections()
 

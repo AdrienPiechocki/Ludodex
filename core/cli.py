@@ -15,6 +15,7 @@ from .game_collections import find_collection, list_collections, add_collection,
 from .importers import import_all, add_custom
 from .pick import excluded_tags, pick, STATUS_WEIGHT
 from .sources import source_cond
+from .tracker import tracked_games, tracker_paths, set_tracker, clear_tracker, scan
 
 
 # ---------- gestion ----------
@@ -70,6 +71,11 @@ def main():
     cv.add_argument("--status", action="store_true", help=tr("cover status, no network"))
     c1 = sub.add_parser("cover")  # forcer l'id SteamGridDB d'un jeu (quand la recherche par nom échoue)
     c1.add_argument("name"); c1.add_argument("sgdb_id", type=int)
+    tk = sub.add_parser("tracker")  # succès définis par l'utilisateur, détectés dans les logs d'un jeu moddé
+    tk.add_argument("action", choices=["list", "attach", "status", "scan", "clear"])
+    tk.add_argument("name", nargs="?", help=tr("game name"))
+    tk.add_argument("yaml", nargs="?", help=tr("achievements file (YAML)"))
+    tk.add_argument("log", nargs="?", help=tr("game log file"))
     args = ap.parse_args()
     if args.cmd != "import":
         auto_tidy(con)
@@ -251,6 +257,59 @@ def main():
         q = "SELECT * FROM games" + ((" WHERE " + source_cond(con)) if source_cond(con) else "")
         for g in con.execute(q + " ORDER BY status, name"):
             print(f"{g['status']:<10} {g['name']:<40} {g['tags']}  ({g['session_length']} min)")
+    elif args.cmd == "tracker":
+        if args.action == "list":
+            games = tracked_games(con)
+            if not games:
+                print(tr("no tracker configured"))
+            for gid, name, yaml_path, log_path in games:
+                try:
+                    state = scan(con, gid)
+                    print(f"{name}: {sum(1 for a in state if a['done'])}/{len(state)}")
+                except (ValueError, FileNotFoundError) as e:
+                    print(f"{name}: {e}")
+        else:
+            if not args.name:
+                raise SystemExit(tr("game name required"))
+            g = find(con, args.name)
+            if args.action == "attach":
+                if not (args.yaml and args.log):
+                    raise SystemExit(tr("usage: tracker attach <game> <yaml> <log>"))
+                set_tracker(con, g["id"], args.yaml, args.log)
+                print("OK:", g["name"])
+            elif args.action == "clear":
+                clear_tracker(con, g["id"])
+                print(tr("tracker removed for {name}", name=g["name"]))
+            else:  # status / scan
+                if tracker_paths(con, g["id"]) is None:
+                    raise SystemExit(tr("no tracker configured for {name}", name=g["name"]))
+                prev = {r["ach_id"] for r in con.execute(
+                    "SELECT ach_id FROM achievements WHERE game_id=? AND unlocked_at>0", (g["id"],))}
+                try:
+                    state = scan(con, g["id"])
+                except FileNotFoundError as e:
+                    raise SystemExit(tr("log file missing: {path}", path=e.filename))
+                except ValueError as e:
+                    raise SystemExit(tr("invalid achievements file: {e}", e=e))
+                unlocked = sum(1 for a in state if a["done"])
+                if args.action == "status":
+                    for a in state:
+                        if a["done"]:
+                            date = datetime.datetime.fromtimestamp(a["unlocked_at"]).strftime("%d/%m/%Y")
+                            print(f"✓ {a['name']} · {date}")
+                        elif a["target"] > 1:
+                            print(f"· {a['name']} ({a['progress']}/{a['target']})")
+                        else:
+                            print(f"· {a['name']}")
+                else:  # scan
+                    new = [a for a in state if a["done"] and a["id"] not in prev]
+                    if new:
+                        print(tr("{n} new achievement(s) unlocked", n=len(new)))
+                    for a in new:
+                        print(f"✓ {a['name']}")
+                    if not new:
+                        print(tr("scan: nothing new"))
+                    print(tr("{u}/{t} unlocked", u=unlocked, t=len(state)))
 
 
 if __name__ == "__main__":

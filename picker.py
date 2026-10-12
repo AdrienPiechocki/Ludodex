@@ -21,9 +21,10 @@ from core import game_collections as _mod_collections
 from core import importers as _mod_importers
 from core import pick as _mod_pick
 from core import cli as _mod_cli
+from core import tracker as _mod_tracker
 
 _OWNER_MODULES = (_mod_db, _mod_launch, _mod_steam, _mod_sources, _mod_tags, _mod_covers,
-                  _mod_stats, _mod_collections, _mod_importers, _mod_pick, _mod_cli)
+                  _mod_stats, _mod_collections, _mod_importers, _mod_pick, _mod_cli, _mod_tracker)
 
 # Réexpose tous les noms de premier niveau (y compris les helpers _soulignés), comme
 # le faisait le picker.py monolithique.

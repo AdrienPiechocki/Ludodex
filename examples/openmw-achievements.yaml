@@ -1,0 +1,63 @@
+# Exemple de fichier de succès pour Ludodex (module « Achievements »).
+#
+# Ce fichier s'attache à un jeu dans l'application : page « Achievements » →
+# bouton « + » → choisir ce YAML et le fichier de log du mod.
+#
+# Chaque succès teste les LIGNES du log. Les motifs sont des EXPRESSIONS
+# RÉGULIÈRES appliquées en recherche libre sur chaque ligne (aucun ancrage
+# implicite : le motif peut correspondre à un fragment de ligne).
+#
+# Ce qui suit suppose que le mod écrit des lignes de la forme :
+#   [12:04:11] QUEST COMPLETE: A1_RescueSynette
+#   [12:05:32] NPC KILLED: Bandit
+#   [12:06:00] LEVEL UP: 12
+#   [12:07:10] LOCATION DISCOVERED: Balmora
+#   [12:08:00] ITEM ACQUIRED: Sunder
+# Adapte les motifs au format réel de ton log.
+
+achievements:
+  - name: First Steps
+    description: Complete your first quest.
+    icon: "🌟"
+    match: "QUEST COMPLETE:"
+    # « match » : un seul motif, débloqué dès la première ligne correspondante.
+
+  - name: Bandit Slayer
+    description: Defeat 10 bandits.
+    icon: "⚔️"
+    match: "NPC KILLED: Bandit"
+    count: 10            # 10 occurrences requises (au plus une par ligne)
+
+  - name: Explorer of Vvardenfell
+    description: Discover 5 locations.
+    icon: "🗺️"
+    match: "LOCATION DISCOVERED:"
+    count: 5
+
+  - name: Legendary
+    description: Reach level 10 or higher.
+    icon: "🏅"
+    match: "LEVEL UP: (1[0-9]|[2-9][0-9])"   # regex : niveaux ≥ 10
+    case_insensitive: true
+
+  - name: Wielder of the Tools
+    description: Obtain Sunder, Keening and Wraithguard.
+    icon: "🔨"
+    all:                 # chaque motif doit apparaître ; débloqué quand les 3 sont vus
+      - "ITEM ACQUIRED: Sunder"
+      - "ITEM ACQUIRED: Keening"
+      - "ITEM ACQUIRED: Wraithguard"
+
+  - name: Troubleshooter
+    description: Complete any one of the main quest branches.
+    icon: "🧭"
+    any:                 # au moins un des motifs suffit
+      - "QUEST COMPLETE: A2_"
+      - "QUEST COMPLETE: B1_"
+      - "QUEST COMPLETE: C0_"
+
+  - name: Survivor
+    description: Survive 25 enemy encounters.
+    icon: "🛡️"
+    match: "ENEMY ENCOUNTER:"
+    count: 25

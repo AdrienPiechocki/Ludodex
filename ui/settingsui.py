@@ -43,7 +43,8 @@ class SettingsMixin:
             title=tr("Modules"),
             description=tr("Hide a screen from the main window. Nothing is deleted."))
         self._module_sw = {}
-        for name, label in (("pick", "Pick"), ("retro", "Retrospective"), ("notes", "Notes")):
+        for name, label in (("pick", "Pick"), ("retro", "Retrospective"), ("notes", "Notes"),
+                            ("achievements", "Achievements")):
             sw = Adw.SwitchRow(title=tr(label), active=P.module_enabled(self.con, name))
             sw.connect("notify::active", self._on_module, name)
             mod_group.add(sw)
