@@ -54,7 +54,7 @@ Every launch through Ludodex opens a **session**; its duration is recorded when 
 
 ### Linux
 
-Dependencies: Python 3, PyGObject, GTK 4, libadwaita and Cairo (Debian/Ubuntu: `python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1`).
+Dependencies: Python 3, PyGObject, GTK 4, libadwaita, Cairo and PyYAML (Debian/Ubuntu: `python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 python3-yaml`).
 
 ```sh
 git clone <repo-url> ludodex
@@ -65,13 +65,19 @@ python3 picker.py --help  # command line
 
 ### Windows
 
-Built around [MSYS2](https://www.msys2.org/) (GTK4, libadwaita, PyGObject):
-- `ludodex.bat` launches the interface (`pythonw.exe`);
-- `ludodex-cli.bat` launches the command line.
+`gi` (PyGObject) and `cairo` (PyCairo) ship **no Windows wheels on PyPI**, so `pip install pygobject` cannot work: GTK 4 and libadwaita have to come from [MSYS2](https://www.msys2.org/) (recommended, `docs/WINDOWS.md` has the gvsbuild alternative for a python.org interpreter).
+
+```bat
+setup-windows.bat        :: pacman: Python, PyGObject, PyCairo, PyYAML, GTK4, libadwaita, icons
+ludodex-cli.bat --help   :: command line, checks the install
+ludodex.bat              # graphical interface (pythonw.exe)
+```
+
+The launchers look for MSYS2 in `C:\msys64` (`ucrt64`, then `mingw64`) and set up `PATH` themselves.
 
 ### Standalone build (PyInstaller)
 
-`./build.sh` produces `build/ludodex/` with `ludodex` (interface), `ludodex-cli` (CLI) and `_internal/` (embedded Python, GTK4, libadwaita and translations). See `ludodex.spec`; on Windows the `ludodex.bat` / `ludodex-cli.bat` launchers assume MSYS2.
+`./build.sh` (Linux) or `build.bat` (Windows) produces `build/ludodex/` with `ludodex` (interface), `ludodex-cli` (CLI) and `_internal/` (embedded Python, GTK4, libadwaita and translations). See `ludodex.spec`; a bundle is only valid for the OS it was built on.
 
 ## Usage
 
@@ -137,6 +143,10 @@ ui/           GTK4 interface: main, theme, pickview, library, retrospec,
 lang/         translations (en = base, fr)
 examples/     sample files (e.g. openmw-achievements.yaml)
 build.sh      standalone PyInstaller build (ludodex.spec)
+build.bat     same build under Windows
+setup-windows.bat  installs every Windows dependency via MSYS2 (pacman)
+requirements.txt   the only pip dependency (PyYAML); gi/cairo come from the OS
+docs/         platform notes (WINDOWS.md)
 ```
 
 ## License

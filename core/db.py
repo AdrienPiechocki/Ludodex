@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """db.py — base SQLite locale : schéma, constantes de découverte et accès de base."""
-import datetime, re, sqlite3, time
+import datetime, pathlib, re, sqlite3, time
 
 from i18n import available, set_lang, tr
 from .platform import data_dir, migrate_data_dir, lutris_dbs, itch_dbs, flatpak_dirs, retro_dirs
@@ -227,7 +227,16 @@ def _ts(s):
 
 
 def _ro(path):
-    con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    """Ouvre une base EXISTANTE en lecture seule — `mode=ro` n'en crée jamais une.
+
+    Le chemin passe par une URI (`Path.as_uri()`), seule forme que SQLite
+    interprète correctement partout. Sans elle, sous Windows, `file:C:\\Users\\
+    itch.db?mode=ro` est lu comme un nom de fichier ordinaire : antislashs non
+    séparateurs, lettre de lecteur ignorée, et le `?` coupe le chemin (doc
+    SQLite §3.1 : un chemin absolu Windows devient `file:///C:/...`). Les
+    espaces, `#` et `%` sont échappés `%HH`, ce qu'une simple interpolation
+    ne fait pas — un `#` ouvre une « frange » que SQLite ignore."""
+    con = sqlite3.connect(f"{pathlib.Path(path).absolute().as_uri()}?mode=ro", uri=True)
     con.row_factory = sqlite3.Row
     return con
 

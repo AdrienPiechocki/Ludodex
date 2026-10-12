@@ -24,7 +24,7 @@ def steam_libraries():
         libs.add(root.resolve())
         vdf = root / "libraryfolders.vdf"
         if vdf.exists():
-            for p in re.findall(r'"path"\s+"([^"]+)"', vdf.read_text(errors="ignore")):
+            for p in re.findall(r'"path"\s+"([^"]+)"', vdf.read_text(encoding="utf-8", errors="ignore")):
                 libs.add((clean_path(p) / "steamapps").resolve())
     return libs
 
@@ -37,7 +37,7 @@ def import_steam(con):
     n = 0
     for lib in libs:
         for acf in lib.glob("appmanifest_*.acf"):
-            t = acf.read_text(errors="ignore")
+            t = acf.read_text(encoding="utf-8", errors="ignore")
             g = lambda k: (re.search(rf'"{k}"\s+"([^"]*)"', t) or [None, ""])[1]
             name, appid = g("name"), g("appid")
             if not appid or any(s in name for s in IGNORE):
@@ -228,7 +228,7 @@ def steam_stats():
     out = {}
     for root in STEAM_ROOTS:
         for cfg in (root.parent / "userdata").glob("*/config/localconfig.vdf"):
-            apps = find_apps(parse_vdf(cfg.read_text(errors="ignore"))) or {}
+            apps = find_apps(parse_vdf(cfg.read_text(encoding="utf-8", errors="ignore"))) or {}
             for appid, v in apps.items():
                 if isinstance(v, dict):
                     v = {k.lower(): x for k, x in v.items()}
@@ -248,7 +248,7 @@ def steam_log_launches():
             try:
                 if f.stat().st_size > 50_000_000:
                     continue
-                lines = f.read_text(errors="ignore").splitlines()
+                lines = f.read_text(encoding="utf-8", errors="ignore").splitlines()
             except OSError:
                 continue
             nfiles += 1

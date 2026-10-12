@@ -1,0 +1,6 @@
+# Seule dépendance Python de Ludodex qui s'installe par pip.
+#
+# `gi` (PyGObject) et `cairo` (PyCairo) n'ont AUCUN wheel Windows sur PyPI :
+# ils viennent du système — MSYS2 (route recommandée) ou gvsbuild. Sur Linux,
+# la distribution les fournit aussi. Voir docs/WINDOWS.md.
+PyYAML>=5.4

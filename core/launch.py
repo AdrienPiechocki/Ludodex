@@ -3,7 +3,7 @@
 import json, os, pathlib, re, shutil, subprocess, time
 
 from i18n import tr
-from .platform import uri_command, split_command, join_command, popen_kwargs
+from .platform import uri_command, split_command, join_command, popen_kwargs, retroarch_exe
 
 
 def default_command(g, osname=None):
@@ -18,7 +18,9 @@ def default_command(g, osname=None):
         return (["lutris", uri] if kind == "native" else ["flatpak", "run", "net.lutris.Lutris", uri]), None
     if src == "retroarch":
         d = json.loads(ext)
-        base = ["flatpak", "run", "org.libretro.RetroArch"] if d["f"] else ["retroarch"]
+        # sous Windows, rétroarch.exe est cherché dans les dossiers d'installation
+        base = (["flatpak", "run", "org.libretro.RetroArch"] if d["f"]
+                else [retroarch_exe(osname) or "retroarch"])
         return base + ["-L", d["core"], d["content"]], None
     if src == "itch":
         return uri_command(f"itch://caves/{ext}/launch", osname), None

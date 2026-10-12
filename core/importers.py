@@ -66,7 +66,7 @@ def import_flatpak(con):
         for f in d.glob("*.desktop"):
             if f.stem in FLATPAK_IGNORE:
                 continue
-            t = f.read_text(errors="ignore")
+            t = f.read_text(encoding="utf-8", errors="ignore")
             cats = re.search(r"^Categories=(.*)$", t, re.M)
             if not cats or "Game" not in cats.group(1).split(";") or re.search(r"^NoDisplay=true", t, re.M):
                 continue
@@ -130,7 +130,7 @@ def runtime_path_for(ext_id):
 def retro_runtime(base, content):
     for f in runtime_paths(base, content):
         try:
-            d = json.loads(f.read_text())
+            d = json.loads(f.read_text(encoding="utf-8", errors="ignore"))
             minutes = int(d.get("runtime_hours", 0)) * 60 + int(d.get("runtime_minutes", 0))
             y = int(d.get("last_played_year", 0))
             last = int(datetime.datetime(y, int(d["last_played_month"]), int(d["last_played_day"]),
@@ -153,7 +153,7 @@ def import_retroarch(con):
             if lpl.name.startswith("content_"):  # historique / favoris : doublons
                 continue
             try:
-                data = json.loads(lpl.read_text(errors="ignore"))
+                data = json.loads(lpl.read_text(encoding="utf-8", errors="ignore"))
             except ValueError:
                 continue
             default_core = data.get("default_core_path") or ""
@@ -265,7 +265,7 @@ def import_heroic(con):
     n = 0
     for path in files:
         try:
-            data = json.loads(path.read_text(errors="ignore"))
+            data = json.loads(path.read_text(encoding="utf-8", errors="ignore"))
         except (OSError, ValueError):  # fichier absent/illisible : on ignore
             continue
         for g in parse_legendary(data):
@@ -291,7 +291,7 @@ def import_epic(con):
         games = {}
         if dat.exists():  # liste des installés (noms = codes internes)
             try:
-                data = json.loads(dat.read_text(errors="ignore"))
+                data = json.loads(dat.read_text(encoding="utf-8", errors="ignore"))
             except (OSError, ValueError):
                 data = {}
             for g in parse_launcher_installed(data):
@@ -299,7 +299,7 @@ def import_epic(con):
         if man.is_dir():  # manifestes : plus riches (nom d'affichage)
             for f in sorted(man.glob("*.item")):
                 try:
-                    data = json.loads(f.read_text(errors="ignore"))
+                    data = json.loads(f.read_text(encoding="utf-8", errors="ignore"))
                 except (OSError, ValueError):
                     continue
                 g = parse_epic_manifest(data)

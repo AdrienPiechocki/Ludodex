@@ -1,6 +1,12 @@
 @echo off
-REM Ludodex — ligne de commande (Windows, via MSYS2).
-REM Adapte le chemin ci-dessous si MSYS2 n'est pas installé dans C:\msys64.
+REM Ludodex - ligne de commande (Windows, via MSYS2).
+REM MSYS2 fournit Python et PyYAML (voir docs\WINDOWS.md).
+REM Adapte le chemin ci-dessous si MSYS2 n'est pas dans C:\msys64.
 set "MSYS=C:\msys64"
-set "PATH=%MSYS%\mingw64\bin;%PATH%"
-"%MSYS%\mingw64\bin\python.exe" "%~dp0picker.py" %*
+if exist "%MSYS%\ucrt64\bin\python.exe" (
+    set "PYBIN=%MSYS%\ucrt64\bin"
+) else (
+    set "PYBIN=%MSYS%\mingw64\bin"
+)
+set "PATH=%PYBIN%;%PATH%"
+"%PYBIN%\python.exe" "%~dp0picker.py" %*

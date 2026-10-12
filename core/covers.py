@@ -25,7 +25,7 @@ def key_file():
 def sgdb_key():
     """Variable d'environnement, sinon clé enregistrée par l'interface, sinon constante ci-dessus."""
     try:
-        saved = key_file().read_text().strip()
+        saved = key_file().read_text(encoding="utf-8").strip()
     except OSError:
         saved = ""
     return (os.environ.get("STEAMGRIDDB_API_KEY") or saved or STEAMGRIDDB_API_KEY).strip()
@@ -41,7 +41,7 @@ def save_sgdb_key(key):
     f.parent.mkdir(parents=True, exist_ok=True)
     f.touch(mode=0o600, exist_ok=True)
     f.chmod(0o600)
-    f.write_text(key)
+    f.write_text(key, encoding="utf-8")
 
 
 def covers_dir():

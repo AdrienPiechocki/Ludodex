@@ -204,6 +204,22 @@ def gog_registry_games():
     return out
 
 
+def retroarch_exe(osname=None, roots=None):
+    """`retroarch.exe` sous Windows (souvent hors PATH) ; None ailleurs, où le PATH suffit.
+
+    Cherche dans les dossiers d'installation habituels. `roots` sert aux tests."""
+    if not is_windows(osname):
+        return None
+    if roots is None:
+        roots = [pathlib.Path(p) / "RetroArch"
+                 for p in (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)")) if p]
+    for base in roots:
+        exe = base / "retroarch.exe"
+        if exe.is_file():
+            return str(exe)
+    return None
+
+
 def uri_command(uri, osname=None):
     """Commande ouvrant un URI (steam://, itch://). « cmd start » pour l'association Windows."""
     return ["cmd", "/c", "start", "", uri] if is_windows(osname) else ["xdg-open", uri]
