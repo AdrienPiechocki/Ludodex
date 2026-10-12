@@ -103,9 +103,32 @@ def import_itch(con):
     return n
 
 
-def retro_runtime(base, content):
+def runtime_paths(base, content):
+    """Chemins des fichiers de runtime `.lrtl` de RetroArch pour ce contenu.
+
+    RetroArch écrit un fichier de runtime par jeu (durée de jeu + dernière
+    partie) et le met à jour en jouant : pour un jeu RetroAchievements, c'est
+    l'équivalent du log d'un suivi YAML, et la même façon de repérer une partie."""
     stem = pathlib.Path(content.split("#")[-1]).stem
-    for f in (base / "playlists" / "logs").glob(f"*/{glob.escape(stem)}.lrtl"):
+    return list((base / "playlists" / "logs").glob(f"*/{glob.escape(stem)}.lrtl"))
+
+
+def runtime_path_for(ext_id):
+    """Chemin du `.lrtl` d'un jeu importé depuis RetroArch, ou None.
+
+    `ext_id` est le JSON posé par `import_retroarch` : playlist, core, contenu."""
+    try:
+        ext = json.loads(ext_id or "")
+        base = pathlib.Path(ext["f"]).parent.parent   # <base>/playlists/<x>.lpl
+        content = ext["content"]
+    except (ValueError, KeyError, TypeError):
+        return None
+    paths = runtime_paths(base, content)
+    return str(paths[0]) if paths else None
+
+
+def retro_runtime(base, content):
+    for f in runtime_paths(base, content):
         try:
             d = json.loads(f.read_text())
             minutes = int(d.get("runtime_hours", 0)) * 60 + int(d.get("runtime_minutes", 0))

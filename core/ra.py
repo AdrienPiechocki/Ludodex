@@ -42,6 +42,21 @@ def set_ra_credentials(con, user, key):
     set_setting(con, "ra_key", (key or "").strip())
 
 
+def ra_enabled(con):
+    """L'intégration RetroAchievements est-elle active ? (réglages → Succès)
+
+    Sémantique de la valeur en base, écrite par `set_ra_enabled` :
+      - `'0'` → OFF : aucun succès RA affiché, aucune synchro, aucun appel réseau ;
+      - `'1'` ou ABSENT → ON. L'absence compte comme activé : l'option est neuve
+        et doit s'activer d'elle-même, sans migration de base."""
+    return get_setting(con, "ra_enabled") != "0"
+
+
+def set_ra_enabled(con, on):
+    """Active ou désactive RetroAchievements (case des réglages des succès)."""
+    set_setting(con, "ra_enabled", "1" if on else "0")
+
+
 # ---------- accès HTTP ----------
 def _http_json(url, timeout=15):
     req = urllib.request.Request(url, headers={"User-Agent": RA_UA})

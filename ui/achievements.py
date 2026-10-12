@@ -185,24 +185,68 @@ class AchievementsMixin:
 
         « write » : le jeu écrit = il tourne → actualisation périodique.
         « closed » : les écritures viennent de s'arrêter = le jeu vient de se
-        fermer → un dernier scan pour récupérer les dernières lignes."""
+        fermer → un dernier scan pour récupérer les dernières lignes.
+
+        Une partie repérée met à jour les DEUX sources du jeu : le suivi YAML
+        local et, si le jeu est relié et si RetroAchievements est activé, la
+        synchro RetroAchievements. Un seul snapshot avant/après couvre donc les
+        deux, et un seul toast annonce tous les nouveaux succès."""
         if not P.module_enabled(self.con, "achievements"):
             return True   # module masqué : on sonde mais on ne fait rien
         if self._ach_watcher is None:
             self._ach_watcher = P.LogWatcher()
         for gid, _reason in self._ach_watcher.poll(self.con):
-            prev = {r["ach_id"] for r in self.con.execute(
-                "SELECT ach_id FROM achievements WHERE game_id=? AND unlocked_at>0", (gid,))}
-            try:
-                state = P.scan(self.con, gid)
-            except (FileNotFoundError, ValueError):
-                continue   # log ou YAML cassé : déjà signalé à l'affichage du jeu
-            new = [a for a in state if a["done"] and a["id"] not in prev]
-            if new:
+            avant = self._unlocked_snapshot(gid)
+            fait_scan = self._scan_tracked(gid)        # les deux doivent tourner
+            fait_ra = self._sync_ra_played(gid)         # (pas de `or` : court-circuit)
+            nouveaux = self._unlocked_snapshot(gid) - avant
+            touche = fait_scan or fait_ra
+            if nouveaux:
                 g = self.con.execute("SELECT name FROM games WHERE id=?", (gid,)).fetchone()
                 self.toasts.add_toast(Adw.Toast.new(tr("{n} new achievement(s) unlocked in {game}",
-                                                       n=len(new), game=g["name"] if g else "")))
-            self._on_auto_scan(gid)
+                                                       n=len(nouveaux),
+                                                       game=g["name"] if g else "")))
+                touche = True
+            if touche:
+                self._on_auto_scan(gid)
+        return True
+
+    def _unlocked_snapshot(self, gid):
+        """Ensemble des succès ACQUIS du jeu, log YAML et RetroAchievements confondus.
+
+        Deux snapshots encadrant un sondage donnent d'un coup les déblocages des
+        deux sources : ni toast en double, ni succès oublié."""
+        out = {("log", r["ach_id"]) for r in self.con.execute(
+            "SELECT ach_id FROM achievements WHERE game_id=? AND unlocked_at>0", (gid,))}
+        return out | {("ra", r["ach_id"]) for r in self.con.execute(
+            "SELECT ach_id FROM ra_achievements WHERE game_id=? AND earned_at>0", (gid,))}
+
+    def _scan_tracked(self, gid):
+        """Relit le log YAML du jeu. Renvoie True si le scan a tourné.
+
+        Les nouveaux succès sont relevés par le snapshot, pas ici : cette méthode
+        ne fait que lire. Un log ou un YAML cassé n'interrompt rien — l'erreur est
+        déjà affichée à l'ouverture du jeu."""
+        if P.tracker_paths(self.con, gid) is None:
+            return False   # jeu suivi par RetroAchievements seul : rien à lire
+        try:
+            P.scan(self.con, gid)
+        except (FileNotFoundError, ValueError):
+            return False
+        return True
+
+    def _sync_ra_played(self, gid):
+        """Synchronise RetroAchievements pour un jeu en train d'être joué.
+
+        Même principe que le log : la détection de la partie suffit à déclencher
+        la synchro, sans intervention. Un souci réseau n'interrompt rien — la
+        prochaine écriture réessaiera. Renvoie True si la synchro a tourné."""
+        if not P.ra_enabled(self.con) or P.linked(self.con, gid) is None:
+            return False
+        try:
+            P.sync_game(self.con, gid)
+        except (P.RaError, OSError):
+            return False
         return True
 
     def _on_auto_scan(self, gid):
@@ -299,9 +343,13 @@ class AchievementsMixin:
             else:
                 self._ach_entries[gid] = {a["id"]: a for a in state}
                 self._ach_state = state
-        self._ra_state = P.ra_achievements(self.con, gid)
-        self._ach_ra_linked = P.linked(self.con, gid) is not None
-        # Le compteur affiché sous le titre additionne les deux sources, pour que
+        # Réglage « Use RetroAchievements » (réglages → Succès) : à OFF, aucun
+        # succès RA n'est chargé — donc ni affiché, ni compté — et le jeu n'est
+        # pas considéré comme lié, sinon la section « synchroniser » se
+        # proposerait pour rien.
+        ra_on = P.ra_enabled(self.con)
+        self._ra_state = P.ra_achievements(self.con, gid) if ra_on else []
+        self._ach_ra_linked = ra_on and P.linked(self.con, gid) is not None        # Le compteur affiché sous le titre additionne les deux sources, pour que
         # les jeux RetroAchievements affichent leur nombre au même endroit que
         # les jeux suivis par un fichier YAML.
         done = sum(1 for a in self._ach_state if a["done"]) \
@@ -409,10 +457,11 @@ class AchievementsMixin:
         """Bouton 🔄 unique : relit le log local ET synchronise RetroAchievements.
 
         Synchronisation RA uniquement si le jeu est lié au compte (sinon c'est un
-        appel API inutile). Une erreur RA n'empêche pas le rechargement local."""
+        appel API inutile) ET si RetroAchievements est activé dans les réglages.
+        Une erreur RA n'empêche pas le rechargement local."""
         if gid is None:
             return
-        if P.linked(self.con, gid) is not None:
+        if P.ra_enabled(self.con) and P.linked(self.con, gid) is not None:
             try:
                 P.sync_game(self.con, gid)
             except (P.RaError, OSError) as e:

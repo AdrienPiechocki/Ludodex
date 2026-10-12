@@ -30,6 +30,7 @@ class SettingsMixin:
         self._pick_owned_chk = None
         self._show_hidden_chk = self._show_not_installed_chk = None
         self._ach_show_hidden_chk = self._ra_user_row = self._ra_key_row = None
+        self._ra_sync_row = self._ra_enabled_sw = None   # groupes réouvrables à l'identique
         self._notes_group = self._notes_font_spin = None   # curseur de la page précédente
         page = Adw.PreferencesPage()
 
@@ -150,6 +151,16 @@ class SettingsMixin:
                 title="RetroAchievements",
                 description=tr("The key is on your account's control panel page "
                                "(retroachievements.org/controlpanel.php)."))
+            # Coupé : plus aucun succès RA affiché nulle part, les jeux RA-seuls
+            # quittent la liste de gauche, aucun appel réseau — et le groupe
+            # s'éteint sous les yeux plutôt que de rester cliquable pour rien.
+            enabled = P.ra_enabled(self.con)
+            sw = Adw.SwitchRow(title=tr("Use RetroAchievements"),
+                               subtitle=tr("Show and sync achievements from retroachievements.org"),
+                               active=enabled)
+            sw.connect("notify::active", self._on_ra_enabled)
+            ra_group.add(sw)
+            self._ra_enabled_sw = sw  # référence pour les tests
             user_row = Adw.EntryRow(title=tr("Username"), text=P.ra_user(self.con),
                                     show_apply_button=True)
             user_row.connect("apply", self._on_ra_credentials)
@@ -158,7 +169,6 @@ class SettingsMixin:
                                            show_apply_button=True)
             key_row.connect("apply", self._on_ra_credentials)
             ra_group.add(key_row)
-            self._ra_user_row, self._ra_key_row = user_row, key_row
             sync_row = Adw.ActionRow(title=tr("Link my games"),
                                      subtitle=tr("Match your played games and download "
                                                  "their achievements"))
@@ -167,6 +177,9 @@ class SettingsMixin:
             sync_btn.connect("clicked", self._on_ra_sync)
             sync_row.add_suffix(sync_btn)
             ra_group.add(sync_row)
+            for w in (user_row, key_row, sync_row):
+                w.set_sensitive(enabled)
+            self._ra_user_row, self._ra_key_row, self._ra_sync_row = user_row, key_row, sync_row
             page.add(ra_group)
 
         # --- suite des réglages généraux ---
@@ -252,6 +265,21 @@ class SettingsMixin:
         P.set_setting(self.con, "ach_show_hidden", "1" if chk.get_active() else "0")
         if hasattr(self, "_refresh_achievements"):
             self._refresh_achievements()   # le volet droit est sur la même page
+
+    def _on_ra_enabled(self, row, _p):
+        """Couche/ramène RetroAchievements depuis les réglages des succès.
+
+        À OFF, les succès RA ne s'affichent plus nulle part, les jeux qui n'ont
+        que ce lien quittent la liste de gauche, et plus aucun appel réseau n'est
+        lancé (synchro manuelle ou actualisation automatique). Le scan YAML, lui,
+        ne dépend pas de ce réglage et continue de tourner."""
+        on = row.get_active()
+        P.set_ra_enabled(self.con, on)
+        for w in (self._ra_user_row, self._ra_key_row, self._ra_sync_row):
+            if w is not None:
+                w.set_sensitive(on)
+        if hasattr(self, "_refresh_achievements"):
+            self._refresh_achievements()
 
     def _on_ra_credentials(self, *_row):
         """Enregistre identifiant + clé (chaque ligne confirme la sienne ; on lit

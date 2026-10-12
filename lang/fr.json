@@ -291,6 +291,8 @@
   "Web API key": "Clé Web de l'API",
   "The key is on your account's control panel page (retroachievements.org/controlpanel.php).": "La clé se trouve sur la page du panneau de contrôle de ton compte (retroachievements.org/controlpanel.php).",
   "Sync account": "Synchroniser le compte",
+  "Use RetroAchievements": "Utiliser RetroAchievements",
+  "Show and sync achievements from retroachievements.org": "Affiche et synchronise les succès de retroachievements.org",
   "{n} game(s) linked to RetroAchievements": "{n} jeu(x) relié(s) à RetroAchievements",
   "RetroAchievements account saved: {user}": "Compte RetroAchievements enregistré : {user}",
   "not configured": "non configuré",

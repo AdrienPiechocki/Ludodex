@@ -154,17 +154,22 @@ def achievement_games(con):
     """[(id, nom, has_tracker, has_ra)] des jeux ayant un suivi YAML et/ou des succès RA.
 
     Sert à la liste de gauche de la page « Achievements » : un jeu apparaît s'il a un
-    fichier de log suivi et/ou un lien vers un jeu RetroAchievements."""
-    from .ra import ra_linked_games  # import local : évite un cycle de chargement
+    fichier de log suivi et/ou un lien vers un jeu RetroAchievements.
+
+    Si RetroAchievements est désactivé dans les réglages, un jeu n'ayant QUE ce
+    lien n'a plus rien à montrer ici : il disparaît. Ceux suivis par un YAML, eux,
+    restent — leurs succès locaux ne dépendent pas de RetroAchievements."""
+    from .ra import ra_linked_games, ra_enabled  # import local : évite un cycle de chargement
     info = {}
     for gid, name, _yaml, _log in tracked_games(con):
         info[gid] = [name, True, False]
-    for gid, _ra in ra_linked_games(con):
-        row = con.execute("SELECT name FROM games WHERE id=?", (gid,)).fetchone()
-        if row is None:
-            continue
-        entry = info.setdefault(gid, [row["name"], False, False])
-        entry[2] = True
+    if ra_enabled(con):
+        for gid, _ra in ra_linked_games(con):
+            row = con.execute("SELECT name FROM games WHERE id=?", (gid,)).fetchone()
+            if row is None:
+                continue
+            entry = info.setdefault(gid, [row["name"], False, False])
+            entry[2] = True
     return sorted(((gid, v[0], v[1], v[2]) for gid, v in info.items()),
                   key=lambda t: t[1].lower())
 
@@ -186,19 +191,45 @@ def show_hidden(con):
     return get_setting(con, "ach_show_hidden") == "1"
 
 
+def watch_paths(con, gid):
+    """Chemins dont l'écriture signale « ce jeu est en train d'être joué ».
+
+    Suivi YAML → son log. Jeu RetroAchievements importé par RetroArch → le
+    fichier de runtime `.lrtl` que RetroArch met à jour en jouant : même
+    principe qu'un log, donc même détection. Renvoie [] s'il n'y a rien à
+    surveiller pour ce jeu."""
+    from .importers import runtime_path_for  # import local : évite un cycle
+    out = []
+    p = tracker_paths(con, gid)
+    if p:
+        out.append(p[1])
+    g = con.execute("SELECT source, ext_id FROM games WHERE id=?", (gid,)).fetchone()
+    if g is not None and g["source"] == "retroarch":
+        rt = runtime_path_for(g["ext_id"])
+        if rt and rt not in out:
+            out.append(rt)
+    return out
+
+
 def log_fingerprint(con, gid):
-    """(taille, mtime_ns) du log du jeu ; (0, 0) s'il n'est pas suivi ou a disparu.
+    """(taille, mtime_ns) des logs du jeu ; (0, 0) s'il n'en a aucun ou s'ils ont disparu.
 
     Sert à repérer une écriture sans ouvrir le fichier — bien plus cheap qu'un
-    scan, et suffisant pour savoir si le jeu tourne encore."""
-    p = tracker_paths(con, gid)
-    if not p:
+    scan, et suffisant pour savoir si le jeu tourne encore. Les sources possibles
+    (log YAML, runtime RetroArch) sont cumulées : que l'une ou l'autre bouge, le
+    jeu est en train d'être joué."""
+    paths = watch_paths(con, gid)
+    if not paths:
         return (0, 0)
-    try:
-        st = os.stat(p[1])
-    except OSError:
-        return (0, 0)
-    return (st.st_size, st.st_mtime_ns)
+    size, mtime = 0, 0
+    for p in paths:
+        try:
+            st = os.stat(p)
+        except OSError:
+            continue          # fichier disparu : il ne borne pas les autres
+        size += st.st_size
+        mtime = max(mtime, st.st_mtime_ns)
+    return (size, mtime)
 
 
 class LogWatcher:
@@ -221,9 +252,13 @@ class LogWatcher:
         self._writing = set()
 
     def poll(self, con):
-        """[(gid, raison)] des jeux à re-scanner : « write » ou « closed »."""
+        """[(gid, raison)] des jeux à re-scanner : « write » ou « closed ».
+
+        On parcourt la liste des jeux SUIVIS (liste de gauche de la page
+        Succès) : y figurent les jeux à log YAML — et aussi les jeux reliés à
+        RetroAchievements, dont la partie se repère sur le runtime `.lrtl`."""
         out, alive = [], set()
-        for gid, _name, _yaml, _log in tracked_games(con):
+        for gid, _name, _has_tracker, _has_ra in achievement_games(con):
             alive.add(gid)
             fp = log_fingerprint(con, gid)
             prev = self._prev.get(gid)
