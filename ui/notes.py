@@ -383,6 +383,7 @@ class NotesMixin:
         if not self._note_tasks or self.notes_game_id is None:
             return
         view, buf = self.note_view, self.note_buffer
+        rows = []
         for start, end, checked in self._note_tasks:
             r0 = view.get_iter_location(buf.get_iter_at_offset(start))
             # Haut de ligne et hauteur LUS SUR LE `]`, jamais sur le tiret : celui-ci
@@ -395,19 +396,42 @@ class NotesMixin:
                 continue
             x, _ = view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, r0.x, r0.y)
             _, y = view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, mark.x, mark.y)
-            # Limite à droite : la 1re lettre du texte de la tâche, moins une
-            # marge pour le trait du cadre (qui déborde d'un demi-trait).
+            # Limite à droite : la 1re lettre du texte de la tâche (elle seule peut
+            # être heurtée ; le marqueur est peint dans le fond, la case le remplace).
             t = buf.get_iter_at_offset(end)
             while not t.ends_line() and t.get_char() in (" ", "\t"):
                 t.forward_char()
+            if t.ends_line():                       # rien derrière : la ligne ne borne pas
+                rows.append((x, y, height, None, checked))
+                continue
             rt = view.get_iter_location(t)
             x_text, _ = view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, rt.x, rt.y)
-            # Pleine hauteur de ligne, ancrée au tiret : jamais plus étroite que
-            # le plancher, jamais assez large pour que le trait vienne lécher la
-            # première lettre (le trait déborde de la moitié de son épaisseur).
-            side = max(12.0, min(height - 3.0,
-                                 (x_text - x - _CHECK_GAP) / (1.0 + _CHECK_STROKE / 2.0)))
-            y += (height - side) / 2.0            # ancré au tiret : position identique coché ou non
+            if checked:
+                # `[x]` est plus large que `[ ]` (le « x » qu'une espace) : mesurée
+                # telle quelle, la limite recule de cet écart et une note à cases
+                # cochées SEULES ressort en pleine hauteur — plus grande qu'une note
+                # mêlée. On remet la limite là où elle serait si le marqueur était
+                # `[ ]`, en comparant la largeur du milieu du marqueur à celle d'une
+                # espace, toutes deux prises dans le même style.
+                g = lambda o: view.get_iter_location(buf.get_iter_at_offset(o)).x
+                w_mid = g(end - 1) - g(end - 2)     # milieu du marqueur (« x »)
+                if buf.get_iter_at_offset(end).get_char() == " ":
+                    w_esp = g(end + 1) - g(end)     # une espace de la même police
+                    x_text -= (w_mid - w_esp)
+            rows.append((x, y, height, x_text, checked))
+        if not rows:
+            return
+
+        # UN seul côté pour toute la note : `[x]` est plus large que `[ ]`, donc,
+        # né ligne par ligne, la case cochée disposerait de 4 px de plus, atteindrait
+        # la pleine hauteur et ressortirait plus grande que la case vide. On retient
+        # la contrainte la plus serrée de la note et on l'applique partout.
+        limit = min(self._check_side(x, height, x_text)
+                    for x, _y, height, x_text, _checked in rows)
+
+        for x, y, height, x_text, checked in rows:
+            side = max(12.0, min(limit, height - 3.0))
+            y += (height - side) / 2.0            # centrée sur SA ligne
             self._check_path(cr, x, y, side)
             if checked:
                 cr.set_source_rgb(*_CHECK_ACCENT)
@@ -424,6 +448,17 @@ class NotesMixin:
                 cr.set_source_rgb(*_CHECK_BORDER)
                 cr.set_line_width(max(1.3, side * 0.11))
                 cr.stroke()
+
+    @staticmethod
+    def _check_side(x, height, x_text):
+        """Plus grand côté admis sur une ligne : pleine hauteur, sans lécher le texte.
+
+        Le trait déborde d'un demi-trait sur le chemin : on décompte son épaisseur
+        pour que le cadre ne vienne jamais toucher la première lettre de la tâche.
+        """
+        room = (float("inf") if x_text is None else
+                (x_text - x - _CHECK_GAP) / (1.0 + _CHECK_STROKE / 2.0))
+        return max(12.0, min(height - 3.0, room))
 
     @staticmethod
     def _check_path(cr, x, y, side):
