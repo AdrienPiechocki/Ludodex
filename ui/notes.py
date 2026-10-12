@@ -36,6 +36,8 @@ _QUOTE_RE = re.compile(r"^([ \t]*>[ \t]?)")
 # vraies icônes de case : sur Breeze, `checkbox-symbolic` n'est qu'un crochet).
 _CHECK_ACCENT = (0.208, 0.518, 0.894)   # #3584e4
 _CHECK_BORDER = (0.604, 0.596, 0.588)   # #9a9996
+_CHECK_STROKE = 0.11                    # épaisseur du trait : max(1.3, side * 0.11)
+_CHECK_GAP = 2.0                        # marge visuelle voulue entre le trait et le texte
 
 
 class NotesMixin:
@@ -382,17 +384,28 @@ class NotesMixin:
             return
         view, buf = self.note_view, self.note_buffer
         for start, end, checked in self._note_tasks:
+            # Hauteur LUE SUR LE `]`, jamais sur le tiret : celui-ci est dans
+            # `md-tasklead` (scale=0.01) où get_iter_location().height vaut 0, et
+            # max(12, h-3) retombait sur le plancher de 12 px — les cases
+            # paraissaient trop petites à côté du texte.
             r0 = view.get_iter_location(buf.get_iter_at_offset(start))
-            r1 = view.get_iter_location(buf.get_iter_at_offset(end))
-            x, y = view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, r0.x, r0.y)
-            x_end, _ = view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, r1.x, r1.y)
-            span = x_end - x                        # emplacement complet : tiret + `[ ]`
-            if span <= 1.0:
+            height = view.get_iter_location(buf.get_iter_at_offset(end - 1)).height
+            if height < 4.0:
                 continue
-            # Jamais plus large que l'emplacement : le côté ne dépendait que de la
-            # hauteur de ligne, donc la case débordait à droite du `]` sur le texte.
-            side = min(max(12.0, r0.height - 3.0), span)
-            y += (r0.height - side) / 2.0           # ancré au tiret : position identique coché ou non
+            x, y = view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, r0.x, r0.y)
+            # Limite à droite : la 1re lettre du texte de la tâche, moins une
+            # marge pour le trait du cadre (qui déborde d'un demi-trait).
+            t = buf.get_iter_at_offset(end)
+            while not t.ends_line() and t.get_char() in (" ", "\t"):
+                t.forward_char()
+            rt = view.get_iter_location(t)
+            x_text, _ = view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, rt.x, rt.y)
+            # Pleine hauteur de ligne, ancrée au tiret : jamais plus étroite que
+            # le plancher, jamais assez large pour que le trait vienne lécher la
+            # première lettre (le trait déborde de la moitié de son épaisseur).
+            side = max(12.0, min(height - 3.0,
+                                 (x_text - x - _CHECK_GAP) / (1.0 + _CHECK_STROKE / 2.0)))
+            y += (height - side) / 2.0            # ancré au tiret : position identique coché ou non
             self._check_path(cr, x, y, side)
             if checked:
                 cr.set_source_rgb(*_CHECK_ACCENT)
