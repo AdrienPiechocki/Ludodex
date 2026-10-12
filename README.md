@@ -1,6 +1,6 @@
 # Ludodex
 
-A GTK4 / libadwaita game library manager that imports your games (Steam, itch.io, Flatpak, Lutris, RetroArch…), picks a **random game to play** based on your mood and the time available, and keeps a **retrospective** of your play sessions — all local, with a Markdown note per game.
+A GTK4 / libadwaita game library manager that imports your games (Steam, itch.io, Flatpak, Lutris, RetroArch…), picks a **random game to play** based on your mood and the time available, and keeps a **retrospective** of your play sessions — all local, with a Markdown note per game and user-defined achievements tracked from game logs.
 
 ## Features
 
@@ -30,6 +30,12 @@ Launch the picked game directly, or launch from the library.
 - one **Markdown note per game**, with a permanent live preview (clickable checkboxes, internal links, Markdown help);
 - the line under the cursor shows the raw source, Obsidian-style;
 - adjustable text size (8–40 pt), auto-save, "only noted games" filter.
+
+### Achievements
+- bring your own achievements for **modded games**: pick a game on the left, then attach a **YAML file** and the game's **log file** to it;
+- each achievement tests the **log lines** with regular expressions: `match` (one pattern), `any` (at least one), or `all` (every pattern), with an optional `count` (e.g. "defeat 50 bandits");
+- the log is read **incrementally** (each line is counted once); a truncated or rewritten log is detected and re-scanned from the start;
+- per-game panel with progress (`x/N`), unlock dates, a rescan button and a tracker dialog; a ready-to-adapt example lives in `examples/openmw-achievements.yaml`.
 
 ### Play time tracking
 Every launch through Ludodex opens a **session**; its duration is recorded when it closes. Steam history (minutes played, last launch) is imported locally with `backfill`, no API needed. Both the interface and the CLI show total play time, the timelines, and rankings.
@@ -82,6 +88,7 @@ python3 picker.py <command> [options]
 | `diag` | Game diagnostic (name, status, tags, launch…) |
 | `covers` | SteamGridDB covers (`-n`, `--retry`, `--status`) |
 | `cover` | Forces a game's SteamGridDB ID |
+| `tracker` | Achievements from a game log: `list`, `attach <game> <yaml> <log>`, `status`, `scan`, `clear` |
 
 Examples:
 
@@ -90,6 +97,8 @@ python3 picker.py import
 python3 picker.py pick -t 30 -m calm -c "To finish"
 python3 picker.py stats
 python3 picker.py note "Hollow Knight" "- [x] beat the final boss"
+python3 picker.py tracker attach "OpenMW" examples/openmw-achievements.yaml ~/.local/share/openmw/openmw.log
+python3 picker.py tracker status "OpenMW"
 ```
 
 ## Data
@@ -111,10 +120,11 @@ gui.py        graphical entry (re-exports Win/App, run python3 gui.py)
 picker.py     facade: re-exports core/* (used by gui and the CLI) and the CLI entry
 i18n.py       translation engine (tr, detection, set_lang)
 core/         logic: db, platform, sources, importers, steam, tags, covers,
-              launch, stats, pick, game_collections, cli
+              launch, stats, pick, game_collections, tracker, cli
 ui/           GTK4 interface: main, theme, pickview, library, retrospec,
-              notes, markdown, settingsui
+              notes, markdown, achievements, settingsui
 lang/         translations (en = base, fr)
+examples/     sample files (e.g. openmw-achievements.yaml)
 build.sh      standalone PyInstaller build (ludodex.spec)
 ```
 
