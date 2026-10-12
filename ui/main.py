@@ -17,6 +17,8 @@ from .notes import NotesMixin
 from .achievements import AchievementsMixin
 from .settingsui import SettingsMixin
 
+MODULES = ("pick", "retro", "notes", "achievements")  # ordre CANONIQUE de la barre de navigation
+
 
 class Win(PickViewMixin, LibraryMixin, RetroMixin, NotesMixin, AchievementsMixin, SettingsMixin, Adw.ApplicationWindow):
 
@@ -53,13 +55,16 @@ class Win(PickViewMixin, LibraryMixin, RetroMixin, NotesMixin, AchievementsMixin
         self._pages = {"pick": self._build_pick(), "lib": self._build_library_page(),
                        "retro": self._build_retro_page(), "notes": self._build_notes_page(),
                        "achievements": self._build_achievements_page()}
+        # le sélecteur doit exister avant _sync_modules : il se détache et se rebranche
+        # à chaque reconstruction de la barre
+        self._switcher = Adw.ViewSwitcher(stack=stack, policy=Adw.ViewSwitcherPolicy.WIDE)
         self._sync_modules()
         stack.connect("notify::visible-child-name", self._on_page_changed)
         self._build_lib()
 
         refresh = Gtk.Button(icon_name="view-refresh-symbolic", tooltip_text=tr("Import games"))
         refresh.connect("clicked", self._on_import)
-        header = Adw.HeaderBar(title_widget=Adw.ViewSwitcher(stack=stack, policy=Adw.ViewSwitcherPolicy.WIDE))
+        header = Adw.HeaderBar(title_widget=self._switcher)
         header.pack_start(refresh)
         add_btn = Gtk.Button(icon_name="list-add-symbolic", tooltip_text=tr("Add a game"))
         add_btn.connect("clicked", self._open_add_game)
@@ -98,23 +103,34 @@ class Win(PickViewMixin, LibraryMixin, RetroMixin, NotesMixin, AchievementsMixin
         self.stack.add_titled_with_icon(self._pages[name], name, title, icon)
 
     def _sync_modules(self):
-        """N'affiche que les modules activés (bibliothèque en tête, puis choix, rétrospective,
-        notes, succès), en conservant la page courante si elle est toujours disponible.
+        """N'affiche que les modules activés, TOUJOURS dans l'ordre canonique
+        (bibliothèque en tête, puis choix, rétrospective, notes, succès), en
+        conservant la page courante si elle est toujours disponible.
 
-        Reconstruction incrémentale : on ne touche qu'aux pages qui changent. Tout
-        retirer puis tout ré-ajouter déclenche un crash libadwaita (l'animation de
-        page « skip » sur un widget détruit)."""
+        Un `Adw.ViewStack` ne sait qu'APPENDRE ses pages : sans reconstruction,
+        un module ré-activé revient systématiquement en DERNIER de la barre de
+        navigation, et chaque aller-retour le fait glisser d'un cran de plus.
+        Insérer à une position n'est pas possible ici : PyGObject n'expose pas
+        `adw_view_stack_insert_before` (écrasée par `GtkWidget.insert_before`,
+        qui ne fait rien de tel) et `AdwViewStackPage:visible` n'est pas
+        honoré par le sélecteur. D'où la reconstruction complète — MAIS en
+        détachant d'abord le `Adw.ViewSwitcher` : laisser un sélecteur branché
+        pendant que son modèle de pages se vide plante libadwaita (SIGSEGV)
+        dans environ six cas sur dix, d'où l'implémentation incrémentale de
+        départ."""
+        want = ["lib"] + [n for n in MODULES if P.module_enabled(self.con, n)]
+        pages = self.stack.get_pages()
+        actuel = [pages.get_item(i).get_name() for i in range(pages.get_n_items())]
+        if actuel == want:
+            return                      # rien n'a bougé : pas de reconstruction inutile
         keep = self.stack.get_visible_child_name()
-        want = ["lib"] + [n for n in ("pick", "retro", "notes", "achievements")
-                          if P.module_enabled(self.con, n)]
-        for name in ("pick", "retro", "notes", "achievements"):
-            child = self.stack.get_child_by_name(name)
-            if name not in want and child is not None:
-                self.stack.remove(child)
+        self._switcher.set_stack(None)  # le sélecteur lâche le stack pendant la reconstruction
+        for name in actuel:
+            self.stack.remove(self.stack.get_child_by_name(name))
         for name in want:
-            if self.stack.get_child_by_name(name) is None:
-                self._add_page(name)
-        self.stack.set_visible_child_name(keep if keep and self.stack.get_child_by_name(keep) else "lib")
+            self._add_page(name)
+        self.stack.set_visible_child_name(keep if keep in want else "lib")
+        self._switcher.set_stack(self.stack)
         self._on_page_changed()
 
     def _on_close(self, *_):
