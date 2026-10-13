@@ -60,6 +60,23 @@ CSS = """
    Voir ui/achievements.py : la classe doit être posée par `add_css_class`,
    GTK4 ne peint pas une barre à laquelle on a effacé sa classe `horizontal`. */
 .ach-bar { min-height: 6px; }
+
+/* Carrousel de tirage (page « Choisir ») : UNE seule règle — tout est flou sauf
+   la case centrale. Pendant le défilement la bande bouge, donc rien n'est au
+   centre et rien n'est net : le flou de mouvement naît tout seul. À l'arrêt, le
+   jeu tiré occupe la case centrale et redevient net, ses voisins restant floutés.
+   Le flou est une propriété CSS de GTK 4.14+ (mesuré ici : rendu correct). */
+.roulette-flou { filter: blur(9px); }
+
+/* Case sans couverture : un jeu sans art ne doit pas laisser un TROU dans la
+   bande — il se lit comme un dos de carte, ce qui est exactement ce qu'il est.
+   La classe tombe dès que l'art arrive. */
+.roulette-case { background-color: alpha(currentColor, 0.10); border-radius: 8px; }
+
+/* La révélation : nom, détail et boutons n'apparaissent qu'une fois la bande
+   immobilisée. La transition porte sur l'opacité, que le code change — un
+   widget masqué par `visible` libérerait sa place et décalerait la bande. */
+.revel { transition: opacity 240ms ease-out; }
 """
 _css_done = False
 

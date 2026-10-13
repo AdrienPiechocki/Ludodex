@@ -25,6 +25,23 @@ def set_excluded_tags(con, tags):
     set_setting(con, "exclude_tags", ",".join(sorted({t.strip() for t in tags if t.strip()}, key=str.lower)))
 
 
+def tags_summary(inclus, exclus):
+    """Résumé des tags retenus, sous le titre « Tags » : « + Puzzle  − Roguelike ».
+
+    Les tags sont toujours dépliés : ce résumé donne la portée du filtre d'un coup
+    d'œil, là où il faudrait sinon parcourir la centaine de pastilles retenues par
+    le catalogue pour savoir ce qu'elles excluent réellement.
+
+    Renvoie du TEXTE PLAIN — c'est l'interface qui l'échappe, car le label du
+    description interprète le BALISAGE GTK, et un « & » nu (tag « Action &
+    Adventure ») invaliderait ce balisage. GTK ne signale rien dans ce cas : il
+    affiche simplement plus rien du tout, ce qui passerait inaperçu.
+    """
+    inc = "  ".join("+ " + t for t in sorted(inclus, key=str.lower))
+    exc = "  ".join("− " + t for t in sorted(exclus, key=str.lower))
+    return "  ".join(x for x in (inc, exc) if x)
+
+
 def weight(g, minutes, mood, now, mood_mode="any", include_not_installed=False, exclude=None):
     if g["hidden"] or (not g["installed"] and not include_not_installed):
         return 0
@@ -88,6 +105,91 @@ def pick_pool(con, minutes, mood, collection=None, mood_mode="any", exclude=None
     installed = build(False)
     owned = [(g, w) for g, w in build(True) if not g["installed"]]
     return installed, owned
+
+
+# ---------- carrousel (tirage animé) ----------
+def roulette_strip(pool, winner_id, slots=45, rng=None, deja_visibles=()):
+    """Bande de jaquettes du carrousel, composée à partir du BASSIN éligible `pool`.
+
+    Le tirage pondérer a lieu AVANT l'animation : cette fonction ne fait que la mise
+    en scène, en disposant les jaquettes pour que le gagnant `winner_id` atterrisse
+    dans la case centrale après que tout le reste a défilé. Les jaquettes sont
+    celles qui auraient pu sortir — jamais un décor emprunté ailleurs.
+
+    Le gagnant y figure UNE seule fois, en `slots - 3` : il reste de la place pour
+    des voisins visibles de part et d'autre une fois à l'arrêt. Les autres cases se
+    cyclent en rebattant les cartes à chaque tour ; la longueur suit le bassin, au
+    plus DEUX exemplaires par jeu — à bassin réduit, garder `slots` faisait revenir
+    chaque jaquette en boucle (5 éligibles sur 45 cases, c'est 11 exemplaires de
+    chacune : mesuré, et perçu comme des duplicatas). Plafonnée à `slots`, elle
+    reste de 45 dès 23 jeux éligibles : le défilement des gros bassins n'a pas
+    bougé. Pendant la rotation tout est flou et rapide : une jaquette vue deux fois
+    ne s'y remarque pas.
+
+    `deja_visibles` reçoit les ids déjà affichées en bout de bande. Un tirage
+    n'ALLONGE la bande que — sans cette exclusion, le gagnant pourrait se trouver
+    dans les jaquettes conservées, et `index_de` le lirait LÀ plutôt qu'à sa vraie
+    place : la cible serait alors derrière le point de départ et l'animation
+    partirait à rebours. Si le bassin est trop petit pour s'en passer, on dégrade
+    en répétant plutôt qu'en vidant la bande.
+
+    `rng` reçoit un `random.Random(graine)` pour rendre un défilement rejouable à
+    l'identique (utile au débogage comme en test).
+    """
+    rng = rng or random
+    jeux = [p[0] for p in pool]
+    if not jeux:
+        return []
+    if len(jeux) == 1:  # un seul jeu possible : aucune bande n'a de sens
+        return list(jeux)
+    # La bande ne dépasse pas DEUX exemplaires par jeu. À bassin réduit, garder
+    # `slots` faisait revenir chaque jaquette en boucle — 5 éligibles sur 45 cases,
+    # soit 11 exemplaires chacune, mesuré et perçu comme des duplicatas. `2n − 1`
+    # et non `2n` : le gagnant occupe une case à lui seul en plus du remplissage,
+    # qui ne dispose plus que de `n − 1` autres jeux. Plafonnée à `slots`, la
+    # longueur des gros bassins est inchangée — 38 jeux installés donnent 45 cases.
+    slots = min(slots, 2 * len(jeux) - 1)
+    gagnant = next((g for g in jeux if g["id"] == winner_id), jeux[0])
+    autres = [g for g in jeux if g["id"] != gagnant["id"] and g["id"] not in deja_visibles]
+    if not autres:  # bassin trop petit : on préfère répéter à garder une bande vide
+        autres = [g for g in jeux if g["id"] != gagnant["id"]]
+    rang = min(max(slots - 3, 0), slots - 1)
+    bande, reste = [], None
+    for i in range(slots):
+        if i == rang:
+            bande.append(gagnant)
+            continue
+        if not reste:  # donne épuisée : on rebat pour le tour suivant
+            reste = autres[:]
+            rng.shuffle(reste)
+            # À la couture, la première carte de la nouvelle donne ne doit pas
+            # être la dernière de l'ancienne : deux jaquettes identiques de suite
+            # se liraient comme un ralentissement du défilement.
+            if bande and len(reste) > 1 and reste[-1]["id"] == bande[-1]["id"]:
+                reste[-1], reste[0] = reste[0], reste[-1]
+        bande.append(reste.pop())
+    return bande
+
+
+def roulette_rogne(longueur, rang, a_gauche=4, a_droite=2):
+    """Bornes de la coupe après un tirage : ne garder que ce qui sert encore.
+
+    Sans cette coupe, chaque « Encore un » allongerait la bande d'une quarantaine
+    de jaquettes : au bout de vingt tirages, plus de 900 jaquettes et ~160 Mo de
+    textures. Les jaquettes gardées sont les MÊMES widgets, donc leurs textures
+    survivent et la coupe reste invisible à l'écran.
+
+    `a_gauche` jaquettes avant le gagnant suffisent pour le recadrer (4 × 182 px
+    = 728 px de marge, pour un cadre d'environ 1 090 px), `a_droite` après lui
+    pour l'accompagner. Renvoie `(premier, dernier, rang_du_gagnant_après)` ;
+    le tranche `[premier:dernier]` convient donc tel quel.
+
+    L'invariant à préserver côté UI : l'offset doit être diminué de
+    `premier * pas`, sans quoi la bande sauterait au moment de la coupe.
+    """
+    premier = max(0, rang - a_gauche)
+    dernier = min(longueur, rang + a_droite + 1)
+    return premier, dernier, rang - premier
 
 
 def pick(con, minutes, mood, collection=None, mood_mode="any", exclude=None):

@@ -1,15 +1,151 @@
 """pickview.py — page « Choisir » (tirage du jeu)."""
 import random, threading, time
+from concurrent.futures import ThreadPoolExecutor
 
 import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 gi.require_version("GdkPixbuf", "2.0")
-from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, GObject, Gtk, Pango
+gi.require_version("Gsk", "4.0")
+from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, GObject, Graphene, Gsk, Gtk, Pango
 
 import picker as P
 from i18n import available, get_lang, tr
 from .theme import DUREES
+
+# Carrousel de tirage : 45 jaquettes de 170×260 px espacées de 12 px. Dimensions
+# FIXES : le défilement se positionne case par case, et une jaquette de largeur
+# variable (selon le thème ou le contenu) décalerait le point d'atterrissage.
+ROULETTE_JAQUETTES = 45
+ROULETTE_L, ROULETTE_H = 170, 260
+ROULETTE_ESPACEMENT = 12
+ROULETTE_DUREE_MS = 2800
+# Décélération : à 90 % du temps écoulé, il ne reste que 10 % du chemin, puis
+# presque plus rien — la jaquette retenue semble se poser, pas s'arrêter.
+ROULETTE_EASE = lambda t: 1 - (1 - t) ** 5
+
+
+class RouletteBande(Gtk.Widget):
+    """Bande de jaquettes qui glisse horizontalement, cadrée par sa largeur.
+
+    Pourquoi pas un `Gtk.Box` dans un `Gtk.ScrolledWindow` ? Un `Gtk.Box` additionne
+    les largeurs MINIMALES de ses enfants : 45 jaquettes de 170 px réclament
+    7 650 px. GTK4 propage cette largeur minimale à travers `GtkScrolledWindow`,
+    `GtkViewport`, `GtkStack`, `Adw.ToolbarView`… jusqu'à la fenêtre, qui
+    s'élargit d'autant (mesuré sur les cinq conteneurs testés : aucun n'y échappe,
+    même avec `propagate-natural-width` à `False` ou `overflow` à `Hidden`).
+
+    Ce widget déclare donc lui-même une largeur minimale et naturelle nulle : le
+    cadre ne dépend que de l'espace disponible. Les jaquettes sont posées par une
+    translation dans `do_allocate`, au-delà du cadre elles sont simplement masquées
+    (`overflow = HIDDEN`). Pas de barre de défilement, pas d'ajustement à piloter :
+    une seule valeur, l'offset, que l'animation fait varier.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.set_overflow(Gtk.Overflow.HIDDEN)
+        self._pics, self._offset, self._pas = [], 0.0, ROULETTE_L + ROULETTE_ESPACEMENT
+
+    # -- contenu -------------------------------------------------------------
+    def _creer_pic(self, g):
+        pic = Gtk.Picture(width_request=ROULETTE_L, height_request=ROULETTE_H,
+                          can_shrink=True, content_fit=Gtk.ContentFit.COVER)
+        pic.add_css_class("roulette-flou")   # tout est flou tant que la bande tourne
+        pic.add_css_class("roulette-case")   # dos de carte tant que l'art n'arrive pas
+        pic._jeu_id = g["id"]
+        return pic
+
+    def remplacer(self, jeux):
+        """Reconstruit la bande. Chaque jaquette garde son `id` de jeu en attribut
+        Python (`_jeu_id`) : c'est par là qu'on reconnaît le gagnant au moment de
+        le déflouter, sans tenir une liste à part."""
+        self.vider()
+        self.ajouter(jeux)
+
+    def ajouter(self, jeux):
+        """Allonge la bande à droite SANS toucher à ce qui s'y trouve déjà : les
+        jaquettes en place gardent leurs textures, et le raccord se produit en
+        dehors de ce que le cadre montre (tout est flou et en mouvement)."""
+        for g in jeux:
+            pic = self._creer_pic(g)
+            pic.set_parent(self)
+            self._pics.append(pic)
+        self.queue_allocate()
+
+    def rogner(self, premier, dernier):
+        """Ne garde que `pics[premier:dernier]`, et décale l'offset d'autant pour
+        que la bande paraisse strictement immobile. Les widgets conservés ne sont
+        PAS recréés — c'est ce qui rend la coupe invisible à l'écran."""
+        perdus = self._pics[:premier] + self._pics[dernier:]
+        self._pics = self._pics[premier:dernier]
+        for pic in perdus:
+            pic.unparent()
+        self._offset -= premier * self._pas
+        self.queue_allocate()
+
+    def index_de(self, jeu_id, depuis=0):
+        """Index réel d'un jeu dans la bande, à partir de la case `depuis` — lu,
+        jamais déduit de la règle de placement de `roulette_strip`.
+
+        `depuis` est indispensable : un tirage n'ALLONGE la bande que, et un jeu
+        conservé peut y être déjà présent. Chercher depuis 0 le trouverait LÀ,
+        cible derrière le point de départ, et l'animation partirait à rebours."""
+        return next((i for i in range(depuis, len(self._pics))
+                     if getattr(self._pics[i], "_jeu_id", None) == jeu_id), depuis)
+
+    def jaquette_de(self, jeu_id):
+        return next((p for p in self._pics if getattr(p, "_jeu_id", None) == jeu_id), None)
+
+    def vider(self):
+        for pic in self._pics:
+            pic.unparent()
+        self._pics = []
+
+    # -- défilement ----------------------------------------------------------
+    def set_offset(self, v):
+        """Décale la bande. `queue_allocate`, pas `queue_draw` : la position des
+        jaquettes est fixée au moment de l'allocation, et GTK ne repeint que ce
+        qui a bougé.
+
+        AUCUN plafond à zéro : un offset négatif décale la bande vers la DROITE,
+        laissant du vide à gauche — c'est même la seule façon de centrer la case 0
+        d'une bande plus courte que le cadre (un seul jeu éligible). Ce vide ne se
+        voit pas, l'overflow caché du cadre le rognant."""
+        self._offset = float(v)
+        self.queue_allocate()
+
+    def cible_centre(self, rang):
+        """Offset qui place la case `rang` au centre du cadre, si large soit-il.
+
+        Peut être NÉGATIF : la case demandée tombe alors en deçà du début de la
+        bande. Voir `set_offset` — un plafond à zéro laissait la jaquette unique
+        collée au bord gauche, à 460 px du centre."""
+        return rang * self._pas + ROULETTE_L / 2 - self.get_width() / 2
+
+    # -- protocolles GTK -----------------------------------------------------
+    def do_measure(self, orientation, for_size):
+        if orientation == Gtk.Orientation.HORIZONTAL:
+            return (0, 0, -1, -1)      # ne dicte JAMAIS la largeur de la fenêtre
+        return (0, ROULETTE_H + 40, -1, -1)
+
+    def do_size_allocate(self, width, height, baseline):
+        """Pose les jaquettes par translation. Protocole nommé `size_allocate`, et
+        NON `allocate` : `allocate` est le nom de la fonction publique, celui du
+        vfunc de classe est `size_allocate` — un `do_allocate` est ignoré EN
+        SILENCE, les enfants restent à 0×0 alors que le parent se croit dimensionné
+        (vérifié : les jaquettes alors invisibles, sans la moindre trace d'erreur)."""
+        y = max(0, (height - ROULETTE_H) // 2)
+        base = Gsk.Transform().translate(Graphene.Point().init(-self._offset, y))
+        for i, pic in enumerate(self._pics):
+            pic.allocate(ROULETTE_L, ROULETTE_H, -1,
+                         base.translate(Graphene.Point().init(i * self._pas, 0)))
+
+    def do_unroot(self):
+        # Les jaquettes sont nos enfants : elles doivent être détachées quand la
+        # bande quitte l'arbre, sinon GTK se plaint à la destruction.
+        self.vider()
+        Gtk.Widget.do_unroot(self)
 
 
 class PickViewMixin:
@@ -23,23 +159,33 @@ class PickViewMixin:
         group = Adw.PreferencesGroup()
         self.time_row = Adw.ComboRow(title=tr("Time available"),
                                  model=Gtk.StringList.new([tr("Any"), "15 min", "30 min", "1 h", "2 h"]))
-        self.mood_row = Adw.ExpanderRow(title=tr("Tags"), subtitle=tr("Any"))
+        group.add(self.time_row)
+        filters.append(group)
+
+        # Les tags sont TOUJOURS dépliés : le dépliant imposait un clic juste pour
+        # voir quels tags sont retenus. Le sous-titre dit, lui, la portée du filtre
+        # (« + Puzzle − Roguelike ») — les pastilles bleues et rouges se voient, mais
+        # pas toutes ensemble d'un seul regard. En groupe à part, à sa place
+        # d'origine, entre « Temps disponible » et « Humeur ».
+        self.tags_group = Adw.PreferencesGroup(title=tr("Tags"))
         self.mood_flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, homogeneous=False,
                                      min_children_per_line=2, max_children_per_line=5,
                                      row_spacing=6, column_spacing=6,
                                      margin_top=8, margin_bottom=8, margin_start=12, margin_end=12)
-        # défilement interne borné : sinon, liste de tags dépliée, la zone dédiée au jeu est écrasée
+        # défilement interne borné : sinon, beaucoup de tags, la zone dédiée au jeu est écrasée
         mood_scroll = Gtk.ScrolledWindow(propagate_natural_height=True, max_content_height=400,
                                          hscrollbar_policy=Gtk.PolicyType.NEVER)
         mood_scroll.set_child(self.mood_flow)
-        self.mood_row.add_row(Gtk.ListBoxRow(child=mood_scroll, activatable=False, selectable=False))
-        group.add(self.time_row)
-        group.add(self.mood_row)
+        self.tags_group.add(mood_scroll)
+        filters.append(self.tags_group)
+        self._update_tags_summary()  # l'astuce des clics, avant même le chargement des tags
+
+        group2 = Adw.PreferencesGroup()
         self.mood_mode_row = Adw.ComboRow(title=tr("Mood match"),
                                           model=Gtk.StringList.new([tr("Any (OR)"), tr("All (AND)")]))
         self.mood_mode_row.set_selected(0 if self.mood_mode == "any" else 1)
         self.mood_mode_row.connect("notify::selected", self._on_mood_mode_changed)
-        group.add(self.mood_mode_row)
+        group2.add(self.mood_mode_row)
         self.pick_col_selected = set()  # collections du tirage (vide = toutes)
         self.collections_row = Adw.ActionRow(title=tr("Collections"), activatable=False)
         self.collections_btn = Gtk.MenuButton(valign=Gtk.Align.CENTER)
@@ -47,8 +193,8 @@ class PickViewMixin:
         self.collections_btn.set_popover(self.collections_pop)
         self.collections_row.add_suffix(self.collections_btn)
         self.collections_row.set_activatable_widget(self.collections_btn)
-        group.add(self.collections_row)
-        filters.append(group)
+        group2.add(self.collections_row)
+        filters.append(group2)
 
         self.btn_go = Gtk.Button(label=tr("Pick for me"), halign=Gtk.Align.CENTER)
         self.btn_go.add_css_class("suggested-action")
@@ -57,7 +203,7 @@ class PickViewMixin:
         filters.append(self.btn_go)
         filters_scroll = Gtk.ScrolledWindow(child=filters, hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
 
-        # --- écran 2 : le jeu proposé ---
+        # --- écran 2 : le jeu proposé, en carrousel de jaquettes ---
         proposal = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12,
                            margin_top=6, margin_bottom=24, margin_start=18, margin_end=18)
         self.back_btn = Gtk.Button(icon_name="go-previous-symbolic", halign=Gtk.Align.START,
@@ -65,11 +211,31 @@ class PickViewMixin:
         self.back_btn.connect("clicked", lambda *_: self._show_filters())
         proposal.append(self.back_btn)
 
-        # la couverture est affichee dans la status page elle-meme (set_paintable)
+        # Le carrousel remplace l'ancienne couverture unique : défilent les
+        # jaquettes des jeux ÉLIGIBLES au tirage — ceux qui auraient pu sortir —
+        # et le jeu tiré s'immobilise au centre, seul déflouté. Avant tout tirage,
+        # la même zone montre simplement l'invite (pile d'écran « vide »).
+        self.roulette_bande = RouletteBande()
         self.status_page = Adw.StatusPage(icon_name="input-gaming-symbolic", title=tr("What to play?"),
                                           description=tr("Press the button and the app decides."),
-                                          height_request=220, vexpand=True)  # hauteur mini : sinon ecrasee quand les tags sont deplies
-        proposal.append(self.status_page)
+                                          height_request=ROULETTE_H + 40, vexpand=True)
+        # Nom `pick_zone`, PAS `pick_stack` : ce nom désigne déjà, plus bas, le
+        # sélecteur « filtres → fiche ». Deux piles du même attribut se seraient
+        # écrasées silencieusement (la seconde gagne, la première reste muette).
+        self.pick_zone = Gtk.Stack(vexpand=True, transition_type=Gtk.StackTransitionType.CROSSFADE)
+        self.pick_zone.add_named(self.status_page, "vide")
+        self.pick_zone.add_named(self.roulette_bande, "carrousel")
+        proposal.append(self.pick_zone)
+
+        # Centrés pour tenir sous le carrousel centré. `xalign=0.5` et NON le
+        # seul `justify` : la justification porte sur les lignes qui REMPLISSENT
+        # la ligne, et la dernière d'un paragraphe ne l'est jamais — sans
+        # `xalign`, le dernier trait part donc à gauche.
+        self.pick_name = Gtk.Label(xalign=0.5, wrap=True, css_classes=["title-2", "revel"])
+        self.pick_desc = Gtk.Label(xalign=0.5, wrap=True, justify=Gtk.Justification.CENTER,
+                                   css_classes=["dim-label", "revel"])
+        proposal.append(self.pick_name)
+        proposal.append(self.pick_desc)
 
         self.btn_yes = Gtk.Button(label=tr("Play"))
         self.btn_yes.add_css_class("suggested-action")
@@ -79,6 +245,7 @@ class PickViewMixin:
         self.btn_no.add_css_class("pill")
         self.btn_no.connect("clicked", self._on_other)
         self.choice_box = Gtk.Box(spacing=12, halign=Gtk.Align.CENTER)
+        self.choice_box.add_css_class("revel")
         self.choice_box.append(self.btn_no)
         self.choice_box.append(self.btn_yes)
         proposal.append(self.choice_box)
@@ -90,6 +257,7 @@ class PickViewMixin:
         self._refresh_moods()
         self._refresh_pick_collections()
         self.time_row.connect("notify::selected", self._on_time_changed)  # changer un filtre annule le choix
+        self._spin_id, self._roulette_rang, self._roulette_gen = None, 0, 0
         self._show_filters()  # on démarre sur l'écran des filtres
         return self.pick_stack
 
@@ -99,14 +267,14 @@ class PickViewMixin:
     def _reset_pick(self):
         """Changer un filtre du tirage annule la proposition en cours."""
         self.pool, self.current = [], None
-        self.pool_inst, self.pool_owned, self.pick_stage = [], [], None
-        self.status_page.set_icon_name("input-gaming-symbolic")
-        self.status_page.set_paintable(None)
-        img = self._cover_image()
-        if img:
-            img.set_pixel_size(-1)
-        self.status_page.set_title(tr("What to play?"))
-        self.status_page.set_description(tr("Press the button and the app decides."))
+        self._arreter_roulette()
+        self._vide_roulette()
+        self.pick_zone.set_visible_child_name("vide")
+        self.pick_name.set_text("")
+        self.pick_desc.set_text("")
+        # Un tirage interrompu (filtre changé à mi-course) aurait laissé nom et
+        # boutons à opacité 0 : invisibles et pourtant toujours cliquables.
+        self._reveler_infos()
         self._show_filters()  # retour à l'écran des filtres
 
     def _refresh_moods(self):
@@ -163,7 +331,8 @@ class PickViewMixin:
     def _after_tag_change(self):
         for o, b in self._tag_buttons.items():  # états exclusifs : on recolore tout
             self._render_tag(b, o)
-        self._update_mood_subtitle()
+        self._update_tags_summary()
+        self._update_mood_mode()
         self._reset_pick()
 
     def _on_pick_owned(self, chk):
@@ -181,15 +350,24 @@ class PickViewMixin:
     def _on_time_changed(self, *_):
         self._reset_pick()
 
-    def _update_mood_subtitle(self):
-        inc = sorted(self.mood_selected, key=str.lower)
-        exc = sorted(self.exclude_selected, key=str.lower)
-        if inc or exc:  # résumé : « + » inclus / « − » exclus
-            txt = "  ".join(["+ " + t for t in inc] + ["− " + t for t in exc])
-        else:
-            txt = tr("Left-click: include · Right-click: exclude")
-        self.mood_row.set_subtitle(GLib.markup_escape_text(txt))
-        self.mood_mode_row.set_sensitive(bool(inc))  # le mode OU/ET n'a de sens qu'avec un tag inclus
+    def _update_mood_mode(self):
+        """Le mode OU/ET n'a de sens qu'avec au moins un tag inclus — sinon il n'y
+        a rien à combiner."""
+        self.mood_mode_row.set_sensitive(bool(self.mood_selected))
+
+    def _update_tags_summary(self):
+        """Le sous-titre dit la portée du filtre d'un seul coup d'œil (« + Puzzle
+        − Roguelike ») : les pastilles bleues et rouges se voient, mais pas toutes
+        ensemble. Sans rien de retenu, il rappelle au passage l'astuce des clics.
+
+        L'échappement n'est pas optionnel : le label du description interprète le
+        BALISAGE GTK, et un tag « Action & Adventure » contient un « & » nu, qui
+        invalide le balisage. GTK ne signale rien alors — il se contente de
+        n'afficher PLUS RIEN du tout sous le titre, ce qui passerait inaperçu.
+        """
+        txt = P.tags_summary(self.mood_selected, self.exclude_selected)
+        self.tags_group.set_description(GLib.markup_escape_text(
+            txt or tr("Left-click: include · Right-click: exclude")))
 
     def _fetch_tags_bg(self):
         if getattr(self, "_tagging", False):  # une récupération est déjà en cours
@@ -213,10 +391,16 @@ class PickViewMixin:
         return False
 
     def _refresh_current_cover(self):
-        if self.current:
-            row = self.con.execute("SELECT * FROM games WHERE id=?", (self.current["id"],)).fetchone()
-            if row:
-                self._set_cover(row)
+        """Une couverture vient de changer (réglages, réimport) : on ne recharge QUE
+        la jaquette du jeu en cours. Reconstruire toute la bande échangerait des
+        textures déjà décodées pour un seul art nouveau, et ferait repartir le
+        tirage alors que l'utilisateur ne demande qu'une image."""
+        if not self.current:
+            return
+        row = self.con.execute("SELECT * FROM games WHERE id=?", (self.current["id"],)).fetchone()
+        pic = self.roulette_bande.jaquette_de(self.current["id"])
+        if row and pic is not None:
+            self._charger_couvertures([row], self.roulette_bande._pics.index(pic))
 
     def _eligible_pool(self, include_not_installed=False):
         minutes = DUREES[self.time_row.get_selected()]
@@ -238,23 +422,22 @@ class PickViewMixin:
         return [(g, w) for g, w in pool if w > 0]
 
     def _on_choose(self, *_):
-        self.pool_inst = self._eligible_pool(False)
-        # les jeux non installés ne sont proposés que si l'option du Choix les prend en compte
-        self.pool_owned = ([p for p in self._eligible_pool(True) if not p[0]["installed"]]
-                           if self.pick_owned else [])
-        if not self.pool_inst and not self.pool_owned:
+        # UN SEUL bassin : l'option « prendre en compte les jeux non installés »
+        # mélange les possédés aux installés dès le premier tirage. L'ancienne
+        # progression — épuiser les installés, puis passer aux possédés — tirait
+        # un seul jeu quand un seul était installé : mesuré, « Action Roguelike »
+        # (1 installé, 18 possédés) ne sortait que SULFUR, et ne découvrait les
+        # 18 autres qu'au second « Encore un ».
+        self.pool = self._eligible_pool(self.pick_owned)
+        if not self.pool:
             self.toasts.add_toast(Adw.Toast.new(tr("Nothing eligible")))
             return
-        self.pick_stage = "installed" if self.pool_inst else "owned"
-        self.pool = list(self.pool_inst) if self.pick_stage == "installed" else list(self.pool_owned)
         self.current = None
         self._propose()
 
     def _propose(self):
-        if not self.pool:  # reservoir epuise : installes passes -> possedes, sinon on recycle
-            if self.pick_stage == "installed" and self.pool_owned:
-                self.pick_stage = "owned"
-            self.pool = list(self.pool_owned) if self.pick_stage == "owned" else list(self.pool_inst)
+        if not self.pool:  # reservoir epuise : on recycle tout le bassin
+            self.pool = self._eligible_pool(self.pick_owned)
             if self.current and len(self.pool) > 1:  # eviter la repetition immediate
                 self.pool = [p for p in self.pool if p[0]["id"] != self.current["id"]]
         if not self.pool:
@@ -262,8 +445,19 @@ class PickViewMixin:
             return
         g = random.choices([p[0] for p in self.pool], [p[1] for p in self.pool])[0]
         self.current = g
-        self._set_cover(g)
-        self.status_page.set_title(g["name"])
+        self.pick_stack.set_visible_child_name("proposal")   # on quitte l'écran des filtres
+        self._montrer_jeu(g)               # la bande défile, le nom n'apparaît qu'à l'arrêt
+
+    # ---------- carrousel de jaquettes ----------
+    def _montrer_jeu(self, g):
+        """Tire le jeu `g` : la bande défile, puis le nom, le détail et les boutons
+        apparaissent. Le résultat ne se dévoile QU'À L'ARRÊT — pendant la rotation
+        il est déjà écrit, mais invisible (`_masquer_infos`).
+
+        Sauf quand il n'y a rien à tirer : un seul jeu éligible est posé au centre
+        et dévoilé d'emblée, sans faire patienter 2 800 ms devant un résultat déjà
+        décidé (voir `_poser_sans_rotation`)."""
+        self.pick_name.set_text(g["name"])
         desc = P.status_label(g["status"])
         if not g["installed"]:
             desc += " · " + tr("not installed")
@@ -271,9 +465,208 @@ class PickViewMixin:
             desc += " · " + tr("{t} played", t=P.fmt_minutes(g["playtime_min"]))
         if g["store_tags"]:
             desc += "\n" + " · ".join(g["store_tags"].split(",")[:4])
-        self.status_page.set_description(GLib.markup_escape_text(desc))
+        self.pick_desc.set_text(desc)
         self.btn_yes.set_label(tr("Play") if g["installed"] else tr("Store page"))
-        self.pick_stack.set_visible_child_name("proposal")  # on bascule sur la fiche du jeu
+        self.pick_zone.set_visible_child_name("carrousel")
+        self._rouler(g)
+
+    def _rouler(self, g):
+        """Fait défiler la bande jusqu'à ce que `g` occupe le centre.
+
+        La bande n'est PAS reconstruite : elle est rognée à gauche de ce qui a déjà
+        défilé, puis allongée à droite de nouvelles jaquettes. Reconstruire laisserait
+        LA MÊME CIBLE à chaque tirage — le gagnant occupe toujours la même case, et
+        l'offset est déjà à cette case, donc il n'y aurait RIEN À ANIMER : « Autre »
+        réaffichait le résultat d'un coup. Les jaquettes déjà en place restent les
+        mêmes widgets : leurs textures ne sont pas perdues, et le raccord se produit
+        hors du cadre, où tout est flou et en mouvement.
+
+        Sauf pour un seul jeu éligible, seul cas où il n'y a rien à dérouler : la
+        bande est alors REMPLACÉE, et posée au centre sans rotation.
+        """
+        bande = self.roulette_bande
+        if len(self.pool) <= 1:
+            # Un seul jeu éligible : la bande n'a ni voisins à montrer ni distance
+            # à parcourir. On la REMPLACE plutôt que de la rognner puis l'allonger —
+            # garder les 7 dernières jaquettes y laisserait des COPIES floutées du
+            # même jeu encadrant le centre, autrefois invisibles puisque tout
+            # défilait, et qui se verraient désormais au repos.
+            self._roulette_gen += 1        # invalide les chargements encore en vol
+            bande.remplacer([g])
+            self._roulette_rang = 0
+            self._charger_couvertures([g], 0)
+            self._poser_sans_rotation()
+            return
+        premier, dernier, rang = P.roulette_rogne(len(bande._pics), self._roulette_rang)
+        bande.rogner(premier, dernier)
+        self._roulette_rang = rang
+        self._roulette_gen += 1            # invalide les chargements encore en vol
+        depart = len(bande._pics)          # première case NEUVE de la bande
+        # Les jaquettes conservées sont déjà à l'écran : `roulette_strip` les
+        # écarte de ses remplies, sans quoi le gagnant pourrait s'y trouver déjà —
+        # la cible serait alors derrière le point de départ et l'animation
+        # partirait à rebours.
+        gardes = [p._jeu_id for p in bande._pics[:depart]]
+        nouveaux = P.roulette_strip(self.pool, g["id"], ROULETTE_JAQUETTES,
+                                    deja_visibles=gardes)
+        bande.ajouter(nouveaux)
+        # Rang LU dans la bande, jamais déduit de `slots - 3` : la règle de
+        # placement appartient à `roulette_strip`, et la dupliquer la ferait
+        # dériver dès que l'une des deux évolue.
+        self._roulette_rang = bande.index_de(g["id"], depart)
+        self._charger_couvertures(nouveaux, depart)
+        # Le résultat n'est masqué qu'ICI, et nulle part ailleurs : la rotation
+        # n'existe que pour retarder la révélation, donc à défaut de rotation il
+        # n'y a rien à masquer. Toujours dans le même passage synchrone, donc
+        # aucun cadre n'est peint entre les deux — pas de scintillement.
+        self._masquer_infos()
+        self._lancer_defilement()
+
+    def _masquer_infos(self):
+        """Nom, détail et boutons pendant la rotation.
+
+        L'OPACITÉ, et non `set_visible(False)` : un widget invisible libère sa
+        place, la bande s'élargirait d'un coup au moment de la révélation."""
+        for w in (self.pick_name, self.pick_desc, self.choice_box):
+            w.set_opacity(0.0)
+            w.set_sensitive(False)
+
+    def _reveler_infos(self):
+        for w in (self.pick_name, self.pick_desc, self.choice_box):
+            w.set_sensitive(True)
+            w.set_opacity(1.0)
+
+
+    def _vide_roulette(self):
+        self.roulette_bande.vider()
+
+    def _charger_couvertures(self, jeux, index_debut=0):
+        """Charge les couvertures EN TÂCHE DE FOND, à partir de la case `index_debut`.
+
+        45 couvertures décodées d'un coup geleraient l'interface pour ~250 ms, ce
+        qui se verrait sur un défilement. Mesuré : 239 ms en série, 59 ms à quatre
+        fils — assez pour que l'art soit déjà en place aux premiers tours. Les
+        jaquettes sans art restent des « dos de carte » (`.roulette-case`) : un
+        TROU dans une bande qui tourne se verrait immédiatement.
+
+        `index_debut` parce qu'un tirage n'ALLONGE la bande que : seules les
+        jaquettes neuves sont décodées, les autres gardent leur texture.
+
+        `gen` nomme la bande à laquelle appartiennent les jaquettes. « Encore un »
+        travaille sur la bande pendant qu'un vieux fil tourne encore ; sans ce
+        jeton, ces textures atterriraient sur des cases qui ne sont plus les leurs
+        — de fausses couvertures, sans la moindre erreur pour le signaler.
+        """
+        gen = self._roulette_gen
+
+        def charger(g):
+            f = P.cover_file(g)
+            if not f:
+                return None
+            try:
+                return Gdk.Texture.new_for_pixbuf(GdkPixbuf.Pixbuf.new_from_file_at_scale(
+                    str(f), ROULETTE_L, ROULETTE_H, True))
+            except Exception:
+                return None
+
+        def work():
+            with ThreadPoolExecutor(max_workers=4) as ex:
+                for i, tex in enumerate(ex.map(charger, jeux)):
+                    GLib.idle_add(self._poser_couverture, gen, index_debut + i, tex)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _poser_couverture(self, gen, i, texture):
+        if gen != self._roulette_gen:
+            return False                       # bande remplacée depuis : on jette
+        pics = self.roulette_bande._pics
+        if i < len(pics):
+            pics[i].set_paintable(texture)
+            if texture is not None:
+                pics[i].remove_css_class("roulette-case")   # l'art remplace le dos
+        return False
+
+    def _poser_sans_rotation(self):
+        """Un seul jeu éligible : rien à tirer, donc rien à faire défiler.
+
+        Une rotation de 2 800 ms ne ferait que faire patienter devant un résultat
+        déjà décidé. On pose la jaquette au centre, nette, et nom, détail et
+        boutons sont là d'emblée — jamais masqués, donc jamais révélés.
+
+        L'ATTENTE est la même que pour une rotation, et tout aussi nécessaire : au
+        premier lancement, la bande n'a pas encore été allouée — `pick_zone` vient
+        de basculer sur le carrousel, et GTK n'a pas encore dessiné de frame. Elle
+        mesure alors 0, `cible_centre` renvoie 85 au lieu de −460, et la jaquette
+        se retrouve à x = −85, à MOITIÉ hors du cadre. C'était exactement le cas à
+        son signalement — corrigé d'un coup par « Autre », la bande étant alors
+        dimensionnée.
+        """
+        self._arreter_roulette()
+        self._spin_id = GLib.timeout_add(16, self._pose_lors_alloue)
+
+    def _pose_lors_alloue(self):
+        bande = self.roulette_bande
+        if not bande._pics:
+            self._spin_id = None
+            return False
+        if bande.get_width() <= 0:
+            return True          # GTK n'a pas encore alloué : on réessaie à la frame suivante
+        bande.set_offset(bande.cible_centre(self._roulette_rang))
+        self._deflouter_gagnant()
+        self._reveler_infos()
+        self._spin_id = None
+        return False
+
+    def _lancer_defilement(self):
+        """Attend l'allocation de la bande, puis la fait défiler jusqu'à centrer le jeu."""
+        self._arreter_roulette()
+        self._deflouter_tout()
+        self._spin_id = GLib.timeout_add(16, self._attente_allocation)
+
+    def _attente_allocation(self):
+        bande = self.roulette_bande
+        if not bande._pics:
+            self._spin_id = None
+            return False
+        if bande.get_width() <= 0:
+            return True          # GTK n'a pas encore alloué : on réessaie à la frame suivante
+        self._roulette_anim = (bande._offset, bande.cible_centre(self._roulette_rang),
+                               GLib.get_monotonic_time())
+        self._spin_id = GLib.timeout_add(16, self._pas_de_temps)
+        return False
+
+    def _pas_de_temps(self):
+        depart, cible, debut = self._roulette_anim
+        t = min((GLib.get_monotonic_time() - debut) / 1e6 / (ROULETTE_DUREE_MS / 1000), 1.0)
+        self.roulette_bande.set_offset(depart + (cible - depart) * ROULETTE_EASE(t))
+        if t >= 1:
+            self._spin_id = None
+            self._deflouter_gagnant()
+            self._reveler_infos()          # c'est ici, et nulle part ailleurs, qu'on découvre
+            return False
+        return True
+
+    def _arreter_roulette(self):
+        if getattr(self, "_spin_id", None) is not None:
+            GLib.source_remove(self._spin_id)
+            self._spin_id = None
+
+    def _deflouter_tout(self):
+        for pic in self.roulette_bande._pics:
+            pic.add_css_class("roulette-flou")
+
+    def _deflouter_gagnant(self):
+        """Une seule règle : flou sauf la case centrale. À l'arrêt, le gagnant
+        l'occupe — il redevient net, ses voisins restent floutés autour de lui.
+
+        On défloute la case CENTRALE, et non « toutes les jaquettes du gagnant » :
+        sur un très petit bassin le même jeu peut revenir ailleurs dans la bande,
+        et deux jaquettes nettes apparaîtraient d'un coup."""
+        for i, pic in enumerate(self.roulette_bande._pics):
+            if i == self._roulette_rang:
+                pic.remove_css_class("roulette-flou")
+            else:
+                pic.add_css_class("roulette-flou")
 
     def _accept(self, *_):
         """Valide la proposition : lance un jeu installé, ouvre la fiche magasin d'un jeu possédé."""
@@ -294,45 +687,13 @@ class PickViewMixin:
         self._propose()
 
     def _launch(self, g):
+        """Lance le jeu (ou ouvre sa fiche magasin). Le carrousel reste affiché et le
+        jeu lancé reste net au centre : le message de réussite remplace le détail,
+        pas la jaquette — c'est elle qui dit quel jeu est parti."""
         ok = P.launch(self.con, g)
-        self._set_cover(g)
-        self.status_page.set_title(g["name"])
-        self.status_page.set_description(
+        self.pick_name.set_text(g["name"])
+        self.pick_desc.set_text(
             tr("▶ Launched. Have fun!") if ok else tr("Couldn't launch: is the game still installed?"))
-
-    def _set_cover(self, g):
-        """Affiche la couverture (réduite à 240 px de haut) ; sans couverture lisible, on garde l'icône."""
-        texture, err = None, ""
-        f = P.cover_file(g)
-        if f:
-            try:
-                texture = Gdk.Texture.new_for_pixbuf(GdkPixbuf.Pixbuf.new_from_file_at_scale(str(f), -1, 240, True))
-            except Exception as e:  # secours : chargeur de GTK lui-même (taille d'origine)
-                err = f"pixbuf : {getattr(e, 'message', e)}"
-                try:
-                    texture = Gdk.Texture.new_from_filename(str(f))
-                except Exception as e2:
-                    err += f" | texture : {getattr(e2, 'message', e2)}"
-        name = g["name"] if g else None
-        self.status_page.set_paintable(texture)          # la couverture fait partie de la status page
-        self.status_page.set_icon_name(None if texture is not None else "input-gaming-symbolic")
-        img = self._cover_image()                        # agrandit la couverture (sinon taille d'icone ~128px)
-        if img is not None:
-            img.set_pixel_size(240 if texture is not None else -1)
-
-    def _cover_image(self):
-        """Le Gtk.Image interne de la status page qui affiche l'icone/couverture."""
-        def walk(w):
-            if isinstance(w, Gtk.Image) and "icon" in w.get_css_classes():
-                return w
-            c = w.get_first_child()
-            while c:
-                r = walk(c)
-                if r is not None:
-                    return r
-                c = c.get_next_sibling()
-            return None
-        return walk(self.status_page)
 
     def _refresh_pick_collections(self):
         if not hasattr(self, "collections_pop"):
