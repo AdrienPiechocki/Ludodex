@@ -19,6 +19,14 @@
 # - Les préfixes d'ids Tamriel Rebuilt suivent la convention TR_m<carte>_<initiales>_<nom> :
 #   FG, MT, TT, IL confirmés ; MG, TG, HH, HT déduits de la convention, à vérifier dans ton log.
 # - Les motifs avec « . » à la place d'une apostrophe évitent les soucis de guillemets.
+# - Project Tamriel (Project Cyrodiil, Skyrim: Home of the Nords) : le guide d'ids de PT impose les préfixes PC_ et Sky_ ;
+#   les quêtes sont donc comptées avec pc_ et (sky|shotn)_ (à vérifier dans ton log). Les factions PT sont reconnues par
+#   leur id Tamriel_Data (t_cyr_..., t_sky_...). Les promotions utilisent « FACTION RANK: ... id=... » (mod mis à jour).
+# - hidden: true marque les succès dont le nom ou la description révèle une quête, une intrigue, un objet ou un secret.
+# - Poison Song (TR 26.08) : les ids des nouvelles quêtes ne sont pas publics, donc les succès reposent sur
+#   les lieux (CELL ENTERED), les factions (Indoril, Ordinators) et les titres de rang. Les titres de rang
+#   Indoril (Oathman, Kinsman, Concordant Minister, Illuminated Elder) viennent de l'UESP et peuvent différer
+#   du jeu ; le préfixe tr_m<n>_hi_ (House Indoril) est déduit de la convention d'ids de TR.
 
 achievements:
 
@@ -445,6 +453,7 @@ achievements:
     icon: "💍"
     match: 'QUEST UPDATE: ms_fargothring \| stage=([2-9][0-9][0-9]|1[1-9][0-9]|10[1-9]|100|[1-9][0-9]{3,})\b'
     case_insensitive: true
+    hidden: true
 
   - name: "Pilgrim of the Seven Trials"
     description: "Complete all seven Ashlander pilgrimage trials."
@@ -468,6 +477,7 @@ achievements:
       - 'QUEST UPDATE: mv_recoverwidowmaker \| stage=([8-9][0-9]|7[1-9]|70|[1-9][0-9]{2,})\b'
       - 'QUEST UPDATE: mv_paralyzedbarbarian \| stage=([2-9][0-9][0-9]|1[1-9][0-9]|10[1-9]|100|[1-9][0-9]{3,})\b'
     case_insensitive: true
+    hidden: true
 
   - name: "Glimpse of the Future"
     description: "See the future through the eyes of a sad seer."
@@ -485,6 +495,7 @@ achievements:
       - 'QUEST UPDATE: mv_missingcompanion \| stage=60\b'
       - 'QUEST UPDATE: mv_victimromance \| stage=(100|105)\b'
     case_insensitive: true
+    hidden: true
 
   - name: "Daedric Devotee"
     description: "Complete the quest of any Daedric shrine."
@@ -498,6 +509,7 @@ achievements:
       - 'QUEST UPDATE: da_molagbal \| stage=30\b'
       - 'QUEST UPDATE: da_sheogorath \| stage=70\b'
     case_insensitive: true
+    hidden: true
 
   - name: "Seven Princes"
     description: "Complete the quests of all seven Daedric shrines."
@@ -511,6 +523,7 @@ achievements:
       - 'QUEST UPDATE: da_molagbal \| stage=30\b'
       - 'QUEST UPDATE: da_sheogorath \| stage=70\b'
     case_insensitive: true
+    hidden: true
 
   - name: "Web of Mephala"
     description: "Complete all 26 Morag Tong sanction quests."
@@ -518,6 +531,7 @@ achievements:
     match: 'QUEST UPDATE: mt_s_\w+ \| stage=100\b'
     count: 26
     case_insensitive: true
+    hidden: true
 
   - name: "Bloodline"
     description: "Complete the questline of one of the vampire clans."
@@ -527,6 +541,7 @@ achievements:
       - 'QUEST UPDATE: va_vampcountess \| stage=([5-9][0-9]|4[1-9]|40|[1-9][0-9]{2,})\b'
       - 'QUEST UPDATE: va_vampamulet \| stage=([4-9][0-9]|3[1-9]|30|[1-9][0-9]{2,})\b'
     case_insensitive: true
+    hidden: true
 
   - name: "Cured of the Wolf"
     description: "Cure yourself of lycanthropy."
@@ -535,6 +550,7 @@ achievements:
       - 'QUEST UPDATE: bm_wolfgiver \| stage=([2-9][0-9][0-9]|1[3-9][0-9]|12[1-9]|120|[1-9][0-9]{3,})\b'
       - 'QUEST UPDATE: bm_wolfgiver_a \| stage=([3-9][0-9]|2[1-9]|20|[1-9][0-9]{2,})\b'
     case_insensitive: true
+    hidden: true
 
   - name: "Stronghold Owner"
     description: "Build a stronghold for one of the Great Houses."
@@ -544,6 +560,7 @@ achievements:
       - 'QUEST UPDATE: hr_stronghold \| stage=300\b'
       - 'QUEST UPDATE: ht_stronghold \| stage=300\b'
     case_insensitive: true
+    hidden: true
 
   # ======================================================================
   # FACTIONS
@@ -832,7 +849,7 @@ achievements:
     case_insensitive: true
 
   - name: "Sundered Scar"
-    description: "Discover the Sundered Scar region, east of Old Ebonheart."
+    description: "Discover the Sundered Scar region, remade in Poison Song as a volcanic sulfur wasteland."
     icon: "🌋"
     match: 'REGION DISCOVERED: [^|]*Sundered Scar'
     case_insensitive: true
@@ -1720,6 +1737,7 @@ achievements:
     icon: "⭐"
     match: 'ITEM ACQUIRED: Azura.s Star'
     case_insensitive: true
+    hidden: true
 
   - name: "Artifact Hunter"
     description: "Collect Azura's Star, Skull of Corruption, Mace of Molag Bal, Spear of Bitter Mercy, Boots of Blinding Speed and Cuirass of the Savior's Hide."
@@ -1732,6 +1750,7 @@ achievements:
       - 'ITEM ACQUIRED: Boots of Blinding Speed'
       - 'ITEM ACQUIRED: Cuirass of the Savior.s Hide'
     case_insensitive: true
+    hidden: true
 
   - name: "Daedric Collector"
     description: "Pick up 5 pieces of Daedric equipment."
@@ -1921,12 +1940,14 @@ achievements:
     icon: "🐱"
     match: 'NPC TALKED: M.aiq'
     case_insensitive: true
+    hidden: true
 
   - name: "Savior of the Savior"
     description: "Talk to Tarhiel."
     icon: "🪶"
     match: 'NPC TALKED: Tarhiel'
     case_insensitive: true
+    hidden: true
 
   - name: "First Sale"
     description: "Open a merchant's trade window."
@@ -2043,4 +2064,738 @@ achievements:
     description: "Pay off or clear your bounty."
     icon: "🧼"
     match: 'BOUNTY DECREASED: 0\b'
+    case_insensitive: true
+
+  # ======================================================================
+  # TAMRIEL REBUILT 26.08 « POISON SONG » — régions, lieux, Indoril et Ordinators
+  # ======================================================================
+  - name: "Orethan Fields"
+    description: "Discover the Orethan Fields, a brand-new region of gardens and farmland that feeds Almalexia."
+    icon: "🌾"
+    match: 'REGION DISCOVERED: [^|]*Orethan Fields'
+    case_insensitive: true
+
+  - name: "Sulfur Mire"
+    description: "Enter the remade Sundered Scar: geysers, sulfur pools and high-level enemies."
+    icon: "🌋"
+    any:
+      - 'REGION DISCOVERED: [^|]*Sundered Scar'
+      - 'CELL ENTERED: Varon\b'
+      - 'CELL ENTERED: Darvonis\b'
+      - 'CELL ENTERED: Harrumat\b'
+    case_insensitive: true
+
+  - name: "Trade Nexus"
+    description: "Visit Othrenis, the trade hub of the Orethan Fields."
+    icon: "🏘️"
+    match: 'CELL ENTERED: Othrenis\b'
+    case_insensitive: true
+
+  - name: "Crossroads Hamlet"
+    description: "Reach Varon, a Velothi hamlet at a crossroads of the Sundered Scar."
+    icon: "🛤️"
+    match: 'CELL ENTERED: Varon\b'
+    case_insensitive: true
+
+  - name: "Chapel of Nanaav"
+    description: "Visit the Indoril chapel of Nanaav in the Orethan Fields."
+    icon: "⛪"
+    match: 'CELL ENTERED: Nanaav\b'
+    case_insensitive: true
+
+  - name: "Poison Song"
+    description: "Set foot on Gorne, the island depicted in the 'Poison Song' books and home to the Indoril chapel of Sandil."
+    icon: "📕"
+    match: 'CELL ENTERED: Gorne\b'
+    case_insensitive: true
+
+  - name: "Isle of Nan Iban"
+    description: "Visit Nan Iban, the island formerly known as Gorne in the Nedothril region."
+    icon: "🏝️"
+    match: 'CELL ENTERED: Nan Iban\b'
+    case_insensitive: true
+
+  - name: "Manor-Strongholds of Indoril"
+    description: "Visit the four Indoril chapels: Nanaav, Gorne, Roa Dyr and Tur Julan."
+    icon: "🏯"
+    all:
+      - 'CELL ENTERED: Nanaav\b'
+      - 'CELL ENTERED: Gorne\b'
+      - 'CELL ENTERED: Roa Dyr\b'
+      - 'CELL ENTERED: Tur Julan\b'
+    case_insensitive: true
+
+  - name: "Stronghold of Idaverrano"
+    description: "Visit Idaverrano (Ida Vano), the ancient Indoril stronghold tied to Nerevar's shrine."
+    icon: "🏚️"
+    match: 'CELL ENTERED: (Idaverrano|Ida Vano)\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Kemel-Ze Revisited"
+    description: "Visit Kemel-Ze, updated in Poison Song with its own quests."
+    icon: "🏘️"
+    match: 'CELL ENTERED: Kemel.Ze\b'
+    case_insensitive: true
+
+  - name: "Aim Ral Investigator"
+    description: "Travel to Aim Ral."
+    icon: "🔍"
+    match: 'CELL ENTERED: Aim Ral\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Hold of the Tantha"
+    description: "Board the TEM Tantha, docked at Firewatch."
+    icon: "⚓"
+    match: 'CELL ENTERED: [^|]*Tantha'
+    case_insensitive: true
+    hidden: true
+
+  - name: "House Calls"
+    description: "Visit Sandil House, Beroth House and Ilvi House."
+    icon: "🏠"
+    all:
+      - 'CELL ENTERED: [^|]*Sandil House'
+      - 'CELL ENTERED: [^|]*Beroth House'
+      - 'CELL ENTERED: [^|]*Ilvi House'
+    case_insensitive: true
+
+  - name: "Pest Control"
+    description: "Visit the Sandil Ancestral Tomb, overrun by cliff racers."
+    icon: "🦇"
+    match: 'INTERIOR DISCOVERED: [^|]*Sandil Ancestral Tomb'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Poison Song Atlas"
+    description: "Visit Othrenis, Varon, Nanaav, Gorne, Roa Dyr, Tur Julan, Almalexia and Kemel-Ze."
+    icon: "🧭"
+    all:
+      - 'CELL ENTERED: Othrenis\b'
+      - 'CELL ENTERED: Varon\b'
+      - 'CELL ENTERED: Nanaav\b'
+      - 'CELL ENTERED: Gorne\b'
+      - 'CELL ENTERED: Roa Dyr\b'
+      - 'CELL ENTERED: Tur Julan\b'
+      - 'CELL ENTERED: Almalexia\b'
+      - 'CELL ENTERED: Kemel.Ze\b'
+    case_insensitive: true
+
+  - name: "Sworn to House Indoril"
+    description: "Join Great House Indoril, joinable for the first time in Poison Song."
+    icon: "🌙"
+    match: 'FACTION JOINED: [^|]*Indoril'
+    case_insensitive: true
+
+  - name: "Ordinator Recruit"
+    description: "Join the Ordinators of the mainland."
+    icon: "🪖"
+    match: 'FACTION JOINED: [^|]*Ordinator'
+    case_insensitive: true
+
+  - name: "Temple Loyalist"
+    description: "Join the Tribunal Temple, House Indoril and the Ordinators."
+    icon: "⛪"
+    all:
+      - 'FACTION JOINED: [^|]*\| id=temple\b'
+      - 'FACTION JOINED: [^|]*Indoril'
+      - 'FACTION JOINED: [^|]*Ordinator'
+    case_insensitive: true
+
+  - name: "Oathman of Indoril"
+    description: "Reach the rank of Oathman in House Indoril."
+    icon: "🤝"
+    match: 'FACTION RANK: [^|]*Indoril[^|]*\| rank=\d+ \| title=Oathman\b'
+    case_insensitive: true
+
+  - name: "Kinsman of Sandil"
+    description: "Become a Kinsman: kin, not servant, of House Indoril."
+    icon: "🩸"
+    match: 'FACTION RANK: [^|]*Indoril[^|]*\| rank=\d+ \| title=Kinsman\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Concordant Minister"
+    description: "Reach the rank of Concordant Minister in House Indoril."
+    icon: "📜"
+    match: 'FACTION RANK: [^|]*Indoril[^|]*\| rank=\d+ \| title=Concordant Minister\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Illuminated Elder"
+    description: "Reach the rank of Illuminated Elder, the highest Indoril rank listed so far."
+    icon: "🌟"
+    match: 'FACTION RANK: [^|]*Indoril[^|]*\| rank=\d+ \| title=Illuminated Elder\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Indoril Standing"
+    description: "Get promoted 3 times in House Indoril."
+    icon: "📈"
+    match: 'FACTION RANK: [^|]*Indoril'
+    count: 3
+    case_insensitive: true
+
+  - name: "Indoril Rising"
+    description: "Get promoted 6 times in House Indoril."
+    icon: "🌙"
+    match: 'FACTION RANK: [^|]*Indoril'
+    count: 6
+    case_insensitive: true
+
+  - name: "Ordinator Ranks I"
+    description: "Get promoted 3 times among the Ordinators."
+    icon: "🪖"
+    match: 'FACTION RANK: [^|]*Ordinator'
+    count: 3
+    case_insensitive: true
+
+  - name: "Ordinator Ranks II"
+    description: "Get promoted 6 times among the Ordinators."
+    icon: "🛡️"
+    match: 'FACTION RANK: [^|]*Ordinator'
+    count: 6
+    case_insensitive: true
+
+  - name: "Ordinator Ranks III"
+    description: "Get promoted 9 times among the Ordinators."
+    icon: "⚔️"
+    match: 'FACTION RANK: [^|]*Ordinator'
+    count: 9
+    case_insensitive: true
+
+  - name: "House Errands"
+    description: "Complete 5 House Indoril quests."
+    icon: "📨"
+    match: 'QUEST COMPLETE: tr_m\d_hi_'
+    count: 5
+    case_insensitive: true
+
+  - name: "Indoril Retainer's Work"
+    description: "Complete 15 House Indoril quests."
+    icon: "🗝️"
+    match: 'QUEST COMPLETE: tr_m\d_hi_'
+    count: 15
+    case_insensitive: true
+
+  - name: "Indoril's Right Hand"
+    description: "Complete 30 House Indoril quests."
+    icon: "👑"
+    match: 'QUEST COMPLETE: tr_m\d_hi_'
+    count: 30
+    case_insensitive: true
+
+  - name: "Pilgrim's Progress"
+    description: "Complete 25 Tribunal Temple quests on the mainland."
+    icon: "🕯️"
+    match: 'QUEST COMPLETE: tr_m\d_tt_'
+    count: 25
+    case_insensitive: true
+
+  - name: "Mainland Executioner"
+    description: "Complete 15 Morag Tong quests on the mainland."
+    icon: "🗡️"
+    match: 'QUEST COMPLETE: tr_m\d_mt_'
+    count: 15
+    case_insensitive: true
+
+  - name: "Mainland Marathoner"
+    description: "Complete 600 Tamriel Rebuilt quests."
+    icon: "🏃"
+    match: 'QUEST COMPLETE: tr_m\d_'
+    count: 600
+    case_insensitive: true
+
+  - name: "Past the Thousand Mark"
+    description: "Complete 1,000 Tamriel Rebuilt quests, as many as the mod offers since Poison Song."
+    icon: "💫"
+    match: 'QUEST COMPLETE: tr_m\d_'
+    count: 1000
+    case_insensitive: true
+
+  - name: "Meet the Indorils"
+    description: "Talk to Indoril Sandil, Indoril Beroth and Gilar Verelnim."
+    icon: "💬"
+    all:
+      - 'NPC TALKED: Indoril Sandil'
+      - 'NPC TALKED: Indoril Beroth'
+      - 'NPC TALKED: [^|]*Verelnim'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Nerevar's Axe"
+    description: "Recover Nerevar's Axe from a sunken stronghold."
+    icon: "🪓"
+    match: 'ITEM ACQUIRED: Nerevar.s Axe'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Indoril Armory"
+    description: "Pick up 5 pieces of Indoril equipment."
+    icon: "🛡️"
+    match: 'ITEM ACQUIRED: Indoril '
+    count: 5
+    case_insensitive: true
+
+  - name: "Blasphemy"
+    description: "Kill a member of House Indoril."
+    icon: "💀"
+    match: 'NPC KILLED: Indoril '
+    case_insensitive: true
+
+  # ======================================================================
+  # PROJECT TAMRIEL — Project Cyrodiil (Abecean Shores)
+  # ======================================================================
+  - name: "Abecean Shores"
+    description: "Set foot in Anvil, port city of the Kingdom of Anvil on the western coast of Cyrodiil."
+    icon: "⚓"
+    match: 'CELL ENTERED: Anvil\b'
+    case_insensitive: true
+
+  - name: "Strident Coast"
+    description: "Discover the Strident Coast, a rocky shore where yellow grass grows between boulders."
+    icon: "🪨"
+    match: 'REGION DISCOVERED: [^|]*Strident Coast'
+    case_insensitive: true
+
+  - name: "Jungles of Dasek Marsh"
+    description: "Discover Dasek Marsh, the jungle swamp of western Cyrodiil."
+    icon: "🌴"
+    match: 'REGION DISCOVERED: [^|]*Dasek Marsh'
+    case_insensitive: true
+
+  - name: "Brennan Bluffs"
+    description: "Discover the Brennan Bluffs region."
+    icon: "⛰️"
+    match: 'REGION DISCOVERED: [^|]*Brennan Bluffs'
+    case_insensitive: true
+
+  - name: "Abecean Sea"
+    description: "Discover the Abecean Sea region and its islands."
+    icon: "🌊"
+    match: 'REGION DISCOVERED: [^|]*Abecean Sea'
+    case_insensitive: true
+
+  - name: "Stirk Isle"
+    description: "Visit Charach, the new town of Stirk Isle, the largest of Anvil's overseas holdings."
+    icon: "🏝️"
+    match: 'CELL ENTERED: Charach\b'
+    case_insensitive: true
+
+  - name: "Sleepy Marav"
+    description: "Visit the town of Marav."
+    icon: "🌾"
+    match: 'CELL ENTERED: Marav\b'
+    case_insensitive: true
+
+  - name: "Salthearth"
+    description: "Visit Salthearth."
+    icon: "🧂"
+    match: 'CELL ENTERED: Salthearth\b'
+    case_insensitive: true
+
+  - name: "Grand Tour of Anvil"
+    description: "Visit Anvil, Charach, Marav, Salthearth and Brina Cross."
+    icon: "🗺️"
+    all:
+      - 'CELL ENTERED: Anvil\b'
+      - 'CELL ENTERED: Charach\b'
+      - 'CELL ENTERED: Marav\b'
+      - 'CELL ENTERED: Salthearth\b'
+      - 'CELL ENTERED: Brina Cross\b'
+    case_insensitive: true
+
+  - name: "Saint Rosunius"
+    description: "Visit the Hostel of Saint Rosunius in Anvil."
+    icon: "⛪"
+    match: 'CELL ENTERED: [^|]*Rosunius'
+    case_insensitive: true
+
+  - name: "West Navy High Command"
+    description: "Visit Fort Telodrach."
+    icon: "🚢"
+    match: 'CELL ENTERED: Fort Telodrach\b'
+    case_insensitive: true
+
+  - name: "Ivrol Crypt"
+    description: "Discover the Ivrol Crypt."
+    icon: "⚰️"
+    match: 'INTERIOR DISCOVERED: [^|]*Ivrol Crypt'
+    case_insensitive: true
+
+  - name: "The Sailor's Fluke"
+    description: "Visit the Sailor's Fluke tavern in Anvil."
+    icon: "🍺"
+    match: 'CELL ENTERED: [^|]*Sailor.s Fluke'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Goldstone"
+    description: "Visit the Goldstone dungeons beneath Anvil."
+    icon: "⛓️"
+    match: 'CELL ENTERED: [^|]*Goldstone'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Haunted Manor"
+    description: "Visit Benirus Manor."
+    icon: "👻"
+    match: 'CELL ENTERED: [^|]*Benirus'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Ayleid Ruins of Valsar"
+    description: "Visit the Ayleid ruins of Valsar."
+    icon: "🏛️"
+    match: 'CELL ENTERED: [^|]*Valsar'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Ruins of Strand"
+    description: "Visit the ruins of Strand."
+    icon: "🪦"
+    match: 'CELL ENTERED: [^|]*Strand'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Fort Heath"
+    description: "Visit Fort Heath, an Imperial Legion outpost."
+    icon: "🏰"
+    match: 'CELL ENTERED: Fort Heath\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Cyrodiil Mage"
+    description: "Join the Mages Guild of Cyrodiil."
+    icon: "🔮"
+    match: 'FACTION JOINED: ([^|]*Cyrodiil[^|]*Mages|[^|]*\| id=t_cyr_\w*mages)'
+    case_insensitive: true
+
+  - name: "Cyrodiil Fighter"
+    description: "Join the Fighters Guild of Cyrodiil."
+    icon: "⚔️"
+    match: 'FACTION JOINED: ([^|]*Cyrodiil[^|]*Fighters|[^|]*\| id=t_cyr_\w*fighters)'
+    case_insensitive: true
+
+  - name: "Cyrodiil Thief"
+    description: "Join the Thieves Guild of Cyrodiil."
+    icon: "🗝️"
+    match: 'FACTION JOINED: ([^|]*Cyrodiil[^|]*Thieves|[^|]*\| id=t_cyr_\w*thieves)'
+    case_insensitive: true
+
+  - name: "Itinerant Priest"
+    description: "Join the Itinerant Priests."
+    icon: "🕯️"
+    match: 'FACTION JOINED: [^|]*Itinerant'
+    case_insensitive: true
+
+  - name: "Subject of Anvil"
+    description: "Join the Kingdom of Anvil."
+    icon: "👑"
+    match: 'FACTION JOINED: ([^|]*Kingdom of Anvil|[^|]*\| id=t_cyr_\w*anvil)'
+    case_insensitive: true
+
+  - name: "Cyrodiil Ladder I"
+    description: "Get promoted 3 times in Cyrodiil factions."
+    icon: "📈"
+    match: 'FACTION RANK: .*id=t_cyr_'
+    count: 3
+    case_insensitive: true
+
+  - name: "Cyrodiil Ladder II"
+    description: "Get promoted 6 times in Cyrodiil factions."
+    icon: "🪜"
+    match: 'FACTION RANK: .*id=t_cyr_'
+    count: 6
+    case_insensitive: true
+
+  - name: "Cyrodiil Ladder III"
+    description: "Get promoted 10 times in Cyrodiil factions."
+    icon: "🏅"
+    match: 'FACTION RANK: .*id=t_cyr_'
+    count: 10
+    case_insensitive: true
+
+  - name: "Anvil Errands"
+    description: "Complete 5 Project Cyrodiil quests."
+    icon: "📜"
+    match: 'QUEST COMPLETE: pc_'
+    count: 5
+    case_insensitive: true
+
+  - name: "Strident Coast Hero"
+    description: "Complete 25 Project Cyrodiil quests."
+    icon: "🛡️"
+    match: 'QUEST COMPLETE: pc_'
+    count: 25
+    case_insensitive: true
+
+  - name: "Abecean Adventurer"
+    description: "Complete 50 Project Cyrodiil quests."
+    icon: "🧭"
+    match: 'QUEST COMPLETE: pc_'
+    count: 50
+    case_insensitive: true
+
+  - name: "Champion of Anvil"
+    description: "Complete 100 Project Cyrodiil quests."
+    icon: "🏆"
+    match: 'QUEST COMPLETE: pc_'
+    count: 100
+    case_insensitive: true
+
+  - name: "Imperial Completionist"
+    description: "Complete 150 Project Cyrodiil quests, nearly all of Abecean Shores."
+    icon: "💎"
+    match: 'QUEST COMPLETE: pc_'
+    count: 150
+    case_insensitive: true
+
+  # ======================================================================
+  # PROJECT TAMRIEL — Skyrim: Home of the Nords (the Reach)
+  # ======================================================================
+  - name: "Home of the Nords"
+    description: "Reach Karthwasten, the largest city of the Kingdom of the Reach."
+    icon: "❄️"
+    match: 'CELL ENTERED: Karthwasten\b'
+    case_insensitive: true
+
+  - name: "The Reach"
+    description: "Discover the Lorchwuir Heath region."
+    icon: "🏔️"
+    match: 'REGION DISCOVERED: [^|]*Lorchwuir Heath'
+    case_insensitive: true
+
+  - name: "Druadach Highlands"
+    description: "Discover the Druadach Highlands region."
+    icon: "🌲"
+    match: 'REGION DISCOVERED: [^|]*Druadach Highlands'
+    case_insensitive: true
+
+  - name: "Dragonstar"
+    description: "Visit Dragonstar."
+    icon: "🐉"
+    match: 'CELL ENTERED: Dragonstar\b'
+    case_insensitive: true
+
+  - name: "A City Divided"
+    description: "Visit both Dragonstar East and Dragonstar West."
+    icon: "🧱"
+    all:
+      - 'CELL ENTERED: Dragonstar[^|]*East'
+      - 'CELL ENTERED: Dragonstar[^|]*West'
+    case_insensitive: true
+
+  - name: "Karthgad"
+    description: "Visit Karthgad."
+    icon: "🏘️"
+    match: 'CELL ENTERED: Karthgad\b'
+    case_insensitive: true
+
+  - name: "Haimtír"
+    description: "Visit the village of Haimtír."
+    icon: "🏡"
+    match: 'CELL ENTERED: Haimt.r\b'
+    case_insensitive: true
+
+  - name: "Direnni Ruins"
+    description: "Visit the ancient Direnni ruins of the Reach."
+    icon: "🏛️"
+    match: 'CELL ENTERED: [^|]*Direnni'
+    case_insensitive: true
+
+  - name: "Reach Tour"
+    description: "Visit Karthwasten, Karthgad, Dragonstar and Haimtír."
+    icon: "🗺️"
+    all:
+      - 'CELL ENTERED: Karthwasten\b'
+      - 'CELL ENTERED: Karthgad\b'
+      - 'CELL ENTERED: Dragonstar\b'
+      - 'CELL ENTERED: Haimt.r\b'
+    case_insensitive: true
+
+  - name: "Droopy Mare"
+    description: "Visit the Droopy Mare Inn in Karthwasten."
+    icon: "🍺"
+    match: 'CELL ENTERED: [^|]*Droopy Mare'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Shadows of Karthwasten"
+    description: "Find the Thieves Guild hideout in Karthwasten."
+    icon: "🥷"
+    match: 'CELL ENTERED: [^|]*Thieves Guild Hideout'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Crown Palace"
+    description: "Visit the Crown Palace in Dragonstar West."
+    icon: "👑"
+    match: 'CELL ENTERED: [^|]*Crown Palace'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Dragonstar Arena"
+    description: "Visit the Dragonstar Arena."
+    icon: "🏟️"
+    match: 'CELL ENTERED: [^|]*Dragonstar Arena'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Thane of Karthwasten"
+    description: "Talk to Fomir the Voiceful."
+    icon: "🗣️"
+    match: 'NPC TALKED: Fomir'
+    case_insensitive: true
+
+  - name: "Carriage Ride"
+    description: "Talk to a carriage driver in Karthwasten or Dragonstar."
+    icon: "🐴"
+    match: 'NPC TALKED: (Arvund|Aurius Jaronich)'
+    case_insensitive: true
+
+  - name: "Wormmouth Hunter"
+    description: "Kill 3 wormmouths."
+    icon: "🐛"
+    match: 'CREATURE KILLED: Wormmouth'
+    count: 3
+    case_insensitive: true
+
+  - name: "Northern Beasts"
+    description: "Kill 10 northern beasts: wormmouths, skeevers, mammoths, sabre cats, trolls or draugr."
+    icon: "🦣"
+    match: 'CREATURE KILLED: [^|]*(Wormmouth|Skeever|Mammoth|Sabre ?Cat|Troll|Draugr)'
+    count: 10
+    case_insensitive: true
+
+  - name: "Skyrim Mage"
+    description: "Join the Mages Guild of Skyrim."
+    icon: "🔮"
+    match: 'FACTION JOINED: ([^|]*Skyrim[^|]*Mages|[^|]*\| id=t_sky_\w*mages)'
+    case_insensitive: true
+
+  - name: "Skyrim Fighter"
+    description: "Join the Fighters Guild of Skyrim."
+    icon: "⚔️"
+    match: 'FACTION JOINED: ([^|]*Skyrim[^|]*Fighters|[^|]*\| id=t_sky_\w*fighters)'
+    case_insensitive: true
+
+  - name: "Skyrim Thief"
+    description: "Join the Thieves Guild of Skyrim."
+    icon: "🗝️"
+    match: 'FACTION JOINED: ([^|]*Skyrim[^|]*Thieves|[^|]*\| id=t_sky_\w*thieves)'
+    case_insensitive: true
+
+  - name: "Skyrim Acolyte"
+    description: "Join the Imperial Cult in Skyrim."
+    icon: "🕊️"
+    match: 'FACTION JOINED: ([^|]*Skyrim[^|]*Cult|[^|]*\| id=t_sky_\w*cult)'
+    case_insensitive: true
+
+  - name: "Skyrim Ladder I"
+    description: "Get promoted 3 times in Skyrim factions."
+    icon: "📈"
+    match: 'FACTION RANK: .*id=t_sky_'
+    count: 3
+    case_insensitive: true
+
+  - name: "Skyrim Ladder II"
+    description: "Get promoted 6 times in Skyrim factions."
+    icon: "🪜"
+    match: 'FACTION RANK: .*id=t_sky_'
+    count: 6
+    case_insensitive: true
+
+  - name: "Skyrim Ladder III"
+    description: "Get promoted 10 times in Skyrim factions."
+    icon: "🏅"
+    match: 'FACTION RANK: .*id=t_sky_'
+    count: 10
+    case_insensitive: true
+
+  - name: "Reach Errands"
+    description: "Complete 5 Skyrim: Home of the Nords quests."
+    icon: "📜"
+    match: 'QUEST COMPLETE: (sky|shotn)_'
+    count: 5
+    case_insensitive: true
+
+  - name: "Hero of the Reach"
+    description: "Complete 25 Skyrim: Home of the Nords quests."
+    icon: "🛡️"
+    match: 'QUEST COMPLETE: (sky|shotn)_'
+    count: 25
+    case_insensitive: true
+
+  - name: "Thane of the Reach"
+    description: "Complete 50 Skyrim: Home of the Nords quests."
+    icon: "🏆"
+    match: 'QUEST COMPLETE: (sky|shotn)_'
+    count: 50
+    case_insensitive: true
+
+  - name: "Dovahkiin of Morrowind"
+    description: "Complete 100 Skyrim: Home of the Nords quests."
+    icon: "💎"
+    match: 'QUEST COMPLETE: (sky|shotn)_'
+    count: 100
+    case_insensitive: true
+
+  # ======================================================================
+  # PROJECT TAMRIEL — liens entre provinces
+  # ======================================================================
+  - name: "Across the Sea"
+    description: "Take a ship between provinces: speak to Jurid Fast-Travel, Annine Golden-Blade or Cascus Daro."
+    icon: "⛵"
+    any:
+      - 'NPC TALKED: Jurid Fast.Travel'
+      - 'NPC TALKED: Annine Golden.Blade'
+      - 'NPC TALKED: Cascus Daro'
+    case_insensitive: true
+
+  - name: "Three Ports"
+    description: "Speak to Jurid Fast-Travel, Annine Golden-Blade and Cascus Daro."
+    icon: "⚓"
+    all:
+      - 'NPC TALKED: Jurid Fast.Travel'
+      - 'NPC TALKED: Annine Golden.Blade'
+      - 'NPC TALKED: Cascus Daro'
+    case_insensitive: true
+
+  - name: "Three Provinces"
+    description: "Visit Narsis in Morrowind, Anvil in Cyrodiil and Karthwasten in Skyrim."
+    icon: "🌍"
+    all:
+      - 'CELL ENTERED: Narsis\b'
+      - 'CELL ENTERED: Anvil\b'
+      - 'CELL ENTERED: Karthwasten\b'
+    case_insensitive: true
+
+  - name: "Beyond Morrowind"
+    description: "Complete 10 quests in Project Cyrodiil or Skyrim: Home of the Nords."
+    icon: "🧳"
+    match: 'QUEST COMPLETE: (pc|sky|shotn)_'
+    count: 10
+    case_insensitive: true
+
+  - name: "Provincial Adventurer"
+    description: "Complete 50 quests in Project Cyrodiil or Skyrim: Home of the Nords."
+    icon: "🧭"
+    match: 'QUEST COMPLETE: (pc|sky|shotn)_'
+    count: 50
+    case_insensitive: true
+
+  - name: "Wanderer of Tamriel"
+    description: "Complete 150 quests in Project Cyrodiil or Skyrim: Home of the Nords."
+    icon: "🌐"
+    match: 'QUEST COMPLETE: (pc|sky|shotn)_'
+    count: 150
+    case_insensitive: true
+
+  - name: "Province Hopper"
+    description: "Complete 250 quests in Project Cyrodiil or Skyrim: Home of the Nords."
+    icon: "🏅"
+    match: 'QUEST COMPLETE: (pc|sky|shotn)_'
+    count: 250
     case_insensitive: true
