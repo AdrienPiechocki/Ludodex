@@ -201,6 +201,102 @@ def show_hidden(con):
     return get_setting(con, "ach_show_hidden") == "1"
 
 
+# ---------- complétion (barres de pourcentage) ----------
+
+_DEFS_CACHE = {}   # (chemin, mtime_ns, taille) -> définitions, ou None si le YAML est cassé
+
+
+def _cached_defs(yaml_path):
+    """Définitions du YAML, relues seule si le fichier a changé (mtime).
+
+    Le cache évite de re-parser le YAML à chaque rafraîchissement de la liste : la
+    progression elle-même vit en base (table `achievements`), il ne manque que les
+    cibles. Un YAML cassé est mémorisé `None` — on n'essaye pas à chaque appel."""
+    try:
+        st = os.stat(yaml_path)
+    except OSError:
+        return None
+    key = (str(yaml_path), st.st_mtime_ns, st.st_size)
+    if key not in _DEFS_CACHE:
+        try:
+            _DEFS_CACHE[key] = load_tracker(yaml_path)
+        except (OSError, ValueError):
+            _DEFS_CACHE[key] = None
+    return _DEFS_CACHE[key]
+
+
+def _yaml_done(con, gid, defs):
+    """Somme des fractions de progression : débloqué = 1, sinon `count`/`target`.
+
+    `defs` indexe les définitions par id. Seules les lignes EN BASE sont sommées — un
+    succès jamais apparu dans le log vaut 0 (mais reste au total, voir `completion`)."""
+    done = 0.0
+    rows = con.execute("SELECT ach_id, count, unlocked_at FROM achievements WHERE game_id=?",
+                       (gid,))
+    for r in rows:
+        d = defs.get(r["ach_id"])
+        if d is None:
+            continue  # succès retiré du YAML depuis : plus compté ni au numérateur
+        done += 1.0 if r["unlocked_at"] else min(r["count"], d["target"]) / d["target"]
+    return done
+
+
+def completion(con, gid):
+    """(done, total) d'un jeu — done est une SOMME DE FRACTIONS (un 3/5 vaut 0,6).
+
+    Trois sources cumulées, même dénominateur que le compteur « 12/30 » de la fiche :
+    les définitions du YAML du jeu (progression lue EN BASE, jamais re-scan des logs),
+    puis les succès RetroAchievements et Steam si leur source est active dans les
+    réglages — binaires, `earned_at` non nul vaut 1. Un succès jamais apparu dans le
+    log compte 0 au numérateur mais reste au total. (0, 0) sans source : la barre de
+    l'UI est simplement omise, sans division par zéro."""
+    done, total = 0.0, 0
+    cfg = tracker_paths(con, gid)
+    if cfg:
+        defs = _cached_defs(cfg[0])
+        if defs:
+            done += _yaml_done(con, gid, {d["id"]: d for d in defs})
+            total += len(defs)
+    from .ra import ra_enabled  # import local : évite un cycle de chargement
+    from .steam import steam_enabled
+    for table, on in (("ra_achievements", ra_enabled(con)),       # noms figés du module,
+                      ("steam_achievements", steam_enabled(con))):  # jamais de saisie utilisateur
+        if not on:
+            continue
+        r = con.execute(f"SELECT COUNT(*) AS n, COALESCE(SUM(earned_at > 0), 0) AS k "
+                        f"FROM {table} WHERE game_id=?", (gid,)).fetchone()
+        done += float(r["k"])
+        total += r["n"]
+    return done, total
+
+
+def completions(con):
+    """{gid: (done, total)} pour TOUS les jeux de la liste Succès, en une passe.
+
+    Chaque table est lue une seule fois (groupée par jeu) : aucune requête par jeu —
+    seuls les YAML sont lus jeu par jeu, et via le cache de mtime. Mêmes règles que
+    `completion`, et mêmes exclusions que `achievement_games()` (source coupée = non
+    comptée)."""
+    out = {}
+    for gid, _name, yaml_path, _log in tracked_games(con):
+        defs = _cached_defs(yaml_path)
+        out[gid] = [_yaml_done(con, gid, {d["id"]: d for d in defs}), len(defs)] \
+            if defs else [0.0, 0]
+    from .ra import ra_enabled  # import local : évite un cycle de chargement
+    from .steam import steam_enabled
+    for table, on in (("ra_achievements", ra_enabled(con)),
+                      ("steam_achievements", steam_enabled(con))):
+        if not on:
+            continue
+        rows = con.execute(f"SELECT game_id, COUNT(*) AS n, COALESCE(SUM(earned_at > 0), 0) AS k "
+                           f"FROM {table} GROUP BY game_id")
+        for r in rows:
+            acc = out.setdefault(r["game_id"], [0.0, 0])
+            acc[0] += float(r["k"])
+            acc[1] += r["n"]
+    return {gid: (d, t) for gid, (d, t) in out.items()}
+
+
 def watch_paths(con, gid):
     """Chemins dont l'écriture signale « ce jeu est en train d'être joué ».
 
@@ -444,15 +540,28 @@ def filter_achievements(rows, status="all", query="", show_hidden=False):
     return rows
 
 
-def sort_achievements(rows, mode="origin"):
+def _display_title(a, show_hidden=False):
+    """Titre qui SERA AFFICHÉ : le libellé générique si le succès est masqué,
+    sinon son vrai nom.
+
+    Le tri doit ranger sur ce que l'utilisateur voit — sinon « Title A→Z »
+    disperse les succès cachés selon un nom secret, et contredit la recherche
+    (`filter_achievements`), qui elle range déjà sous le libellé générique."""
+    return tr("Hidden achievement") if is_masked(a, show_hidden) else _title(a)
+
+
+def sort_achievements(rows, mode="origin", show_hidden=False):
     """Copie triée de `rows` selon `mode` (cf. ACHIEVEMENT_SORTS).
 
-    Les tris par statut sont stables : à part égalité, l'ordre d'origine est
-    conservé (prévisible, et identique à l'ordre du fichier YAML)."""
+    Les tris par titre classent sur le libellé AFFICHÉ (`_display_title`), donc
+    un succès masqué rejoint les autres sous « Succès caché » / « Hidden
+    achievement ». Les tris par statut sont stables : à part égalité, l'ordre
+    d'origine est conservé (prévisible, et identique à l'ordre du fichier YAML)."""
     if mode == "title-asc":
-        return sorted(rows, key=lambda a: _norm(_title(a)))
+        return sorted(rows, key=lambda a: _norm(_display_title(a, show_hidden)))
     if mode == "title-desc":
-        return sorted(rows, key=lambda a: _norm(_title(a)), reverse=True)
+        return sorted(rows, key=lambda a: _norm(_display_title(a, show_hidden)),
+                      reverse=True)
     if mode == "unlocked":
         return sorted(rows, key=lambda a: not is_unlocked(a))
     if mode == "locked":

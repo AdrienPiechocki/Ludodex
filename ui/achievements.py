@@ -285,6 +285,65 @@ class AchievementsMixin:
             self._ach_rows = {}
             self.ach_right.set_visible_child_name("empty")
 
+    def _ach_bar(self, row, done, total):
+        """Barre de progression pleine largeur, posée SOUS le nom du jeu.
+
+        Pas de pourcentage à droite du nom : la barre occupe la largeur de la ligne,
+        sous le titre — le pourcentage se lit dans l'infobulle. `done` est une SOMME
+        DE FRACTIONS (un succès à 3/5 vaut 0,6 succès) : la barre est donc plus fine
+        que le compteur « 12/30 » de la fiche, qui ne compte que les succès entièrement
+        débloqués. Borné à [0, 1] par sécurité — une base héritée d'un YAML réécrit ne
+        peut pas faire déborder la barre. Aucune barre si le jeu n'a aucun succès.
+
+        Où l'accrocher : la boîte interne de l'ActionRow est HORIZONTALE (préfixe,
+        titre, suffixes côte à côte) — y ajouter un enfant le place à CÔTÉ du titre,
+        où il est écrasé jusqu'à être invisible. C'est la boîte TITRE (verticale,
+        libellé puis sous-titre) qu'il faut viser : la barre y devient le dernier
+        enfant, donc une ligne posée sous le nom, pleine largeur. `add_suffix` reste
+        inutilisé : il ne placerait qu'à droite du nom."""
+        if not total:
+            return  # jeu sans aucun succès connu : la ligne reste nue
+        tbox = self._ach_title_box(row)
+        if tbox is None:
+            return  # structure interne inattendue : on n'abîme pas la ligne
+        frac = max(0.0, min(1.0, done / total))
+        bar = Gtk.ProgressBar(
+            fraction=frac, hexpand=True,
+            # Pas de « 12/30 » ici : `done` est une somme de fractions (1,6 pour un
+            # 1.0 + un 3/5), et l'afficher en déblocage entier mentirait.
+            tooltip_text=tr("{n} % unlocked", n=round(frac * 100)))
+        # `add_css_class` ET NON `css_classes=[...]` au constructeur : en GTK4 cette
+        # propriété REMPLACE la liste entière, ce qui efface la classe `horizontal`
+        # que GtkProgressBar s'attribue. Sans elle, Breeze n'applique plus
+        # `progressbar.horizontal trough/progress` et la barre se réduit à un
+        # rectangle transparent — elle existe alors dans l'arbre sans se peindre.
+        bar.add_css_class("ach-bar")
+        tbox.append(bar)
+
+    @staticmethod
+    def _ach_title_box(row):
+        """La boîte VERTICALE interne qui porte le titre d'une ActionRow, ou None.
+
+        ActionRow construit sa boîte interne elle-même : on la repère parmi ses
+        enfants par celle qui contient un Gtk.Label portant la classe CSS `title`.
+        On NE compare pas le texte du libellé au titre de la ligne : le titre est
+        stocké ÉCHAPPÉ en markup (`Baldur&apos;s Gate`) alors que `Label.get_text()`
+        renvoie le texte rendu (`Baldur's Gate`) — un jeu avec un esperluette dans
+        le nom rendrait la comparaison impossible et supprimerait sa barre. On ne
+        touche jamais à la structure si elle diffère de l'attendu."""
+        inner = row.get_child()
+        if inner is None:
+            return None
+        child = inner.get_first_child()
+        while child is not None:
+            sub = child.get_first_child()
+            while sub is not None:
+                if isinstance(sub, Gtk.Label) and "title" in sub.get_css_classes():
+                    return child
+                sub = sub.get_next_sibling()
+            child = child.get_next_sibling()
+        return None
+
     def _fill_ach_list(self):
         """Remplit la liste de gauche ; la sélection courante est conservée si possible."""
         self._ach_filling = True
@@ -293,12 +352,15 @@ class AchievementsMixin:
                 self.ach_list.remove(child)
             self._ach_row_by_gid = {}
             tous = P.achievement_games(self.con)  # suivi YAML et/ou lien RetroAchievements
+            # Une seule passe pour la complétion de TOUS les jeux (aucune requête par jeu).
+            compl = P.completions(self.con)
             # Filtre insensible à la casse sur le nom du jeu.
             q = self.ach_game_query.strip().casefold()
             games = [g for g in tous if not q or q in g[1].casefold()]
             for gid, name, _has_tracker, _has_ra in games:
                 row = Adw.ActionRow(title=GLib.markup_escape_text(name))
                 row._gid = gid
+                self._ach_bar(row, *compl.get(gid, (0.0, 0)))   # barre SOUS le nom
                 self.ach_list.append(row)
                 self._ach_row_by_gid[gid] = row
             if self.ach_game_id not in self._ach_row_by_gid:
@@ -352,7 +414,14 @@ class AchievementsMixin:
         # du jeu précédemment sélectionné.
         self._ach_state = []
 
-        if P.tracker_paths(self.con, gid) is not None:
+        tracks = P.tracker_paths(self.con, gid)
+        # Le bouton d'engrenage ouvre la configuration du SUIVI YAML (fichier de
+        # succès + log). Un jeu suivi par RetroAchievements ou Steam n'y a rien à
+        # régler — ces sources se configurent depuis les réglages des succès — et
+        # l'ajout d'un suivi reste possible par le « + » de la liste de gauche. Le
+        # bouton n'est donc montré que lorsqu'il sert.
+        self.ach_gear.set_visible(tracks is not None)
+        if tracks is not None:
             try:
                 state = P.scan(self.con, gid)
             except FileNotFoundError as e:
@@ -397,15 +466,15 @@ class AchievementsMixin:
         local = P.sort_achievements(
             P.filter_achievements(self._ach_state, self.ach_filter, self.ach_query,
                                   show_hidden=self._ach_show_hidden),
-            self.ach_sort)
+            self.ach_sort, show_hidden=self._ach_show_hidden)
         ra_rows = P.sort_achievements(
             P.filter_achievements(self._ra_state, self.ach_filter, self.ach_query,
                                   show_hidden=self._ach_show_hidden),
-            self.ach_sort)
+            self.ach_sort, show_hidden=self._ach_show_hidden)
         steam_rows = P.sort_achievements(
             P.filter_achievements(self._steam_state, self.ach_filter, self.ach_query,
                                   show_hidden=self._ach_show_hidden),
-            self.ach_sort)
+            self.ach_sort, show_hidden=self._ach_show_hidden)
         if self._ach_error:
             self._ach_group = self._new_ach_group()
             self._add_game_error(self._ach_name, self._ach_error)
@@ -559,6 +628,19 @@ class AchievementsMixin:
                 row.add_suffix(Gtk.Label(label=tr("Unlocked {date}", date=date),
                                          css_classes=["accent"]))
             elif a["target"] > 1:
+                # Barre lisse (pas de segments — arbitrage utilisateur) AVANT l'étiquette :
+                # l'ordre des add_suffix suit l'ordre d'appel. Le libellé 3/5 reste, la
+                # barre ne fait que le rendre visible. Les succès binaires (target == 1),
+                # RA et Steam n'ont pas de target : rien à mesurer, ils n'entrent pas ici.
+                pbar = Gtk.ProgressBar(
+                    fraction=max(0.0, min(1.0, a["progress"] / a["target"])),
+                    valign=Gtk.Align.CENTER, width_request=110,
+                    tooltip_text=tr("{n} % unlocked", n=round(a["progress"] / a["target"] * 100)))
+                # add_css_class et non css_classes=[...] : voir _ach_bar — la propriété
+                # css_classes REMPLACE la liste et effacerait la classe `horizontal`,
+                # sans laquelle Breeze ne peint ni trough ni progress.
+                pbar.add_css_class("ach-bar")
+                row.add_suffix(pbar)
                 row.add_suffix(Gtk.Label(label=f"{a['progress']}/{a['target']}",
                                          css_classes=["dim-label"]))
         self._ach_group.append(row)
@@ -726,15 +808,32 @@ class AchievementsMixin:
         log_btn.connect("clicked", lambda b: pick(b, "log"))
         dlg._pick = pick   # référence pour les tests (appel direct → exceptions remontent)
 
-        # --- actions ---
+        # --- actions : empilées verticalement, chacune pleine largeur ---
+        # Côte à côte sur une ligne, les trois boutons se partageaient la grille en
+        # colonnes de 152 / 230 / 182 px alors que la fenêtre en fait 640 : la cible
+        # cliquable d'« Enregistrer » — l'action principale — se réduisait à un tiers
+        # de la largeur disponible. Empilés et pleine largeur, l'ordre visuel
+        # (principal → destructif → fermeture) devient aussi l'ordre de lecture.
         save = Gtk.Button(label=tr("Save"), css_classes=["suggested-action"])
-        grid.attach(save, 0, row[0], 1, 1)
-        remove = Gtk.Button(label=tr("Remove tracker"))
-        grid.attach(remove, 1, row[0], 1, 1)
         # Sans ce bouton, seul Échap ferme le dialogue (pas d'en-tête, pas de
         # bouton natif sur Adw.Dialog tel qu'ici configuré).
         close = Gtk.Button(label=tr("Close"))
-        grid.attach(close, 2, row[0], 1, 1)
+        actions = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10,
+                          margin_top=8, hexpand=True)
+        actions.append(save)
+        # « Retirer le suivi » ne sert QUE s'il existe un suivi à retirer. Ouvert
+        # par le « + » ou par « Configurer un suivi », le dialogue n'en a aucun, et
+        # le bouton n'y faisait rien d'autre que fermer la fenêtre (`gid` vaut
+        # None → aucun retrait). Il n'existe donc qu'en mode configuration d'un
+        # suivi déjà en place, c'est-à-dire depuis l'engrenage.
+        remove = None
+        if gid is not None and P.tracker_paths(self.con, gid) is not None:
+            remove = Gtk.Button(label=tr("Remove tracker"))
+            actions.append(remove)
+        actions.append(close)
+        grid.attach(actions, 0, row[0], 3, 1)   # les 3 colonnes = toute la grille
+        # Références pour les tests de largeur/position (comme `dlg._close_btn`).
+        dlg._save_btn, dlg._remove_btn = save, remove
 
         def on_save(_b):
             g = games[drop.get_selected()]
@@ -747,13 +846,16 @@ class AchievementsMixin:
             self._refresh_achievements()
 
         def on_remove(_b):
-            if gid is not None:
-                P.clear_tracker(self.con, gid)
+            # Pas de garde sur `gid` : ce bouton n'existe que si un suivi est déjà
+            # en place, donc `gid` y est toujours renseigné. Une garde masquerait
+            # que la condition d'existence du bouton a été rompue.
+            P.clear_tracker(self.con, gid)
             dlg.close()
             self._refresh_achievements()
 
         save.connect("clicked", on_save)
-        remove.connect("clicked", on_remove)
+        if remove is not None:
+            remove.connect("clicked", on_remove)
         close.connect("clicked", lambda *_: dlg.close())
         dlg._close_btn = close  # référence pour les tests
 
@@ -761,4 +863,18 @@ class AchievementsMixin:
         # porte lui-même son en-tête avec le titre).
         scroll = Gtk.ScrolledWindow(vexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER)
         scroll.set_child(grid)
+        # La fenêtre se taille au contenu. `content_height` fixe la hauteur AFFICHÉE
+        # du dialogue : aux 480 px déclarés, la grille était étirée et laissait
+        # 304 px de vide sous les boutons. On prend la hauteur NATURELLE de la
+        # grille, plus ses marges — recalculée à chaque ouverture, elle suit la
+        # langue, la police et les fichiers choisis.
+        #
+        # La largeur doit être FOURNIE à `measure()` : à -1 (non contraint) le texte
+        # des chemins ne se retourne pas et la hauteur ressort trop petite — mesuré,
+        # 302 px avec aucun chemin renseigné, mais 384 annoncés pour 438 réels dès
+        # qu'un YAML est chargé. La grille est allouée sur `content_width` moins ses
+        # marges : c'est là qu'il faut mesurer.
+        largeur = dlg.get_content_width() - grid.get_margin_start() - grid.get_margin_end()
+        dlg.set_content_height(grid.measure(Gtk.Orientation.VERTICAL, largeur)[1]
+                               + grid.get_margin_top() + grid.get_margin_bottom())
         return scroll
