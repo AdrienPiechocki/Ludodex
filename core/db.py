@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS tracker_logs (
     offset INTEGER NOT NULL DEFAULT 0,
     size INTEGER NOT NULL DEFAULT 0,
     prefix TEXT NOT NULL DEFAULT '',
+    yaml TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (game_id, log_path)
 );
 CREATE TABLE IF NOT EXISTS achievements (
@@ -126,6 +127,9 @@ def db():
     hcols = {r["name"] for r in con.execute("PRAGMA table_info(steam_achievements)")}
     if "hidden" not in hcols:  # table créée sans le drapeau spoiler de Steam
         con.execute("ALTER TABLE steam_achievements ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
+    tcols = {r["name"] for r in con.execute("PRAGMA table_info(tracker_logs)")}
+    if "yaml" not in tcols:  # la position de lecture vaut pour le YAML qui l'a produite
+        con.execute("ALTER TABLE tracker_logs ADD COLUMN yaml TEXT NOT NULL DEFAULT ''")
     ensure_auto_collections(con)
     con.execute("PRAGMA foreign_keys=ON")
     load_lang(con)  # langue choisie dans les réglages (sinon celle du système)

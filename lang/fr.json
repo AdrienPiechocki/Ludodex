@@ -400,5 +400,16 @@
   "Saturday": "samedi",
   "Sunday": "dimanche",
   "Search a game": "Rechercher un jeu",
-  "{n} % unlocked": "{n} % débloqué(s)"
+  "{n} % unlocked": "{n} % débloqué(s)",
+  "Install": "Installer",
+  "Its sessions, notes and achievements go with it.": "Ses sessions, notes et succès partent avec lui.",
+  "Installation opened · the library updates on the next import": "Installation ouverte · la bibliothèque se met à jour à la prochaine importation",
+  "Couldn't open the installation": "Impossible d'ouvrir l'installation",
+  "! couldn't open the installation: {e}": "! impossible d'ouvrir l'installation : {e}",
+  "Uninstall": "Désinstaller",
+  "Uninstall “{name}”?": "Désinstaller « {name} » ?",
+  "Its files leave your computer. The game stays in Ludodex until the next import.": "Ses fichiers quittent votre ordinateur. Le jeu reste dans Ludodex jusqu'à la prochaine importation.",
+  "Uninstallation opened · the library updates on the next import": "Désinstallation ouverte · la bibliothèque se met à jour à la prochaine importation",
+  "Couldn't open the uninstallation": "Impossible d'ouvrir la désinstallation",
+  "! couldn't open the uninstall: {e}": "! impossible d'ouvrir la désinstallation : {e}"
 }

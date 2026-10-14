@@ -2,7 +2,8 @@
 """picker.py — façade de compatibilité et entrée CLI.
 
 La logique est rangée dans le paquet `core/` (db, launch, steam, sources, tags,
-covers, stats, game_collections, importers, pick, cli). Ce module réexpose tous
+covers, stats, game_collections, importers, pick, cli, tracker, ra, games). Ce module
+réexpose tous
 les noms (y compris les helpers historiques) pour que `import picker as P`
 (gui.py, suites de tests) continue de fonctionner à l'identique, y compris les
 monkeypatches `P.<nom> = ...`.
@@ -23,10 +24,11 @@ from core import pick as _mod_pick
 from core import cli as _mod_cli
 from core import tracker as _mod_tracker
 from core import ra as _mod_ra
+from core import games as _mod_games  # après covers : réexporte aussi `covers_dir`, sans écraser celui de covers
 
 _OWNER_MODULES = (_mod_db, _mod_launch, _mod_steam, _mod_sources, _mod_tags, _mod_covers,
                   _mod_stats, _mod_collections, _mod_importers, _mod_pick, _mod_cli, _mod_tracker,
-                  _mod_ra)
+                  _mod_ra, _mod_games)
 
 # Réexpose tous les noms de premier niveau (y compris les helpers _soulignés), comme
 # le faisait le picker.py monolithique.

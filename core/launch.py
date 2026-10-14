@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""launch.py — construction et exécution des commandes de lancement."""
+"""launch.py — construction et exécution des commandes de lancement, d'installation et
+de désinstallation."""
 import json, os, pathlib, re, shutil, subprocess, time
 
 from i18n import tr
+from .db import LUTRIS_DBS, _ro
 from .platform import uri_command, split_command, join_command, popen_kwargs, retroarch_exe
+from .steam import steam_appid_of
 
 
 def default_command(g, osname=None):
@@ -128,4 +131,134 @@ def launch(con, g):
     con.execute("INSERT OR IGNORE INTO sessions (game_id, started, ended, minutes) VALUES (?, ?, 0, 0)", (g["id"], now))
     con.commit()
     print(f"▶ {g['name']}.")
+    return True
+
+
+def lutris_install_uri(ext):
+    """`lutris:install/{slug}` du jeu, ou None.
+
+    Lutris n'installe pas à partir d'un id numérique : `lutris:rungameid/{id}` ne fait
+    que lancer, et seul son help annonce `lutris:install/game-identifier`. Le slug
+    n'est pas dans notre base — il est relu dans `pga.db`, la même que l'import ouvre
+    déjà (c'est ainsi que « native:10 » se résout en « hedgewars »)."""
+    try:
+        kind, gid = str(ext).split(":", 1)
+        gid = int(gid)
+    except ValueError:  # pas de deux-points, ou id non numérique
+        return None
+    for k, path in LUTRIS_DBS:
+        if k != kind or not path.exists():
+            continue
+        src = _ro(path)
+        try:
+            row = src.execute("SELECT slug FROM games WHERE id=?", (gid,)).fetchone()
+        finally:
+            src.close()
+        if row is not None and row["slug"]:
+            return f"lutris:install/{row['slug']}"
+    return None
+
+
+def install_command(g, osname=None):
+    """Commande installant le jeu, ou None : sa source ne sait pas installer.
+
+    LE point de décision : l'interface n'affiche « Installer » que si cette fonction
+    renvoie un argv, donc jamais de bouton muet. Steam passe par son appid (`steam_appid_of`,
+    seule source de la règle « c'est un appid »), Flatpak par une vraie commande —
+    d'où un argv rendu plutôt qu'une URI — et Lutris par le slug relu plus haut.
+    GOG n'a aucune commande de lancement, une ROM ne se « télécharge » pas, et
+    Epic/Heroic/itch n'ont rien de documenté de façon sûre."""
+    try:
+        src, ext = g["source"], g["ext_id"]
+    except (IndexError, KeyError, TypeError):
+        return None
+    if src == "steam":
+        appid = steam_appid_of(g)
+        return uri_command(f"steam://install/{appid}", osname) if appid else None
+    if src == "flatpak":
+        return ["flatpak", "install", "-y", str(ext)]
+    if src == "lutris":
+        uri = lutris_install_uri(ext)
+        if uri is None:
+            return None
+        # Lutris est lui-même un flatpak : le chemin est celui du lancement.
+        return (["flatpak", "run", "net.lutris.Lutris", uri] if str(ext).split(":", 1)[0] == "flatpak"
+                else uri_command(uri, osname))
+    return None
+
+
+def _detached(cmd):
+    """Lance `cmd` hors de la session de la fenêtre et sans capter sa sortie : un
+    téléchargement ou une désinstallation dure bien plus que l'application, qui ne doit
+    ni s'arrêter avec elle ni se bloquer dessus. Renvoie l'erreur éventuelle, ou None."""
+    try:
+        subprocess.Popen(cmd, start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return None
+    except OSError as e:
+        return e
+
+
+def install(g):
+    """Lance l'installation chez la source du jeu. False s'il n'est pas installable.
+
+    Contrairement à `launch`, rien n'est enregistré : le jeu n'a pas démarré, une
+    session serait fausse. Ludodex apprend l'installation à la prochaine importation,
+    quand la source a écrit ses fichiers."""
+    cmd = install_command(g)
+    if cmd is None:
+        return False
+    e = _detached(cmd)
+    if e is not None:
+        print(tr("! couldn't open the installation: {e}", e=e))
+        return False
+    print(f"⬇ {g['name']}.")
+    return True
+
+
+def uninstall_command(g, osname=None):
+    """Commande désinstallant le jeu, ou None : sa source ne sait pas désinstaller.
+
+    Le miroir exact de `install_command` — même rôle, même mécanisme — mais la liste des
+    sources est plus courte, parce qu'un retrait se prouve moins bien qu'une URI
+    d'installation :
+
+    - **Steam** — `steam://uninstall/{appid}`, listé par Valve parmi ses commandes
+      implémentées, et le client réclame sa propre confirmation (« uninstall … from
+      this device? ») : jamais de retrait silencieux. L'appid vient de `steam_appid_of`.
+    - **Flatpak** — `flatpak uninstall -y {id}`, qui ouvre la place mais laisse les
+      données `~/.var/app` en place.
+
+    Lutris est écarté pour l'inverse de la raison qui l'admettait côté installation :
+    son parseur (`lutris/gui/application.py`) n'accepte que `rungame`, `rungameid` et
+    `install` — le slug existe, l'action non. RetroArch l'est parce que `ext_id` est le
+    chemin d'une ROM : ce fichier appartient à l'utilisateur, pas à Ludodex. itch, GOG,
+    Epic et Heroic n'ont chez nous ni jeu installé ni commande documentée."""
+    try:
+        src, ext = g["source"], g["ext_id"]
+    except (IndexError, KeyError, TypeError):
+        return None
+    if src == "steam":
+        appid = steam_appid_of(g)
+        return uri_command(f"steam://uninstall/{appid}", osname) if appid else None
+    if src == "flatpak":
+        return ["flatpak", "uninstall", "-y", str(ext)]
+    return None
+
+
+def uninstall(g):
+    """Désinstalle le jeu chez sa source. False si sa source ne sait pas.
+
+    Comme `install`, rien n'est écrit en base : Steam affiche sa propre confirmation et
+    on ne peut pas savoir si elle sera validée — c'est l'importation suivante, quand le
+    fichier `appmanifest` aura disparu, qui bascule la fiche. Une désinstallation
+    anticipée mentirait jusqu'alors sur un jeu encore présent sur le disque."""
+    cmd = uninstall_command(g)
+    if cmd is None:
+        return False
+    e = _detached(cmd)
+    if e is not None:
+        print(tr("! couldn't open the uninstall: {e}", e=e))
+        return False
+    print(f"⌫ {g['name']}.")
     return True

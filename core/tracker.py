@@ -28,6 +28,20 @@ def _slug(name):
     return s or "achievement"
 
 
+def _yaml_fingerprint(path):
+    """Identité du fichier de succès : chemin, date et taille.
+
+    La position de lecture en base n'est valable que pour le YAML qui l'a produite.
+    Dès qu'il change — un autre fichier, ou le même réécrit — les lignes déjà
+    consommées doivent être relues, sinon les nouveaux succès ne les verraient jamais.
+    """
+    try:
+        st = os.stat(path)
+    except OSError:
+        return f"{path}|absent"   # fichier encore absent : toute apparition compte
+    return f"{path}|{st.st_mtime_ns}|{st.st_size}"
+
+
 def load_tracker(path):
     """Lit et valide un fichier de succès ; renvoie la liste des définitions.
 
@@ -122,7 +136,8 @@ def reset(con, gid):
     con.execute("DELETE FROM achievements WHERE game_id=?", (gid,))
     cfg = tracker_paths(con, gid)
     if cfg is not None:
-        log_path = cfg[1]
+        yaml_path, log_path = cfg
+        fp = _yaml_fingerprint(yaml_path)
         try:
             with open(log_path, "rb") as f:
                 size = os.fstat(f.fileno()).st_size
@@ -132,10 +147,14 @@ def reset(con, gid):
             pass  # log absent : on n'avance pas la position
         else:
             con.execute(
-                "INSERT INTO tracker_logs (game_id, log_path, offset, size, prefix) VALUES (?,?,?,?,?) "
+                "INSERT INTO tracker_logs (game_id, log_path, offset, size, prefix, yaml) VALUES (?,?,?,?,?,?) "
                 "ON CONFLICT(game_id, log_path) DO UPDATE SET offset=excluded.offset, size=excluded.size, "
-                "prefix=excluded.prefix",
-                (gid, str(log_path), size, size, prefix))
+                "prefix=excluded.prefix, yaml=excluded.yaml",
+                (gid, str(log_path), size, size, prefix, fp))
+        # la remise à zéro vaut pour le YAML courant, sinon le scan suivant
+        # la prendrait pour un changement de définitions et relirait tout
+        con.execute("UPDATE tracker_logs SET yaml=? WHERE game_id=? AND log_path=?",
+                    (fp, gid, str(log_path)))
     con.commit()
     return n
 
@@ -417,26 +436,33 @@ def scan(con, gid, now=None):
     yaml_path, log_path = cfg
     defs = load_tracker(yaml_path)
     now = time.time() if now is None else now
-
-    state = {r["ach_id"]: dict(r) for r in con.execute(
-        "SELECT ach_id, count, unlocked_at FROM achievements WHERE game_id=?", (gid,))}
+    fp = _yaml_fingerprint(yaml_path)
 
     with open(log_path, "rb") as f:
         size = os.fstat(f.fileno()).st_size
-        row = con.execute("SELECT offset, size, prefix FROM tracker_logs WHERE game_id=? AND log_path=?",
-                          (gid, str(log_path))).fetchone()
+        row = con.execute(
+            "SELECT offset, size, prefix, yaml FROM tracker_logs WHERE game_id=? AND log_path=?",
+            (gid, str(log_path))).fetchone()
         # « lignée » : si le début du fichier a changé, c'est un log réécrit depuis
         # zéro (rotation) → on re-scanne tout ; sinon c'est une simple append.
         check_n = min(4096, row["size"]) if row else 0
         keep = check_n and f.read(check_n).decode("latin-1") == row["prefix"]
         f.seek(0)
         prefix = f.read(min(4096, size)).decode("latin-1")
-        if row is None or not keep or row["offset"] > size:
-            start = 0  # premier scan, log réécrit ou tronqué
+        # Position produite par un autre YAML : elle ne dit plus rien de ce fichier.
+        changed = row is not None and row["yaml"] != fp
+        if row is None or not keep or row["offset"] > size or changed:
+            start = 0  # premier scan, log réécrit, tronqué ou YAML différent
         else:
             start = row["offset"]
         f.seek(start)
         data = f.read()
+    if changed:
+        # On recompte tout avec les nouvelles définitions : conserver l'état
+        # additionnerait aux compteurs déjà posés.
+        con.execute("DELETE FROM achievements WHERE game_id=?", (gid,))
+    state = {r["ach_id"]: dict(r) for r in con.execute(
+        "SELECT ach_id, count, unlocked_at FROM achievements WHERE game_id=?", (gid,))}
     for line in data.decode("utf-8", "replace").splitlines():
         for d in defs:
             st = state.get(d["id"])
@@ -460,10 +486,10 @@ def scan(con, gid, now=None):
                 "unlocked_at=excluded.unlocked_at",
                 (gid, d["id"], st["count"], st["unlocked_at"]))
     con.execute(
-        "INSERT INTO tracker_logs (game_id, log_path, offset, size, prefix) VALUES (?,?,?,?,?) "
+        "INSERT INTO tracker_logs (game_id, log_path, offset, size, prefix, yaml) VALUES (?,?,?,?,?,?) "
         "ON CONFLICT(game_id, log_path) DO UPDATE SET offset=excluded.offset, size=excluded.size, "
-        "prefix=excluded.prefix",
-        (gid, str(log_path), size, size, prefix))
+        "prefix=excluded.prefix, yaml=excluded.yaml",
+        (gid, str(log_path), size, size, prefix, fp))
     con.commit()
 
     out = []

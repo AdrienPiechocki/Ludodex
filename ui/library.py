@@ -679,14 +679,39 @@ class LibraryMixin:
             pic.set_visible(True)
         title = Gtk.Label(label=g["name"], wrap=True, justify=Gtk.Justification.CENTER, css_classes=["title-1"])
         subtitle = Gtk.Label(label=self._lib_subtitle(gid, g["status"]), wrap=True, css_classes=["dim-label"])
-        play = Gtk.Button(label=tr("Play"), halign=Gtk.Align.CENTER, sensitive=bool(g["installed"]),
+        # « Installer » remplace le « Lancer » inactif, mais SEULEMENT là où la source
+        # sait installer : ailleurs, un bouton muet ne servirait à rien. C'est
+        # `install_command` qui tranche, pour Steam, Lutris et Flatpak.
+        installer = not g["installed"] and P.install_command(g) is not None
+        play = Gtk.Button(label=tr("Install") if installer else tr("Play"), halign=Gtk.Align.CENTER,
+                          sensitive=installer or bool(g["installed"]),
                           css_classes=["suggested-action", "pill"])
-        play.connect("clicked", lambda *_: (self._quick_launch(gid), win.close()))
 
-        store = None  # proposé juste sous « Lancer », seulement si une fiche magasin existe
+        def on_primary(_b):
+            (self._install if installer else self._quick_launch)(gid)
+            win.close()
+        play.connect("clicked", on_primary)
+
+        store = None  # proposé juste sous le bouton principal, seulement si une fiche magasin existe
         if P.store_page(g):
             store = Gtk.Button(label=tr("View in store"), halign=Gtk.Align.CENTER, css_classes=["pill"])
             store.connect("clicked", lambda *_: self._open_store(g))
+
+        # Un seul bouton destructeur à l'emplacement, jamais les deux. La source
+        # qui sait RETIRER LES FICHIERS l'emporte : « Désinstaller », c'est
+        # `uninstall_command` qui tranche, pour Steam et Flatpak. Partout ailleurs —
+        # jeu déjà retiré du disque, mais aussi ajouté à la main (custom) ou installé
+        # sans désinstallation possible (RetroArch, itch, Lutris) — le même
+        # emplacement porte « Supprimer », qui ne retire que la FICHE.
+        delete = None
+        if g["installed"] and P.uninstall_command(g) is not None:
+            delete = Gtk.Button(label=tr("Uninstall"), halign=Gtk.Align.CENTER,
+                                css_classes=["destructive-action", "pill"])
+            delete.connect("clicked", lambda *_: self._on_uninstall(gid, win))
+        else:
+            delete = Gtk.Button(label=tr("Delete"), halign=Gtk.Align.CENTER,
+                                css_classes=["destructive-action", "pill"])
+            delete.connect("clicked", lambda *_: self._on_delete_game(gid, win))
 
         st = Adw.ComboRow(title=tr("Status"), model=Gtk.StringList.new([P.status_label(s) for s in STATUTS]),
                           selected=STATUTS.index(g["status"]) if g["status"] in STATUTS else 1)
@@ -787,7 +812,7 @@ class LibraryMixin:
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12,
                       margin_top=6, margin_bottom=24, margin_start=18, margin_end=18)
-        for w in (cover, title, subtitle, play, store, group, col_group):
+        for w in (cover, title, subtitle, play, store, delete, group, col_group):
             if w is not None:
                 box.append(w)
         body = Gtk.ScrolledWindow(child=Adw.Clamp(maximum_size=480, child=box), vexpand=True,
@@ -812,6 +837,66 @@ class LibraryMixin:
         ok = P.launch(self.con, g)
         self.toasts.add_toast(Adw.Toast.new(GLib.markup_escape_text(
             tr("▶ Launched. Have fun!") if ok else tr("Couldn't launch: is the game still installed?"))))
+
+    def _install(self, gid):
+        """Ouvre l'installation chez le lanceur. Ludodex ne peut pas savoir si elle
+        aboutit : Steam écrit l'`appmanifest` quand le téléchargement est fini, et c'est
+        l'importation suivante qui bascule le jeu en installé — d'où le rappel."""
+        g = self.con.execute("SELECT * FROM games WHERE id=?", (gid,)).fetchone()
+        if not g:
+            return
+        msg = (tr("Installation opened · the library updates on the next import") if P.install(g)
+               else tr("Couldn't open the installation"))
+        self.toasts.add_toast(Adw.Toast.new(GLib.markup_escape_text(msg)))
+
+    def _on_uninstall(self, gid, win):
+        """Confirmation destructrice avant de retirer les fichiers.
+
+        On ne touche à rien en base : Steam réclame sa propre validation et on ne saura
+        pas si elle a été donnée — la fiche ne bascule qu'à la prochaine importation,
+        quand l'`appmanifest` aura disparu."""
+        g = self.con.execute("SELECT * FROM games WHERE id=?", (gid,)).fetchone()
+        if not g:
+            return
+        dlg = Adw.AlertDialog(heading=tr("Uninstall “{name}”?", name=g["name"]),
+                              body=tr("Its files leave your computer. The game stays in Ludodex until the next import."))
+        dlg.add_response("cancel", tr("Cancel"))
+        dlg.add_response("uninstall", tr("Uninstall"))
+        dlg.set_response_appearance("uninstall", Adw.ResponseAppearance.DESTRUCTIVE)
+        dlg.set_default_response("cancel")
+        dlg.set_close_response("cancel")
+
+        def on_resp(_d, resp):
+            if resp != "uninstall":
+                return
+            msg = (tr("Uninstallation opened · the library updates on the next import") if P.uninstall(g)
+                   else tr("Couldn't open the uninstallation"))
+            self.toasts.add_toast(Adw.Toast.new(GLib.markup_escape_text(msg)))
+            win.close()
+        dlg.connect("response", on_resp)
+        dlg.present(win)
+
+    def _on_delete_game(self, gid, win):
+        """Confirmation destructrice, puis la fiche et tout ce qu'elle porte disparaissent."""
+        g = self.con.execute("SELECT * FROM games WHERE id=?", (gid,)).fetchone()
+        if not g:
+            return
+        dlg = Adw.AlertDialog(heading=tr("Delete “{name}”?", name=g["name"]),
+                              body=tr("Its sessions, notes and achievements go with it."))
+        dlg.add_response("cancel", tr("Cancel"))
+        dlg.add_response("delete", tr("Delete"))
+        dlg.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
+        dlg.set_default_response("cancel")
+        dlg.set_close_response("cancel")
+
+        def on_resp(_d, resp):
+            if resp != "delete":
+                return
+            P.delete_game(self.con, gid)
+            win.close()  # → `_on_game_closed` rebâtit la grille et les collections
+            self._refresh_covers_summary()  # le dénominateur du « X/Y » vient de bouger
+        dlg.connect("response", on_resp)
+        dlg.present(win)
 
     def _on_auto_collection(self, row, _p, source):
         P.set_auto_collection_enabled(self.con, source, row.get_active())
