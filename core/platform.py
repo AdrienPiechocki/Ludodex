@@ -174,6 +174,22 @@ def epic_programdata(osname=None, env=None, home=None):
     return [_home(home) / ".wine/drive_c/ProgramData/Epic"]
 
 
+def epic_settings_dirs(osname=None, env=None, home=None):
+    """Dossier `Saved/Config/Windows` du lanceur Epic officiel (Windows, ou Wine).
+
+    C'est là que `GameUserSettings.ini` garde, sous `[RememberMe] Data`, la session du
+    compte — la seule chose qu'il soit possible de réutiliser : sa bibliothèque, lui,
+    n'est écrite nulle part. Sous Wine, le nom du user Windows n'est pas connu
+    d'avance, d'où le `glob`."""
+    home = _home(home)
+    if is_windows(osname):
+        env = _env(env)
+        base = env.get("LOCALAPPDATA") or env.get("APPDATA") or home / "AppData/Local"
+        return [pathlib.Path(base) / "EpicGamesLauncher" / "Saved" / "Config" / "Windows"]
+    return sorted(home.glob(".wine/drive_c/users/*/AppData/Local/EpicGamesLauncher/"
+                            "Saved/Config/Windows"))
+
+
 def gog_registry_games():
     """Jeux installés vus par GOG Galaxy (registre Windows). Liste vide hors Windows.
 

@@ -7,7 +7,7 @@ from .db import upsert, upsert_owned, _ts, _ro, LUTRIS_DBS, ITCH_DBS, FLATPAK_DI
 from .tags import clean_tags, LUTRIS_API
 from .steam import import_steam
 from .launch import default_command, parse_command, split_env, check_command
-from . import platform
+from . import platform, epic
 from .platform import join_command
 from .sources import source_enabled
 from .stats import refresh_stats, auto_tidy
@@ -337,10 +337,16 @@ def epic_game_files():
             for base in platform.epic_programdata()]
 
 
-def import_epic(con):
+def import_epic(con, fetch=None):
+    """Installations Epic (ses fichiers) et jeux possédés (sa SESSION, `core/epic.py`).
+
+    Deux phases et non une : les installations viennent de fichiers LOCAUX, elles
+    doivent survivre à un réseau en panne. Les possédés, eux, ne sont ajoutés qu'avec
+    un titre (catalogue) — un jeu sans nom affichable n'aurait aucune raison d'être
+    en base. `fetch` est le transport HTTP, injecté par les tests.
+    """
     sources = epic_game_files()
-    if not any(dat.exists() or man.is_dir() for dat, man in sources):
-        return 0
+    # Les fichiers disent qui est installé : plus de fichier, plus rien d'installé.
     con.execute("UPDATE games SET installed=0 WHERE source='epic'")
     n = 0
     for dat, man in sources:
@@ -364,6 +370,15 @@ def import_epic(con):
         for g in games.values():
             upsert(con, "epic", g["ext_id"], g["name"])
             n += 1
+    try:  # phase réseau : une panne ne doit pas effacer les installations ci-dessus
+        connus = {r[0] for r in con.execute("SELECT ext_id FROM games WHERE source='epic'")}
+        owned = epic.epic_owned_games(known=connus, fetch=fetch)
+    except Exception as e:
+        print(f"! Epic Games : {e}")
+        owned = []
+    for g in owned:
+        upsert_owned(con, "epic", g["ext_id"], g["name"])
+        n += 1
     return n
 
 

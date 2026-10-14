@@ -181,9 +181,11 @@ def install_command(g, osname=None):
     renvoie un argv, donc jamais de bouton muet. Steam passe par son appid (`steam_appid_of`,
     seule source de la règle « c'est un appid »), Flatpak par une vraie commande —
     d'où un argv rendu plutôt qu'une URI — et Lutris par le slug relu plus haut.
-    GOG n'a aucune commande de lancement, une ROM ne se « télécharge » pas, et
-    Epic natif ne connaît que `action=launch` : aucun `install` n'est documenté
-    (Lutris lui-même ne lui envoie jamais qu'un `action=launch`)."""
+    GOG n'a aucune commande de lancement et une ROM ne se « télécharge » pas.
+    Epic natif, lui, installe par `com.epicgames.launcher://apps/{AppName}?action=install`
+    : c'est le `GameInstallUrlMask` du plugin Epic de Playnite, dont le commentaire
+    dit l'action réelle (« technically works » — seul son dialogue est en vieux
+    style, d'où le choix de Playnite d'ouvrir la bibliothèque à la place)."""
     try:
         src, ext = g["source"], g["ext_id"]
     except (IndexError, KeyError, TypeError):
@@ -195,6 +197,8 @@ def install_command(g, osname=None):
         return ["flatpak", "install", "-y", str(ext)]
     if src == "heroic":
         return uri_command(heroic_uri(ext), osname)
+    if src == "epic":
+        return uri_command(f"com.epicgames.launcher://apps/{ext}?action=install", osname)
     if src == "lutris":
         uri = lutris_install_uri(ext)
         if uri is None:
@@ -291,8 +295,10 @@ def uninstall_command(g, osname=None):
     son parseur (`lutris/gui/application.py`) n'accepte que `rungame`, `rungameid` et
     `install` — le slug existe, l'action non. RetroArch l'est parce que `ext_id` est le
     chemin d'une ROM : ce fichier appartient à l'utilisateur, pas à Ludodex. itch, GOG
-    et Epic natifs n'ont chez nous aucune commande documentée ; Epic ne connaît que
-    `action=launch`, et `gogdl` — l'outil GOG de Heroic — n'a pas de `uninstall` du tout.
+    et Epic natifs n'ont chez nous aucune commande de retrait documentée — pour Epic,
+    Playnite lui-même ne fait qu'ouvrir `com.epicgames.launcher://store/library`, une
+    ouverture de page n'étant pas une désinstallation, et `gogdl` — l'outil GOG de
+    Heroic — n'a pas de `uninstall` du tout.
     Heroic, lui, passe par `legendary uninstall`, à condition que le binaire soit là et
     que ce soit LUI qui ait installé le jeu (voir `legendary_install_dir`)."""
     try:
