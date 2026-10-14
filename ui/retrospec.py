@@ -456,8 +456,10 @@ class RetroMixin:
             if b["minutes"] and b["minutes"] == maxm:
                 bar.add_css_class("peak")
             motion = Gtk.EventControllerMotion()
-            motion.connect("enter", lambda ctrl, _=bar: ctrl.get_widget().add_css_class("hot"))
-            motion.connect("leave", lambda ctrl, _=bar: ctrl.get_widget().remove_css_class("hot"))
+            # Arity-proof : « enter » porte (x, y) dans GTK 4.24 → 3 args en Python ;
+            # le lambda à 2 params plantait à chaque survol (jamais de « hot »).
+            motion.connect("enter", lambda ctrl, *_: ctrl.get_widget().add_css_class("hot"))
+            motion.connect("leave", lambda ctrl, *_: ctrl.get_widget().remove_css_class("hot"))
             bar.add_controller(motion)
             bars.append(bar)
         col.append(bars)
@@ -516,14 +518,30 @@ class RetroMixin:
         head.append(legend)
         box.append(head)
         if kind == "week":
-            box.append(self._heatmap_row(cells, maxm))
+            # Modèle annuel : carrés 32 px, grille centrée, jour de la semaine
+            # attaché SOUS chaque carré (dans la grille → alignement exact).
+            grid = Gtk.Grid(column_spacing=2, row_spacing=2, column_homogeneous=True)
+            for i, c in enumerate(cells):
+                grid.attach(self._heat_cell(c, maxm, 32), i, 0, 1, 1)
+                grid.attach(Gtk.Label(label=P.weekday_short(c["date"]), xalign=0.5,
+                                      css_classes=["caption", "dim-label"]), i, 1, 1, 1)
+            grid.set_halign(Gtk.Align.CENTER)
+            box.append(grid)
         elif kind == "month":
             grid = Gtk.Grid(column_spacing=2, row_spacing=2, column_homogeneous=True)
             first = start
             for c in cells:
                 d = c["date"]
-                grid.attach(self._heat_cell(c, maxm, 16), d.weekday(),
+                grid.attach(self._heat_cell(c, maxm, 32), d.weekday(),
                             (first.weekday() + d.day - 1) // 7, 1, 1)
+            # Jours de la semaine sous LEUR colonne, comme les mois sous la grille
+            # annuelle : attachés DANS la grille — une liste séparée se décalerait.
+            bas = max((first.weekday() + c["date"].day - 1) // 7 for c in cells) + 1
+            for j in range(7):
+                ex = next(c["date"] for c in cells if c["date"].weekday() == j)
+                grid.attach(Gtk.Label(label=P.weekday_short(ex), xalign=0.5,
+                                      css_classes=["caption", "dim-label"]), j, bas, 1, 1)
+            grid.set_halign(Gtk.Align.CENTER)
             box.append(grid)
         else:
             outer = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.AUTOMATIC,
@@ -534,24 +552,30 @@ class RetroMixin:
             for c in cells:
                 d = c["date"]
                 col = (d.timetuple().tm_yday - 1 + jan1.weekday()) // 7
-                grid.attach(self._heat_cell(c, maxm, 11), col, d.weekday(), 1, 1)
-            vbox.append(grid)
-            months = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, homogeneous=True)
+                # Même taille de carré que les heatmaps semaine/mois (32 px) :
+                # la grille dépasse alors la section, le ScrolledWindow défile.
+                grid.attach(self._heat_cell(c, maxm, 32), col, d.weekday(), 1, 1)
+            # Les mois sont ATTACHÉS à la grille (ligne sous les cellules), à la
+            # colonne du 1er jour du mois et jusqu'à celle du mois suivant : une
+            # liste séparée, étalée en 12 parts égales sur toute la largeur, ne
+            # tombait jamais sur les vraies positions (jusqu'à 354 px d'écart en
+            # fin d'année). Texte à gauche : le libellé démarre pile sur le mois.
+            dernier = (datetime.date(jan1.year, 12, 31).timetuple().tm_yday - 1
+                       + jan1.weekday()) // 7
             for m in range(1, 13):
-                months.append(Gtk.Label(label=P.month_short(datetime.date(jan1.year, m, 1)),
-                                        css_classes=["caption", "dim-label"]))
-            vbox.append(months)
+                d = datetime.date(jan1.year, m, 1)
+                col = (d.timetuple().tm_yday - 1 + jan1.weekday()) // 7
+                suiv = ((datetime.date(jan1.year, m + 1, 1).timetuple().tm_yday - 1
+                         + jan1.weekday()) // 7 if m < 12 else dernier + 1)
+                lab = Gtk.Label(label=P.month_short(d), xalign=0,
+                                css_classes=["caption", "dim-label"])
+                grid.attach(lab, col, 7, suiv - col, 1)
+            # Centrée quand elle tient dans la section ; sous la largeur, le
+            # ScrolledWindow prend le relais.
+            grid.set_halign(Gtk.Align.CENTER)
+            vbox.append(grid)
             outer.set_child(vbox)
             box.append(outer)
-
-    @staticmethod
-    def _heatmap_row(cells, maxm):
-        """Rangée de la semaine : blocs plats qui se partagent toute la largeur disponible."""
-        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2, hexpand=True,
-                      valign=Gtk.Align.CENTER)
-        for c in cells:
-            row.append(RetroMixin._heat_cell(c, maxm, None, flat=True))
-        return row
 
     @staticmethod
     def _heat_tooltip(c):
@@ -567,15 +591,11 @@ class RetroMixin:
         return "\n".join(lines)
 
     @staticmethod
-    def _heat_cell(c, maxm, size, flat=False):
-        """Cellule du calendrier : niveau d'intensité relatif au max ; jour futur = case neutre.
-
-        `flat` = bloc de semaine, large (`hexpand`) et bas au lieu d'un carré fixes."""
+    def _heat_cell(c, maxm, size):
+        """Cellule du calendrier : carré `size`×`size` ; niveau d'intensité relatif au
+        max ; jour futur = case neutre."""
         m = c["minutes"]
-        if flat:
-            cell = Gtk.Box(height_request=40, hexpand=True, valign=Gtk.Align.CENTER)
-        else:
-            cell = Gtk.Box(width_request=size, height_request=size, valign=Gtk.Align.CENTER)
+        cell = Gtk.Box(width_request=size, height_request=size, valign=Gtk.Align.CENTER)
         if m is None:
             cell.add_css_class("retro-future")
             return cell

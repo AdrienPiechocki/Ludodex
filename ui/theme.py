@@ -54,7 +54,9 @@ CSS = """
 .retro-hm-2 { background-color: alpha(@accent_bg_color, 0.55); border-radius: 2px; }
 .retro-hm-3 { background-color: alpha(@accent_bg_color, 0.80); border-radius: 2px; }
 .retro-hm-4 { background-color: @accent_bg_color; border-radius: 2px; }
-.retro-future { background-color: transparent; border-radius: 2px; }
+/* Jour futur : case NEUTRE visible (contour) — transparent sans bord, elle
+   disparaissait : la « grille de carrés » montrait seulement les jours écoulés. */
+.retro-future { background-color: transparent; border: 1px solid alpha(currentColor, 0.15); border-radius: 2px; }
 
 /* Barres de complétion du module Succès (jeu dans la liste, succès à étapes).
    Voir ui/achievements.py : la classe doit être posée par `add_css_class`,
