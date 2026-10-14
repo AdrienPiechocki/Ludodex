@@ -83,8 +83,10 @@ class RetroMixin:
                                        homogeneous=True, valign=Gtk.Align.START)
         frise_scroll.set_child(self._retro_cols_box)
         content.append(frise_scroll)
+        self._retro_frise_scroll = frise_scroll     # pour centrer le défilement sur aujourd'hui
 
         self._retro_columns = []
+        self._retro_frise_centrage = []
         self._retro_buttons = {}
         self._retro_kind = "week"
         self._pie_da, self._pie_slices, self._pie_total, self._pie_hover = None, [], 0, None
@@ -546,15 +548,23 @@ class RetroMixin:
         else:
             outer = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.AUTOMATIC,
                                        vscrollbar_policy=Gtk.PolicyType.NEVER)
-            vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            # Marge basse DANS le ScrolledWindow : la barre flottante (overlay)
+            # se pose sur le bas de la vue — sans marge elle recouvrait les mois.
+            vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4,
+                           margin_bottom=16)
             jan1 = start
+            auj = datetime.date.today()
+            cell_auj = None
             grid = Gtk.Grid(column_spacing=2, row_spacing=2)
             for c in cells:
                 d = c["date"]
                 col = (d.timetuple().tm_yday - 1 + jan1.weekday()) // 7
                 # Même taille de carré que les heatmaps semaine/mois (32 px) :
                 # la grille dépasse alors la section, le ScrolledWindow défile.
-                grid.attach(self._heat_cell(c, maxm, 32), col, d.weekday(), 1, 1)
+                celule = self._heat_cell(c, maxm, 32)
+                grid.attach(celule, col, d.weekday(), 1, 1)
+                if d == auj:
+                    cell_auj = celule
             # Les mois sont ATTACHÉS à la grille (ligne sous les cellules), à la
             # colonne du 1er jour du mois et jusqu'à celle du mois suivant : une
             # liste séparée, étalée en 12 parts égales sur toute la largeur, ne
@@ -576,6 +586,10 @@ class RetroMixin:
             vbox.append(grid)
             outer.set_child(vbox)
             box.append(outer)
+            # Défilement initial centré sur aujourd'hui (si la grille déborde).
+            if cell_auj is not None:
+                self._centrer_scroll_h(outer, lambda: (cell_auj.get_allocation().x,
+                                                       cell_auj.get_allocation().width))
 
     @staticmethod
     def _heat_tooltip(c):
@@ -603,6 +617,43 @@ class RetroMixin:
         cell.add_css_class(f"retro-hm-{lvl}")
         cell.set_tooltip_text(RetroMixin._heat_tooltip(c))
         return cell
+
+    @staticmethod
+    def _centrer_scroll_h(sw, cible):
+        """Défilement horizontal initial : place l'objet rendu par `cible()` — callable
+        (x, largeur) — au milieu de la vue. On ne touche à l'ajustement que depuis un
+        signal : une tentative synchrone verrait l'allocation FANTÔME que GTK donne aux
+        enfants fraîchement joints (x=-6, w=12) et l'`upper` périmé du contenu précédent.
+        `page-size`/`upper` sont émis APRÈS l'allocation — soit au premier affichage de
+        la page de la pile (encore invisible à la construction), soit au premier frame
+        suivant un rebuild. La REGULATION elle-même est repoussée en idle : régler la
+        valeur pendant le layout est avalé (la viewport ne retranslate jamais — GTK 4).
+        Contenu plus étroit que la vue : la valeur reste bornée à 0. Un rafraîchissement
+        qui ne change pas la largeur n'émet rien : le défilement en cours est préservé."""
+        adj = sw.get_hadjustment()
+
+        def centrer():
+            page, upper = adj.get_page_size(), adj.get_upper()
+            x, w = cible()
+            if page > 0 and upper > 0 and w > 0:
+                adj.set_value(max(adj.get_lower(),
+                                  min(x + w / 2 - page / 2, upper - page)))
+            return False
+
+        def appliquer(*_):
+            page, upper = adj.get_page_size(), adj.get_upper()
+            x, w = cible()
+            if page <= 0 or upper <= 0 or w <= 0:
+                return False                 # allocation encore fantôme : on attend
+            GLib.idle_add(centrer)           # hors du layout, sinon c'est avalé
+            for cid in ids:
+                if GObject.signal_handler_is_connected(adj, cid):
+                    adj.disconnect(cid)
+            return False
+
+        ids = [adj.connect("notify::page-size", appliquer),
+               adj.connect("notify::upper", appliquer)]
+        return ids
 
     # ---------- frise existante ----------
     def _refresh_retro_frise(self, kind, tl):
@@ -654,6 +705,17 @@ class RetroMixin:
             self._retro_cols_box.append(box)
             self._retro_columns.append({"date": col["date"], "today": is_today,
                                         "box": box, "header": header, "entries": entries})
+        # Défilement initial centré sur aujourd'hui : les rappels d'attente des
+        # rafraîchissements successifs sont débranchés, seul le dernier compte.
+        for cid in self._retro_frise_centrage:
+            if GObject.signal_handler_is_connected(self._retro_frise_scroll.get_hadjustment(), cid):
+                self._retro_frise_scroll.get_hadjustment().disconnect(cid)
+        self._retro_frise_centrage = []
+        col_auj = next((c["box"] for c in self._retro_columns if c["today"]), None)
+        if col_auj is not None:
+            self._retro_frise_centrage = self._centrer_scroll_h(
+                self._retro_frise_scroll,
+                lambda: (col_auj.get_allocation().x, col_auj.get_allocation().width))
 
     # ---------- rafraîchissement global ----------
     def _refresh_retro(self):
