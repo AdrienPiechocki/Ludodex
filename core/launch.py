@@ -2,8 +2,10 @@
 """launch.py — construction et exécution des commandes de lancement, d'installation et
 de désinstallation."""
 import json, os, pathlib, re, shutil, subprocess, time
+from urllib.parse import quote
 
 from i18n import tr
+from . import platform
 from .db import LUTRIS_DBS, _ro
 from .platform import uri_command, split_command, join_command, popen_kwargs, retroarch_exe
 from .steam import steam_appid_of
@@ -28,7 +30,7 @@ def default_command(g, osname=None):
     if src == "itch":
         return uri_command(f"itch://caves/{ext}/launch", osname), None
     if src == "heroic":
-        return uri_command(f"heroic://launch/{ext}", osname), None
+        return uri_command(heroic_uri(ext), osname), None
     if src == "epic":
         return uri_command(f"com.epicgames.launcher://apps/{ext}?action=launch", osname), None
     if ext.startswith("custom:") or src == "gog":
@@ -47,6 +49,19 @@ def split_env(argv):
         env[k] = v
         i += 1
     return env, argv[i:]
+
+
+def heroic_uri(ext):
+    """URI de lancement (donc d'installation) d'un jeu chez Heroic.
+
+    Son protocole n'accepte que `ping` et `launch` — mais `launch` d'un jeu NON
+    installé ouvre la fenêtre « Is Not Installed, do you wish to Install it? » de
+    Heroic et s'occupe du téléchargement. La forme en requête est la seule non
+    ambiguë : le nom lu par le chemin (`pathname.split('/')`) ne serait pas décoder,
+    lui, tandis que `searchParams.get` l'est — et sans runner, Heroic cherche le jeu
+    chez tous les siens (legendary, gog, nile).
+    """
+    return f"heroic://launch?appName={quote(str(ext), safe='')}"
 
 
 def parse_command(text, osname=None):
@@ -167,7 +182,8 @@ def install_command(g, osname=None):
     seule source de la règle « c'est un appid »), Flatpak par une vraie commande —
     d'où un argv rendu plutôt qu'une URI — et Lutris par le slug relu plus haut.
     GOG n'a aucune commande de lancement, une ROM ne se « télécharge » pas, et
-    Epic/Heroic/itch n'ont rien de documenté de façon sûre."""
+    Epic natif ne connaît que `action=launch` : aucun `install` n'est documenté
+    (Lutris lui-même ne lui envoie jamais qu'un `action=launch`)."""
     try:
         src, ext = g["source"], g["ext_id"]
     except (IndexError, KeyError, TypeError):
@@ -177,6 +193,8 @@ def install_command(g, osname=None):
         return uri_command(f"steam://install/{appid}", osname) if appid else None
     if src == "flatpak":
         return ["flatpak", "install", "-y", str(ext)]
+    if src == "heroic":
+        return uri_command(heroic_uri(ext), osname)
     if src == "lutris":
         uri = lutris_install_uri(ext)
         if uri is None:
@@ -190,9 +208,14 @@ def install_command(g, osname=None):
 def _detached(cmd):
     """Lance `cmd` hors de la session de la fenêtre et sans capter sa sortie : un
     téléchargement ou une désinstallation dure bien plus que l'application, qui ne doit
-    ni s'arrêter avec elle ni se bloquer dessus. Renvoie l'erreur éventuelle, ou None."""
+    ni s'arrêter avec elle ni se bloquer dessus. Renvoie l'erreur éventuelle, ou None.
+
+    Les 'NAME=value' de tête deviennent de vraies variables d'environnement : Popen ne
+    passe pas par un shell, sans quoi le binaire recevrait ces paires en ARGUMENTS."""
+    env, argv = split_env(cmd)
     try:
-        subprocess.Popen(cmd, start_new_session=True,
+        subprocess.Popen(argv, env={**os.environ, **env} if env else None,
+                         start_new_session=True,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return None
     except OSError as e:
@@ -216,6 +239,41 @@ def install(g):
     return True
 
 
+_LEG_CACHE = {}
+
+
+def legendary_install_dir(ext):
+    """Dossier de config de Legendary où `ext` figure comme INSTALLÉ, ou None.
+
+    Deux pièges que cette recherche écarte :
+    - Heroic garde sa config À PART de celle de Legendary autonome — sans
+      `LEGENDARY_CONFIG_PATH`, le binaire ne verrait aucun des jeux de Heroic ;
+    - un jeu GOG n'est pas dans ces fichiers (c'est `gogdl` qui l'a installé, et ce
+      binaire n'a aucune commande `uninstall`) : `legendary uninstall 999` ne
+      retirerait rien, si ce n'est valider un bouton muet.
+
+    Cache à la volée, indexé sur mtime+taille : ces fichiers ne bougent que pendant
+    une installation, et la fonction est appelée pour chaque carte affichée."""
+    ext = str(ext)
+    from .importers import parse_legendary  # import local : évite un cycle de chargement
+    for d in platform.legendary_dirs():
+        f = d / "installed.json"
+        try:
+            st = os.stat(f)
+        except OSError:
+            continue
+        key = (str(f), st.st_mtime_ns, st.st_size)
+        if key not in _LEG_CACHE:
+            try:
+                data = json.loads(f.read_text(encoding="utf-8", errors="ignore"))
+            except (OSError, ValueError):
+                data = []
+            _LEG_CACHE[key] = frozenset(g["ext_id"] for g in parse_legendary(data))
+        if ext in _LEG_CACHE[key]:
+            return d
+    return None
+
+
 def uninstall_command(g, osname=None):
     """Commande désinstallant le jeu, ou None : sa source ne sait pas désinstaller.
 
@@ -232,8 +290,11 @@ def uninstall_command(g, osname=None):
     Lutris est écarté pour l'inverse de la raison qui l'admettait côté installation :
     son parseur (`lutris/gui/application.py`) n'accepte que `rungame`, `rungameid` et
     `install` — le slug existe, l'action non. RetroArch l'est parce que `ext_id` est le
-    chemin d'une ROM : ce fichier appartient à l'utilisateur, pas à Ludodex. itch, GOG,
-    Epic et Heroic n'ont chez nous ni jeu installé ni commande documentée."""
+    chemin d'une ROM : ce fichier appartient à l'utilisateur, pas à Ludodex. itch, GOG
+    et Epic natifs n'ont chez nous aucune commande documentée ; Epic ne connaît que
+    `action=launch`, et `gogdl` — l'outil GOG de Heroic — n'a pas de `uninstall` du tout.
+    Heroic, lui, passe par `legendary uninstall`, à condition que le binaire soit là et
+    que ce soit LUI qui ait installé le jeu (voir `legendary_install_dir`)."""
     try:
         src, ext = g["source"], g["ext_id"]
     except (IndexError, KeyError, TypeError):
@@ -243,6 +304,11 @@ def uninstall_command(g, osname=None):
         return uri_command(f"steam://uninstall/{appid}", osname) if appid else None
     if src == "flatpak":
         return ["flatpak", "uninstall", "-y", str(ext)]
+    if src == "heroic":
+        d = legendary_install_dir(ext)
+        if d is None or shutil.which("legendary") is None:
+            return None
+        return [f"LEGENDARY_CONFIG_PATH={d}", "legendary", "uninstall", str(ext)]
     return None
 
 

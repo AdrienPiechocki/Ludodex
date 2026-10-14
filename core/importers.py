@@ -251,15 +251,60 @@ def parse_gog_registry(entries):
     return out
 
 
+HEROIC_LIBS = (("legendary_library.json", "library"), ("gog_library.json", "games"))
+
+
 def heroic_game_files():
     """Fichiers JSON des jeux installés de Heroic (Legendary pour Epic, gogdl pour GOG)."""
     return [d / "installed.json" for d in platform.legendary_dirs()] + \
            [d / "gog_store" / "installed.json" for d in platform.heroic_dirs()]
 
 
+def heroic_library_files():
+    """(fichier, clé JSON) des bibliothèques que Heroic met en cache après ses requêtes.
+
+    Toute la bibliothèque, installée ou non — la seule source hors ligne des jeux
+    possédés : le lanceur Epic officiel ne range que ses installations.
+    """
+    return [(d / "store_cache" / name, key)
+            for d in platform.heroic_dirs() for name, key in HEROIC_LIBS]
+
+
+def parse_heroic_library(data, key):
+    """Jeux possédés d'un cache de bibliothèque de Heroic -> [{ext_id, name, store_url}].
+
+    Les DLC y sont des entrées à part entière (`install.is_dlc` reste renseigné même
+    sans installation, ou `is_dlc` en tête), et GOG y ajoute en première position ses
+    redistribuables communs — que Heroic lui-même saute dans son journal. Une entrée
+    sans identifiant n'a pas de nom utilisable : Heroic en perdrait lui aussi le nom.
+    """
+    items = data.get(key) if isinstance(data, dict) else None
+    if not isinstance(items, list):
+        return []
+    out = []
+    for e in items:
+        if not isinstance(e, dict):
+            continue
+        ext = _first(e, "app_name", "appName", "app_id")
+        name = _first(e, "title", "name")
+        if not ext or not name or str(name) == "Galaxy Common Redistributables":
+            continue
+        install = e.get("install")
+        install = install if isinstance(install, dict) else {}
+        if e.get("is_dlc") or install.get("is_dlc"):
+            continue
+        extra = e.get("extra")
+        extra = extra if isinstance(extra, dict) else {}
+        out.append({"ext_id": str(ext), "name": str(name),
+                    "store_url": str(_first(e, "store_url", default="") or
+                                     _first(extra, "storeUrl", "store_url", default=""))})
+    return out
+
+
 def import_heroic(con):
     files = [p for p in heroic_game_files() if p.exists()]
-    if not files:
+    libs = [(p, key) for p, key in heroic_library_files() if p.exists()]
+    if not files and not libs:
         return 0
     con.execute("UPDATE games SET installed=0 WHERE source='heroic'")
     n = 0
@@ -270,6 +315,17 @@ def import_heroic(con):
             continue
         for g in parse_legendary(data):
             upsert(con, "heroic", g["ext_id"], g["name"])
+            n += 1
+    for path, key in libs:  # bibliothèques : possédé, sans dégrader un installé
+        try:
+            data = json.loads(path.read_text(encoding="utf-8", errors="ignore"))
+        except (OSError, ValueError):
+            continue
+        for g in parse_heroic_library(data, key):
+            upsert_owned(con, "heroic", g["ext_id"], g["name"])
+            if g["store_url"]:  # sert à chercher les mots clés : jamais de recouvrement
+                con.execute("UPDATE games SET store_url=? WHERE source='heroic' AND ext_id=? "
+                            "AND (store_url IS NULL OR store_url='')", (g["store_url"], g["ext_id"]))
             n += 1
     return n
 
