@@ -61,6 +61,8 @@ class AchievementsMixin:
         self.ach_sort = "origin"
         self.ach_query = ""
         self.ach_game_query = ""      # recherche appliquée au volet GAUCHE (liste des jeux)
+        self.ach_game_sort = "name"       # tri de la liste de gauche (menu dédié)
+        self.ach_game_source = "all"      # filtre de source : toutes / RA / Steam / YAML
         self._ach_state = []          # succès du jeu courant AVANT tri/filtre
         self._ra_state = []           # idem pour les succès RetroAchievements
         self._steam_state = []        # idem pour les succès Steam
@@ -75,6 +77,17 @@ class AchievementsMixin:
         head = Gtk.Box(spacing=6, margin_top=8, margin_bottom=6, margin_start=12, margin_end=6)
         head.append(Gtk.Label(label=tr("Achievements"), xalign=0, hexpand=True,
                               css_classes=["heading"]))
+        # Filtre de source et tri : menus d'icônes COMPACTS dans l'en-tête, à
+        # gauche du « + » — deux listes déroulantes pleine largeur déborderaient
+        # du volet de 260 px. Les libellés complets (dont « Personnalisés »)
+        # vivent dans le menu, avec une coche sur le choix courant, et
+        # l'infobulle répète le choix en cours.
+        self.ach_source_btn = self._ach_menu_button("view-filter-symbolic",
+                                                    tr("Filter by source"), "source")
+        self.ach_sort_btn = self._ach_menu_button("view-sort-ascending-symbolic",
+                                                  tr("Sort"), "sort")
+        head.append(self.ach_source_btn)
+        head.append(self.ach_sort_btn)
         add = Gtk.Button(icon_name="list-add-symbolic", tooltip_text=tr("Set up a tracker"),
                          valign=Gtk.Align.CENTER)
         add.connect("clicked", lambda *_: self._open_tracker_dialog())
@@ -351,24 +364,28 @@ class AchievementsMixin:
             while (child := self.ach_list.get_first_child()) is not None:
                 self.ach_list.remove(child)
             self._ach_row_by_gid = {}
-            tous = P.achievement_games(self.con)  # suivi YAML et/ou lien RetroAchievements
+            tous = P.achievement_games(self.con)  # suivi YAML, lien RA et/ou cache Steam
             # Une seule passe pour la complétion de TOUS les jeux (aucune requête par jeu).
             compl = P.completions(self.con)
-            # Filtre insensible à la casse sur le nom du jeu.
+            # Filtre insensible à la casse sur le nom du jeu, puis filtre de
+            # source et tri — les deux menus du volet gauche.
             q = self.ach_game_query.strip().casefold()
-            games = [g for g in tous if not q or q in g[1].casefold()]
-            for gid, name, _has_tracker, _has_ra in games:
+            cand = [g for g in tous if not q or q in g[1].casefold()]
+            games = P.filter_sort_game_rows(cand, compl, self.ach_game_sort,
+                                            self.ach_game_source)
+            for gid, name, _has_tracker, _has_ra, _has_steam in games:
                 row = Adw.ActionRow(title=GLib.markup_escape_text(name))
                 row._gid = gid
                 self._ach_bar(row, *compl.get(gid, (0.0, 0)))   # barre SOUS le nom
                 self.ach_list.append(row)
                 self._ach_row_by_gid[gid] = row
             if self.ach_game_id not in self._ach_row_by_gid:
-                # Un jeu suivi que la recherche MASQUE ne fait pas changer de jeu :
-                # le volet droit reste sur la partie en cours, seule la liste reflète
-                # la recherche. C'est la perte du suivi (recherche vide) qui bascule
-                # sur le premier jeu, comme auparavant.
-                if not (q and any(g[0] == self.ach_game_id for g in tous)):
+                # Un jeu suivi que la recherche OU le filtre de source MASQUE ne
+                # fait pas changer de jeu : le volet droit reste sur la partie en
+                # cours, seule la liste reflète les réglages. C'est la perte du
+                # suivi (le jeu disparaît de la liste complète) qui bascule sur
+                # le premier jeu, comme auparavant.
+                if not any(g[0] == self.ach_game_id for g in tous):
                     self.ach_game_id = games[0][0] if games else None
             row = self._ach_row_by_gid.get(self.ach_game_id)
             if row is not None:
@@ -384,6 +401,70 @@ class AchievementsMixin:
         alors sélectionnée), et il reparaît sélectionné dès qu'on efface.
         """
         self.ach_game_query = entry.get_text()
+        self._fill_ach_list()
+
+    # ---------- menus de tri et de filtre de la liste de gauche ----------
+    def _ach_menu_button(self, icon, tooltip, kind):
+        """MenuButton d'icône qui déroule une liste de choix (coche sur le courant)."""
+        btn = Gtk.MenuButton(icon_name=icon, tooltip_text=tooltip,
+                             valign=Gtk.Align.CENTER, css_classes=["flat"])
+        btn._kind = kind
+        pop = Gtk.Popover()
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2,
+                      margin_top=6, margin_bottom=6, margin_start=6, margin_end=6)
+        pop.set_child(box)
+        btn.set_popover(pop)
+        btn._choices = box
+        # Gtk.MenuButton n'émet PAS « clicked » (ce n'est pas un GtkButton) : le
+        # menu est rafraîchi à la construction et après chaque choix — il est
+        # donc toujours juste au moment de l'ouverture.
+        self._refill_ach_menu(btn)
+        return btn
+
+    @staticmethod
+    def _ach_menu_labels(kind):
+        """Libellés complets des choix — vivent DANS le menu, pas dans l'en-tête."""
+        if kind == "source":
+            return [tr("All sources"), tr("RetroAchievements"), tr("Steam"),
+                    tr("Custom achievements")]
+        return [tr("Name A→Z"), tr("Completion")]
+
+    def _refill_ach_menu(self, btn):
+        """Reconstruit les lignes du menu au moment de l'ouvrir : la coche suit
+        le choix courant, et le libellé est repris dans la langue du moment."""
+        box = btn._choices
+        while box.get_first_child() is not None:
+            box.remove(box.get_first_child())
+        cur = (P.ACH_GAME_SOURCES.index(self.ach_game_source) if btn._kind == "source"
+               else P.ACH_GAME_SORTS.index(self.ach_game_sort))
+        pick = self._pick_ach_source if btn._kind == "source" else self._pick_ach_sort
+        for i, label in enumerate(self._ach_menu_labels(btn._kind)):
+            # Ligne PLEINE largeur : sans halign=START, le bouton occupe toute
+            # la boîte du menu (comme un vrai menu), texte aligné à gauche.
+            row = Gtk.Button(css_classes=["flat"], hexpand=True)
+            row.set_child(Gtk.Label(label=("✓  " if i == cur else "      ") + label, xalign=0))
+            row.connect("clicked",
+                        lambda _b, idx=i, b=btn: (b.get_popover().popdown(), pick(idx)))
+            box.append(row)
+
+    def _pick_ach_source(self, idx):
+        """Filtre de source choisi : on refait la liste de gauche, l'infobulle suit.
+
+        Comme la recherche, le réglage ne change JAMAIS le jeu affiché : seul le
+        volet gauche suit. Aucun re-scan ni appel réseau — les sources sont déjà
+        en base."""
+        self.ach_game_source = P.ACH_GAME_SOURCES[idx]
+        self.ach_source_btn.set_tooltip_text(
+            f"{tr('Filter by source')} — {self._ach_menu_labels('source')[idx]}")
+        self._refill_ach_menu(self.ach_source_btn)     # la coche suit le choix
+        self._fill_ach_list()
+
+    def _pick_ach_sort(self, idx):
+        """Tri choisi : on refait la liste de gauche, l'infobulle suit."""
+        self.ach_game_sort = P.ACH_GAME_SORTS[idx]
+        self.ach_sort_btn.set_tooltip_text(
+            f"{tr('Sort')} — {self._ach_menu_labels('sort')[idx]}")
+        self._refill_ach_menu(self.ach_sort_btn)       # la coche suit le choix
         self._fill_ach_list()
 
     def _on_ach_game_selected(self, _lb, row):

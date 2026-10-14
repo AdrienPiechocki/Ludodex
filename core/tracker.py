@@ -170,12 +170,13 @@ def tracked_games(con):
 
 
 def achievement_games(con):
-    """[(id, nom, has_tracker, has_ra)] des jeux ayant un suivi YAML, un lien RA
-    ou des succès Steam en cache.
+    """[(id, nom, has_tracker, has_ra, has_steam)] des jeux ayant un suivi YAML,
+    un lien RA ou des succès Steam en cache.
 
     Sert à la liste de gauche de la page « Achievements » : un jeu apparaît s'il a un
     fichier de log suivi, et/ou un lien vers un jeu RetroAchievements, et/ou des
-    succès Steam déjà téléchargés.
+    succès Steam déjà téléchargés. Les trois drapeaux servent au filtre de source
+    (`filter_sort_game_rows`) — un jeu multi-sources vaut pour CHACUNE des siennes.
 
     Chaque source peut être coupée dans les réglages ; un jeu qui n'a QUE cette
     source disparaît alors — il n'aurait plus rien à montrer. Ceux suivis par un
@@ -184,13 +185,13 @@ def achievement_games(con):
     from .steam import steam_enabled
     info = {}
     for gid, name, _yaml, _log in tracked_games(con):
-        info[gid] = [name, True, False]
+        info[gid] = [name, True, False, False]
     if ra_enabled(con):
         for gid, _ra in ra_linked_games(con):
             row = con.execute("SELECT name FROM games WHERE id=?", (gid,)).fetchone()
             if row is None:
                 continue
-            entry = info.setdefault(gid, [row["name"], False, False])
+            entry = info.setdefault(gid, [row["name"], False, False, False])
             entry[2] = True
     if steam_enabled(con):
         # Seuls les jeux dont le cache n'est pas vide comptent : un jeu Steam
@@ -198,9 +199,46 @@ def achievement_games(con):
         for r in con.execute("SELECT g.id, g.name FROM games g WHERE g.source='steam' "
                              "AND EXISTS (SELECT 1 FROM steam_achievements s "
                              "WHERE s.game_id=g.id)"):
-            info.setdefault(r["id"], [r["name"], False, False])
-    return sorted(((gid, v[0], v[1], v[2]) for gid, v in info.items()),
+            entry = info.setdefault(r["id"], [r["name"], False, False, False])
+            entry[3] = True
+    return sorted(((gid, v[0], v[1], v[2], v[3]) for gid, v in info.items()),
                   key=lambda t: t[1].lower())
+
+
+# ---------- tri et filtre de la liste des jeux (volet gauche des succès) ----------
+ACH_GAME_SORTS = ("name", "completion")
+ACH_GAME_SOURCES = ("all", "ra", "steam", "custom")
+
+
+def filter_sort_game_rows(rows, comp, sort="name", source="all"):
+    """Liste de gauche des succès : filtre par source, puis tri.
+
+    `rows` : (gid, nom, a_un_suivi, a_un_lien_ra, a_du_steam) — la sortie d'
+    `achievement_games()`. Un jeu multi-sources est retenu pour CHACUNE de ses
+    sources ; le filtre « all » garde tout le monde.
+
+    `comp` : {gid: (done, total)} de `completions()` — le tri « completion »
+    ordonne par POURCENTAGE (done/total) décroissant, départagé par le nom :
+    3/3 (100 %) passe devant 20/100 (20 %), même si ce dernier compte plus de
+    réussites. Un jeu sans total (inconnu ou vide) vaut 0 %.
+
+    Modes inconnus : ramenés aux valeurs par défaut (« all » / « name »), comme
+    `filter_achievements` le fait pour les succès eux-mêmes."""
+    if source not in ACH_GAME_SOURCES:
+        source = "all"
+    if source != "all":
+        idx = {"ra": 3, "steam": 4, "custom": 2}[source]
+        rows = [r for r in rows if r[idx]]
+    if sort == "completion":
+        # Le TAUX (done/total) décide, jamais la somme brute des réussites :
+        # c'est le pourcentage qui dit à quel point un jeu est terminé.
+        def _taux(gid):
+            d, t = comp.get(gid, (0.0, 0))
+            return d / t if t else 0.0
+        rows = sorted(rows, key=lambda r: (-_taux(r[0]), r[1].lower()))
+    else:
+        rows = sorted(rows, key=lambda r: r[1].lower())
+    return rows
 
 
 def show_hidden(con):
@@ -392,7 +430,7 @@ class LogWatcher:
         Succès) : y figurent les jeux à log YAML — et aussi les jeux reliés à
         RetroAchievements, dont la partie se repère sur le runtime `.lrtl`."""
         out, alive = [], set()
-        for gid, _name, _has_tracker, _has_ra in achievement_games(con):
+        for gid, _name, _has_tracker, _has_ra, _has_steam in achievement_games(con):
             alive.add(gid)
             fp = log_fingerprint(con, gid)
             prev = self._prev.get(gid)
