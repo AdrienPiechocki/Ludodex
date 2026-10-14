@@ -10,6 +10,22 @@ from i18n import available, get_lang, tr
 from .theme import STATUTS, TILE_W, TILE_H, COVER_PX
 
 
+def _est_croix(b):
+    """Ce bouton porte-t-il l'icône « fermer » d'Adw ?
+
+    La croix automatique d'`Adw.Dialog` est un bouton SANS propriété
+    `icon-name` : l'icône est portée par son enfant `Image` — d'où la
+    recherche sur le bouton puis sur ses enfants directs."""
+    if b.get_icon_name() == "window-close-symbolic":
+        return True
+    c = b.get_first_child()
+    while c is not None:
+        if isinstance(c, Gtk.Image) and c.get_icon_name() == "window-close-symbolic":
+            return True
+        c = c.get_next_sibling()
+    return False
+
+
 class LibraryMixin:
 
     # ---------- page « Bibliothèque » : grille de pochettes ----------
@@ -168,6 +184,18 @@ class LibraryMixin:
                 self._tex_cache[key] = None
         return self._tex_cache[key]
 
+    def _cached_cover(self, g):
+        """Texture de couverture DÉJÀ décodée, ou None — sans jamais décoder ici :
+        le premier décodage asynchrone reste l'affaire de la file, mais une grille
+        reconstruite repose les anciennes images au lieu de les faire réapparaître."""
+        f = P.cover_file(g)
+        if not f:
+            return None
+        try:
+            return self._tex_cache.get((str(f), f.stat().st_mtime_ns))
+        except OSError:
+            return None
+
     @staticmethod
     def _image_ok(path):
         """Le fichier est-il une image que GdkPixbuf sait réellement décoder ?"""
@@ -178,7 +206,8 @@ class LibraryMixin:
             return False
 
     def _cover_row(self, g, pic):
-        """Ligne « Couverture » de la fiche : choisir une image / retirer la couverture perso."""
+        """Ligne « Couverture » du dialogue d'édition : choisir une image / retirer la couverture perso.
+        La couverture au fond de la fiche (``pic``) suit en direct."""
         row = Adw.ActionRow(title=tr("Cover image"), subtitle=tr("Custom") if g["custom_cover"] else "")
         remove = Gtk.Button(icon_name="edit-delete-symbolic", valign=Gtk.Align.CENTER, css_classes=["flat"],
                             tooltip_text=tr("Remove custom cover"), sensitive=bool(g["custom_cover"]))
@@ -261,7 +290,11 @@ class LibraryMixin:
     def _make_tile(self, g):
         gid = g["id"]
         cover, pic = self._make_cover(g, TILE_W, TILE_H)
-        if P.cover_file(g):
+        tex = self._cached_cover(g)
+        if tex:
+            pic.set_paintable(tex)
+            pic.set_visible(True)   # déjà décodée : posée tout de suite, sans vague de chargement
+        elif P.cover_file(g):
             self._cover_queue.append((pic, g))
         bar = Gtk.Label(label=g["name"], ellipsize=Pango.EllipsizeMode.END, valign=Gtk.Align.END,
                         css_classes=["game-title-bar"], visible=False)
@@ -692,26 +725,36 @@ class LibraryMixin:
             win.close()
         play.connect("clicked", on_primary)
 
-        store = None  # proposé juste sous le bouton principal, seulement si une fiche magasin existe
-        if P.store_page(g):
-            store = Gtk.Button(label=tr("View in store"), halign=Gtk.Align.CENTER, css_classes=["pill"])
-            store.connect("clicked", lambda *_: self._open_store(g))
+        # Rangée d'actions : petites icônes, pas de texte. Chaque bouton ne
+        # s'affiche QUE si sa commande est avérée — un lien mort ne servirait à
+        # rien : le magasin exige une fiche magasin, les trois pages exigent
+        # leur module activé.
+        actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4, halign=Gtk.Align.CENTER)
 
+        def icon(icon_name, tooltip, cb, destructive=False):
+            b = Gtk.Button(icon_name=icon_name, tooltip_text=tooltip, valign=Gtk.Align.CENTER,
+                           css_classes=["flat"] + (["destructive-action"] if destructive else []))
+            b.connect("clicked", cb)
+            actions.append(b)
+
+        if P.store_page(g):
+            icon("insert-link-symbolic", tr("View in store"), lambda *_: self._open_store(g))
+        if P.module_enabled(self.con, "retro"):
+            icon("document-open-recent-symbolic", tr("Retrospective"), lambda *_: self._goto_retro_game(g, win))
+        if P.module_enabled(self.con, "notes"):
+            icon("document-edit-symbolic", tr("Notes"), lambda *_: self._goto_note_game(gid, win))
+        if P.module_enabled(self.con, "achievements"):
+            icon("starred-symbolic", tr("Achievements"), lambda *_: self._goto_ach_game(gid, win))
         # Un seul bouton destructeur à l'emplacement, jamais les deux. La source
         # qui sait RETIRER LES FICHIERS l'emporte : « Désinstaller », c'est
         # `uninstall_command` qui tranche, pour Steam et Flatpak. Partout ailleurs —
         # jeu déjà retiré du disque, mais aussi ajouté à la main (custom) ou installé
-        # sans désinstallation possible (RetroArch, itch, Lutris) — le même
-        # emplacement porte « Supprimer », qui ne retire que la FICHE.
-        delete = None
+        # sans désinstallation possible (RetroArch, itch, Lutris) — la même poubelle
+        # porte « Supprimer », qui ne retire que la FICHE.
         if g["installed"] and P.uninstall_command(g) is not None:
-            delete = Gtk.Button(label=tr("Uninstall"), halign=Gtk.Align.CENTER,
-                                css_classes=["destructive-action", "pill"])
-            delete.connect("clicked", lambda *_: self._on_uninstall(gid, win))
+            icon("user-trash-symbolic", tr("Uninstall"), lambda *_: self._on_uninstall(gid, win), destructive=True)
         else:
-            delete = Gtk.Button(label=tr("Delete"), halign=Gtk.Align.CENTER,
-                                css_classes=["destructive-action", "pill"])
-            delete.connect("clicked", lambda *_: self._on_delete_game(gid, win))
+            icon("user-trash-symbolic", tr("Delete"), lambda *_: self._on_delete_game(gid, win), destructive=True)
 
         st = Adw.ComboRow(title=tr("Status"), model=Gtk.StringList.new([P.status_label(s) for s in STATUTS]),
                           selected=STATUTS.index(g["status"]) if g["status"] in STATUTS else 1)
@@ -755,13 +798,64 @@ class LibraryMixin:
         browse.connect("clicked", lambda _b: self._pick_exe(ex))
         ex.add_suffix(browse)
 
-        group = Adw.PreferencesGroup(margin_top=6)
+        # Les lignes de modification ne vivent PLUS dans la fiche : elles
+        # composent le dialogue « Édition », rouvrable autant de fois qu'on veut
+        # (le groupe est déplacé tel quel dans le dialogue du moment).
         rows = [nm, ex, st, tags, mn, sg, cover_row, hid]
         if g["store_tags"]:
             rows.append(Adw.ActionRow(title=tr("Store tags"),
                                       subtitle=GLib.markup_escape_text(", ".join(g["store_tags"].split(",")))))
+        edit_group = Adw.PreferencesGroup(margin_top=6)
         for row in rows:
-            group.add(row)
+            edit_group.add(row)
+
+        def refresh_infos(*_):
+            """Fermeture d'« Édition » : la fiche reflète ce qui a changé dedans."""
+            row = self.con.execute("SELECT * FROM games WHERE id=?", (gid,)).fetchone()
+            if not row:
+                return
+            title.set_text(row["name"])
+            win.set_title(row["name"])
+            subtitle.set_text(self._lib_subtitle(gid, row["status"]))
+
+        def cacher_croix(w):
+            """Adw.Dialog ajoute toujours sa croix « fermer » en haut à droite (aucune
+            API publique pour la désactiver) : on ne garde QUE le bouton Retour."""
+            c = w.get_first_child()
+            while c is not None:
+                suivant = c.get_next_sibling()
+                if isinstance(c, Gtk.Button) and _est_croix(c):
+                    c.set_visible(False)
+                else:
+                    cacher_croix(c)
+                c = suivant
+
+        def on_edit(_b):
+            dlg = Adw.Dialog(content_width=440, title=tr("Edit"))
+            body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL,
+                           margin_top=6, margin_bottom=24, margin_start=12, margin_end=12)
+            if (parent := edit_group.get_parent()) is not None:
+                parent.remove(edit_group)  # dialogue précédent fermé : le groupe se repositionne
+            body.append(edit_group)
+            view = Adw.ToolbarView(content=Adw.Clamp(maximum_size=480, child=body))
+            back = Gtk.Button(icon_name="go-previous-symbolic", tooltip_text=tr("Back"),
+                              css_classes=["flat"])
+            back.connect("clicked", lambda _b2: dlg.close())  # retour à la fiche
+            bar = Adw.HeaderBar()
+            bar.pack_start(back)
+            view.add_top_bar(bar)
+            dlg.set_child(view)
+            dlg.connect("closed", refresh_infos)
+            dlg.connect("map", lambda *_: cacher_croix(dlg))  # la croix revient à chaque présentation
+            dlg.present(win)
+            cacher_croix(dlg)
+
+        edit = Gtk.Button(halign=Gtk.Align.CENTER, css_classes=["pill"])
+        edit_box = Gtk.Box(spacing=6)
+        edit_box.append(Gtk.Image(icon_name="document-edit-symbolic"))
+        edit_box.append(Gtk.Label(label=tr("Edit")))
+        edit.set_child(edit_box)
+        edit.connect("clicked", on_edit)
 
         col_group = Adw.PreferencesGroup(title=tr("Collections"), margin_top=6)
         col_rows = []
@@ -812,7 +906,7 @@ class LibraryMixin:
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12,
                       margin_top=6, margin_bottom=24, margin_start=18, margin_end=18)
-        for w in (cover, title, subtitle, play, store, delete, group, col_group):
+        for w in (cover, title, subtitle, play, edit, actions, col_group):
             if w is not None:
                 box.append(w)
         body = Gtk.ScrolledWindow(child=Adw.Clamp(maximum_size=480, child=box), vexpand=True,
@@ -831,6 +925,40 @@ class LibraryMixin:
         win.add_controller(key)
         win.connect("closed", self._on_game_closed)
         win.present(self)
+
+    # ---------- aller aux pages du jeu depuis sa fiche ----------
+    def _goto_retro_game(self, g, win):
+        """Rétrospective ciblée sur le jeu : c'est le champ de recherche qui porte le filtre."""
+        win.close()
+        self._retro_search.set_text(g["name"])
+        self._on_retro_search(self._retro_search)  # on ne dépend pas du délai d'émission du SearchEntry
+        self.stack.set_visible_child_name("retro")
+
+    def _goto_note_game(self, gid, win):
+        """Notes du jeu : la liste est défiltrée pour que la ligne existe, puis sélectionnée."""
+        win.close()
+        self.notes_search.set_text("")   # un filtre oublié ne doit pas cacher le jeu demandé
+        self.notes_only.set_active(False)
+        self._fill_notes_list()
+        row = self._note_rows.get(gid)
+        if row is not None:
+            self.notes_list.select_row(row)     # → `_on_note_selected` → `_show_note`
+        elif self.notes_game_id != gid:
+            self._flush_note()
+            self._show_note(gid)  # jeu masqué par la bibliothèque : l'éditeur s'ouvre quand même
+        self.stack.set_visible_child_name("notes")
+
+    def _goto_ach_game(self, gid, win):
+        """Succès du même acquis : recherche vidée, liste remplie, ligne sélectionnée."""
+        win.close()
+        self.ach_game_search.set_text("")
+        self._fill_ach_list()
+        row = self._ach_row_by_gid.get(gid)
+        if row is not None:
+            self.ach_list.select_row(row)       # → `_on_ach_game_selected` → `_show_ach_game`
+        else:
+            self._show_ach_game(gid)
+        self.stack.set_visible_child_name("achievements")
 
     def _quick_launch(self, gid):
         g = self.con.execute("SELECT * FROM games WHERE id=?", (gid,)).fetchone()

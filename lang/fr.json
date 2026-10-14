@@ -62,6 +62,8 @@
   "Show not installed games": "Afficher les jeux non installés",
   "Store page": "Voir la fiche",
   "View in store": "Voir dans le magasin",
+  "Edit": "Édition",
+  "Back": "Retour",
   "Back to filters": "Retour aux filtres",
   "(not installed)": "(non installé)",
   "Opened store page: {url}": "Fiche ouverte : {url}",
