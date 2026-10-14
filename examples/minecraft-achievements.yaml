@@ -1,0 +1,216 @@
+# Succès Minecraft Vanilla (En anglais, basé sur les annonces du chat) pour Ludodex.
+#
+# Format des lignes lues dans le log :
+#   System chat: <Player> has completed the challenge [<Achievement Name>]
+#   System chat: <Player> has completed the advancement [<Achievement Name>]
+#
+# Notes :
+# - Les noms des succès correspondent aux titres officiels en anglais de Minecraft Java Edition.
+# - hidden: true masque les succès secrets ou de fin de jeu.
+
+achievements:
+
+  # ======================================================================
+  # STORY (Histoire)
+  # ======================================================================
+  - name: "Stone Age"
+    description: "Mine stone with your new pickaxe."
+    icon: "⛏️"
+    match: '\[Stone Age\]'
+    case_insensitive: true
+
+  - name: "Getting an Upgrade"
+    description: "Construct a better pickaxe."
+    icon: "🪨"
+    match: '\[Getting an Upgrade\]'
+    case_insensitive: true
+
+  - name: "A Seedy Place"
+    description: "Plant a seed and watch it grow."
+    icon: "🌱"
+    match: '\[A Seedy Place\]'
+    case_insensitive: true
+
+  - name: "Hot Stuff"
+    description: "Smelt 8 blocks of stone in a furnace."
+    icon: "🔥"
+    match: '\[Hot Stuff\]'
+    case_insensitive: true
+
+  - name: "Ice Bucket Challenge"
+    description: "Obtain a block of obsidian."
+    icon: "🧊"
+    match: '\[Ice Bucket Challenge\]'
+    case_insensitive: true
+
+  - name: "Diamonds!"
+    description: "Acquire diamonds."
+    icon: "💎"
+    match: '\[Diamonds!\]'
+    case_insensitive: true
+
+  - name: "We Need to Go Deeper"
+    description: "Build, light and enter a Nether portal."
+    icon: "🌀"
+    match: '\[We Need to Go Deeper\]'
+    case_insensitive: true
+
+  - name: "Eye Spy"
+    description: "Follow an Ender Eye."
+    icon: "👁️"
+    match: '\[Eye Spy\]'
+    case_insensitive: true
+    hidden: true
+
+  - name: "The End?"
+    description: "Enter the End portal."
+    icon: "🌌"
+    match: '\[The End\?\]'
+    case_insensitive: true
+    hidden: true
+
+
+  # ======================================================================
+  # NETHER
+  # ======================================================================
+  - name: "Return to Sender"
+    description: "Destroy a Ghast with a fireball."
+    icon: "☄️"
+    match: '\[Return to Sender\]'
+    case_insensitive: true
+
+  - name: "Those Were the Days"
+    description: "Enter a Bastion Remnant."
+    icon: "🪙"
+    match: '\[Those Were the Days\]'
+    case_insensitive: true
+
+  - name: "Hidden in the Depths"
+    description: "Obtain netherite armor."
+    icon: "🛡️"
+    match: '\[Hidden in the Depths\]'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Subspace Bubble"
+    description: "Use the Nether to travel 7 km in the overworld."
+    icon: "🚀"
+    match: '\[Subspace Bubble\]'
+    case_insensitive: true
+
+  - name: "Uneasy Alliance"
+    description: "Rescue a Ghast from the Nether, bring it safely home to the overworld... and kill it."
+    icon: "🫂"
+    match: '\[Uneasy Alliance\]'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Cover Me in Debris"
+    description: "Get a full set of netherite armor."
+    icon: "✨"
+    match: '\[Cover Me in Debris\]'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Beaconator"
+    description: "Create and place a Beacon."
+    icon: "🗼"
+    match: '\[Beaconator\]'
+    case_insensitive: true
+
+
+  # ======================================================================
+  # ADVENTURE (Aventure)
+  # ======================================================================
+  - name: "Monster Hunter"
+    description: "Kill any hostile monster."
+    icon: "⚔️"
+    match: '\[Monster Hunter\]'
+    case_insensitive: true
+
+  - name: "Hero of the Village"
+    description: "Successfully defend a village from a raid."
+    icon: "🛡️"
+    match: '\[Hero of the Village\]'
+    case_insensitive: true
+
+  - name: "Adventuring Time"
+    description: "Discover every overworld biome."
+    icon: "🗺️"
+    match: '\[Adventuring Time\]'
+    case_insensitive: true
+
+  - name: "Sniper Duel"
+    description: "Kill a Skeleton from at least 50 metres away."
+    icon: "🏹"
+    match: '\[Sniper Duel\]'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Bullseye"
+    description: "Hit the bullseye of a Target block from at least 30 metres away."
+    icon: "🎯"
+    match: '\[Bullseye\]'
+    case_insensitive: true
+    hidden: true
+
+
+  # ======================================================================
+  # HUSBANDRY (Élevage et agriculture)
+  # ======================================================================
+  - name: "Tactical Fishing"
+    description: "Catch a fish... without a fishing rod!"
+    icon: "🐟"
+    match: '\[Tactical Fishing\]'
+    case_insensitive: true
+
+  - name: "Two by Two"
+    description: "Breed all the animals!"
+    icon: "❤️"
+    match: '\[Two by Two\]'
+    case_insensitive: true
+
+  - name: "A Complete Catalogue"
+    description: "Tame all cat variants."
+    icon: "🐱"
+    match: '\[A Complete Catalogue\]'
+    case_insensitive: true
+
+  - name: "A Balanced Diet"
+    description: "Eat everything that is edible, even if it's not good for you."
+    icon: "🍎"
+    match: '\[A Balanced Diet\]'
+    case_insensitive: true
+    hidden: true
+
+
+  # ======================================================================
+  # THE END (L'End)
+  # ======================================================================
+  - name: "Free the End"
+    description: "Defeat the Ender Dragon."
+    icon: "🐉"
+    match: '\[Free the End\]'
+    case_insensitive: true
+    hidden: true
+
+  - name: "The Next Generation"
+    description: "Respawn the Ender Dragon."
+    icon: "🌠"
+    match: '\[The Next Generation\]'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Remote Getaway"
+    description: "Access an End gateway."
+    icon: "🛸"
+    match: '\[Remote Getaway\]'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Sky's the Limit"
+    description: "Find Elytra."
+    icon: "🪽"
+    match: '\[Sky.s the Limit\]'
+    case_insensitive: true
+    hidden: true
