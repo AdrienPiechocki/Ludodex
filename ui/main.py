@@ -27,8 +27,7 @@ class Win(PickViewMixin, LibraryMixin, RetroMixin, NotesMixin, AchievementsMixin
         _install_css()
         self.con = P.db()
         moved = P.import_all(self.con) if do_import else []  # met aussi à jour temps de jeu, sessions et rangement
-        self.pool, self.current = [], None
-        self.pool_inst, self.pool_owned, self.pick_stage = [], [], None
+        self.pool, self.current, self._tires = [], None, set()
         self.mood_selected, self._mood_opts = set(), None
         self.show_hidden = P.get_setting(self.con, "show_hidden") == "1"  # réglage mémorisé
         self.show_not_installed = P.shows_not_installed(self.con)  # jeux possédés non installés

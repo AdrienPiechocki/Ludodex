@@ -192,6 +192,83 @@ def roulette_rogne(longueur, rang, a_gauche=4, a_droite=2):
     return premier, dernier, rang - premier
 
 
+def roulette_centre(rang, largeur, pas, largeur_jaquette):
+    """Offset qui place la case `rang` au centre d'un cadre de `largeur`.
+
+    Peut être NÉGATIF : la case demandée tombe alors en deçà du début de la
+    bande, laissant du vide à gauche — c'est même la seule façon de centrer la
+    case 0 d'une bande plus courte que le cadre (un seul jeu éligible), un
+    plafond à zéro y laissant la jaquette collée au bord, à 460 px du centre.
+
+    `largeur` entre dans le calcul : la cible n'est donc pas une valeur figée,
+    elle doit être RELUE à chaque changement de largeur du cadre — voir
+    `roulette_delta_largeur`.
+    """
+    return rang * pas + largeur_jaquette / 2 - largeur / 2
+
+
+def roulette_delta_largeur(largeur_avant, largeur_apres):
+    """Décalage d'offset provoqué par un changement de largeur du cadre.
+
+    L'offset centré vaut `K − largeur/2` (voir `roulette_centre`) : quand le
+    cadre change de `Δ`, la cible bouge de `−Δ/2` et l'offset doit suivre AU
+    PAS, sinon le gagnant dérive d'autant.
+
+    Mesuré sur la vraie fenêtre — à l'arrêt, offset = cible = 7107 pour une
+    largeur de 1244. Agrandie à 1664, la cible tombe à 6897 mais l'offset ne
+    bougeait pas : le gagnant dérivait de 210 px, soit exactement Δ/2. C'était
+    le défaut « quand je redimensionne, la roulette n'est plus centrée ».
+
+    Le décalage vaut pour l'offset ET pour les bornes de l'animation en vol
+    (`depart` et `cible`) : si elles ne suivent pas, le tick suivant remet
+    l'offset à l'ancienne valeur et le gagnant atterrit hors centre.
+    """
+    return -(largeur_apres - largeur_avant) / 2
+
+
+def tirer_candidats(pool, tires=frozenset(), courant=None):
+    """Jeux tirables ce tour-ci : tout le `pool`, moins ceux déjà montrés.
+
+    Le bassin ne se vide JAMAIS. Épuiser le réservoir — ce que fait la boucle du
+    CLI `pick()`, qui n'affiche qu'un jeu à la fois — y coûte rien, mais ici le
+    bassin sert aussi à composer la BANDE VISIBLE du carrousel : le vider faisait
+    dégénérer celle-ci, mesuré sur le tag « voxel » (4 jeux éligibles) — les
+    longueurs se succédaient en 7, 12, 10, 1, 6, 9 cases au fil des « Autre »,
+    la bande ne présentait que 3 jeux distincts sur 4, et un réservoir tombé à 1
+    déclenchait le raccourci « un seul jeu éligible » sur un filtre qui en
+    laissait quatre. C'est `tires`, l'ensemble des jeux déjà montrés, qui
+    s'épuise — jamais `pool`.
+
+    Règles, dans l'ordre :
+    1. on écarte les jeux déjà montrés ;
+    2. s'ils le sont TOUS, on entame un nouveau tour — en n'écartant QUE le
+       gagnant sortant, de sorte que les quatre passent en revue avant toute
+       répétition ;
+    3. sinon, si le réservoir compte plus d'un jeu, on écarte aussi le gagnant
+       sortant, pour ne jamais remettre le même deux fois de suite.
+
+    Un seul jeu éligible reste toujours tirable : aucune règle ne s'y applique,
+    faute d'alternative.
+
+    Renvoie `(candidats, tires)` — `tires` DOIT être repris au tour suivant : la
+    règle 2 le réinitialise, et c'est ce qui entame le tour suivant. Le lire par
+    valeur, jamais en le vidant côté appelant, sinon il ne se réinitialise jamais
+    et la règle 2 ne joue qu'une fois.
+    """
+    tires = set(tires)
+    reste = [p for p in pool if p[0]["id"] not in tires]
+    if not reste:                       # tout est passé en revue : on repart,
+        tires = {courant} if courant is not None else set()  # sans le répéter
+        reste = [p for p in pool if p[0]["id"] not in tires]
+    elif len(reste) > 1 and courant is not None:
+        sans_courant = [p for p in reste if p[0]["id"] != courant]
+        if sans_courant:                # le seul autre jeu EST le sortant
+            reste = sans_courant
+    if not reste:                       # un seul jeu éligible, déjà montré et
+        reste = list(pool)              # sortant : impossible de l'écarter
+    return reste, tires
+
+
 def pick(con, minutes, mood, collection=None, mood_mode="any", exclude=None):
     if exclude is None:
         exclude = excluded_tags(con)

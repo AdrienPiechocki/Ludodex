@@ -46,6 +46,8 @@ class RouletteBande(Gtk.Widget):
         super().__init__()
         self.set_overflow(Gtk.Overflow.HIDDEN)
         self._pics, self._offset, self._pas = [], 0.0, ROULETTE_L + ROULETTE_ESPACEMENT
+        self._largeur = 0                  # largeur du cadre à la dernière allocation
+        self._sur_largeur = None           # callable(décalage) : la vue suit le centre
 
     # -- contenu -------------------------------------------------------------
     def _creer_pic(self, g):
@@ -120,8 +122,11 @@ class RouletteBande(Gtk.Widget):
 
         Peut être NÉGATIF : la case demandée tombe alors en deçà du début de la
         bande. Voir `set_offset` — un plafond à zéro laissait la jaquette unique
-        collée au bord gauche, à 460 px du centre."""
-        return rang * self._pas + ROULETTE_L / 2 - self.get_width() / 2
+        collée au bord gauche, à 460 px du centre.
+
+        La formule est dans `core/pick.py` : elle dépend de la LARGEUR, et
+        `do_size_allocate` doit la relire à chaque changement de celle-ci."""
+        return P.roulette_centre(rang, self.get_width(), self._pas, ROULETTE_L)
 
     # -- protocolles GTK -----------------------------------------------------
     def do_measure(self, orientation, for_size):
@@ -134,7 +139,21 @@ class RouletteBande(Gtk.Widget):
         NON `allocate` : `allocate` est le nom de la fonction publique, celui du
         vfunc de classe est `size_allocate` — un `do_allocate` est ignoré EN
         SILENCE, les enfants restent à 0×0 alors que le parent se croit dimensionné
-        (vérifié : les jaquettes alors invisibles, sans la moindre trace d'erreur)."""
+        (vérifié : les jaquettes alors invisibles, sans la moindre trace d'erreur).
+
+        C'est aussi ICI que le cadre suit un redimensionnement de la fenêtre.
+        L'offset exprime une position CENTRÉE, `K − largeur/2` : la largeur
+        changeant, le centre bouge de Δ/2 et l'offset doit suivre. Sans cela, le
+        gagnant reste où il était — dérivant d'autant (mesuré : 210 px après un
+        agrandissement de 420). La première allocation est écartée, `self._largeur`
+        valant 0 : il n'y a pas de centre à suivre tant que le cadre n'a jamais
+        été dimensionné."""
+        if self._largeur and width != self._largeur:
+            decal = P.roulette_delta_largeur(self._largeur, width)
+            self._offset += decal
+            if self._sur_largeur:      # les bornes de l'animation dépendent aussi
+                self._sur_largeur(decal)   # de la largeur : elles doivent suivre
+        self._largeur = width
         y = max(0, (height - ROULETTE_H) // 2)
         base = Gsk.Transform().translate(Graphene.Point().init(-self._offset, y))
         for i, pic in enumerate(self._pics):
@@ -216,6 +235,11 @@ class PickViewMixin:
         # et le jeu tiré s'immobilise au centre, seul déflouté. Avant tout tirage,
         # la même zone montre simplement l'invite (pile d'écran « vide »).
         self.roulette_bande = RouletteBande()
+        # La bande suit déjà son propre offset quand la fenêtre change de largeur ;
+        # elle prévient aussi ici, pour que les BORNES de l'animation suivent.
+        # Sans quoi le tick suivant remettrait l'offset à l'ancienne valeur et le
+        # gagnant atterrit hors centre.
+        self.roulette_bande._sur_largeur = self._bordure_a_change
         self.status_page = Adw.StatusPage(icon_name="input-gaming-symbolic", title=tr("What to play?"),
                                           description=tr("Press the button and the app decides."),
                                           height_request=ROULETTE_H + 40, vexpand=True)
@@ -266,7 +290,7 @@ class PickViewMixin:
 
     def _reset_pick(self):
         """Changer un filtre du tirage annule la proposition en cours."""
-        self.pool, self.current = [], None
+        self.pool, self.current, self._tires = [], None, set()
         self._arreter_roulette()
         self._vide_roulette()
         self.pick_zone.set_visible_child_name("vide")
@@ -433,18 +457,27 @@ class PickViewMixin:
             self.toasts.add_toast(Adw.Toast.new(tr("Nothing eligible")))
             return
         self.current = None
+        self._tires = set()
         self._propose()
 
     def _propose(self):
-        if not self.pool:  # reservoir epuise : on recycle tout le bassin
+        if not self.pool:  # bassin perdu (filtre changé) : on le retélécharge
             self.pool = self._eligible_pool(self.pick_owned)
-            if self.current and len(self.pool) > 1:  # eviter la repetition immediate
-                self.pool = [p for p in self.pool if p[0]["id"] != self.current["id"]]
+            self._tires = set()
         if not self.pool:
             self.toasts.add_toast(Adw.Toast.new(tr("Nothing eligible")))
             return
-        g = random.choices([p[0] for p in self.pool], [p[1] for p in self.pool])[0]
+        # Le bassin n'est PAS épuisé au fil des « Autre » : il sert aussi à
+        # composer la bande. C'est `tirer_candidats` qui écarte les jeux déjà
+        # montrés et le gagnant sortant.
+        tirables, self._tires = P.tirer_candidats(
+            self.pool, self._tires, self.current["id"] if self.current else None)
+        if not tirables:
+            self.toasts.add_toast(Adw.Toast.new(tr("Nothing eligible")))
+            return
+        g = random.choices([p[0] for p in tirables], [p[1] for p in tirables])[0]
         self.current = g
+        self._tires.add(g["id"])
         self.pick_stack.set_visible_child_name("proposal")   # on quitte l'écran des filtres
         self._montrer_jeu(g)               # la bande défile, le nom n'apparaît qu'à l'arrêt
 
@@ -646,6 +679,21 @@ class PickViewMixin:
             return False
         return True
 
+    def _bordure_a_change(self, decal):
+        """Le cadre a changé de largeur pendant un défilement.
+
+        La bande a déjà décalé son offset de `decal` (−Δ/2) ; les bornes de
+        l'animation doivent suivre, sinon le tick suivant — 16 ms plus tard —
+        recalcule l'offset à partir des anciennes bornes et annule le décalage :
+        le gagnant atterrit alors hors centre, exactement le défaut signalé.
+        `depart` et `cible` ne servent qu'au calcul de l'interpolation, leur
+        décaler tous les deux ne bouge pas la trajectoire, seulement son repère.
+        """
+        if getattr(self, "_roulette_anim", None) is None:
+            return
+        depart, cible, debut = self._roulette_anim
+        self._roulette_anim = (depart + decal, cible + decal, debut)
+
     def _arreter_roulette(self):
         if getattr(self, "_spin_id", None) is not None:
             GLib.source_remove(self._spin_id)
@@ -683,7 +731,10 @@ class PickViewMixin:
             self.toasts.add_toast(Adw.Toast.new(tr("No store page for this game.")))
 
     def _on_other(self, *_):
-        self.pool = [p for p in self.pool if p[0]["id"] != self.current["id"]]
+        # On ne vide PAS le bassin : la bande visible en est composée, et le
+        # vider faisait dégénérer le carrousel (longueurs 7, 12, 10, 1, 6, 9 et
+        # 3 jeux distincts sur 4 éligibles, mesurés sur le tag « voxel »).
+        # C'est `tirer_candidats`, via `_tires`, qui évite les répétitions.
         self._propose()
 
     def _launch(self, g):
