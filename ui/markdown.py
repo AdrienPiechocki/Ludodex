@@ -23,8 +23,9 @@ HEADING_SCALE = {1: 1.6, 2: 1.4, 3: 1.2, 4: 1.1, 5: 1.1, 6: 1.0}
 
 # Un élément : `kind` = style à appliquer au contenu (ou None) ;
 # `cstart`/`cend` = bornes du contenu ; `markers` = portions de syntaxe à masquer ;
-# `block` = vrai pour un marqueur de bloc (titre, citation) qu'on révèle dès que
-# le curseur est sur la ligne.
+# `block` = vrai pour un marqueur de bloc (titre, citation) qui occupe toute la
+# tête de ligne ; la révélation suit la règle générale : marqueur exact sous le
+# curseur (voir `markers_revealed`).
 Element = namedtuple("Element", "kind cstart cend markers block")
 # `task` : (début, fin, coché) de la case à cocher `[ ]`/`[x]`, sinon None.
 Line = namedtuple("Line", "elements indent marker checked task", defaults=(None,))
@@ -141,6 +142,25 @@ def heading_text(raw):
     """Texte d'un titre (`## Toto` -> « Toto »), sinon None."""
     m = _HEADING.match(raw)
     return raw[m.end():].strip() if m else None
+
+
+def heading_level(raw):
+    """Niveau du titre (1-6), sinon 0 (pas un titre)."""
+    m = _HEADING.match(raw)
+    return len(m.group(1)) if m else 0
+
+
+def markers_revealed(markers, cursor_col):
+    """Le curseur est-il posé EXACTEMENT sur l'un des marqueurs ?
+
+    Bornes comprises des deux côtés : la position juste avant le premier
+    caractère et celle juste après le dernier comptent (on les tapait il y a un
+    instant), pas celle d'après — tapant « # Titre », les dièses se masquent
+    dès qu'on entre dans le titre. Hors marqueur (colonne négative comprise,
+    curseur sur une autre ligne), la syntaxe reste cachée."""
+    if cursor_col < 0:
+        return False
+    return any(a <= cursor_col <= b for a, b in markers)
 
 
 def heading_slug(text):

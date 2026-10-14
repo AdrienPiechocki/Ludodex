@@ -1,9 +1,11 @@
 """notes.py — page « Notes » : une note Markdown par jeu, avec aperçu en direct.
 
-Comme dans Obsidian, chaque ligne est rendue (mise en forme Markdown, marqueurs
-masqués) sauf la ligne où se trouve le curseur, qui affiche le source brut. Le
-buffer contient toujours le Markdown d'origine : l'aperçu n'est qu'une pose de
-balises `GtkTextTag`, recalculée à chaque frappe et chaque déplacement du curseur.
+Comme dans Obsidian, la syntaxe reste cachée : un marqueur (`#`, `**`, `>`…) ne
+réapparaît que le moment où le curseur est posé exactement dessus, le reste de
+la ligne restant rendu. Le buffer contient toujours le Markdown d'origine :
+l'aperçu n'est qu'une pose de balises `GtkTextTag`, recalculée à chaque frappe
+et chaque déplacement du curseur. Un sommaire (colonne dépliable à droite de
+l'éditeur, indentation par niveau) permet de naviguer dans la note.
 """
 import math
 import re
@@ -17,8 +19,8 @@ from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango
 
 import picker as P
 from i18n import tr
-from .markdown import (HEADING_SCALE, anchor_matches, heading_text, is_fence,
-                       line_elements, link_at, task_at)
+from .markdown import (HEADING_SCALE, anchor_matches, heading_level, heading_text,
+                       is_fence, line_elements, link_at, markers_revealed, task_at)
 
 NOTE_SAVE_DELAY = 600  # ms d'inactivité avant d'enregistrer une note
 
@@ -84,6 +86,23 @@ class NotesMixin:
         title_row.append(self.note_title)
         title_row.append(self.note_help_btn)
         self.note_subtitle = Gtk.Label(xalign=0, css_classes=["dim-label"])
+        # Sommaire : colonne dépliable à DROITE de l'éditeur — une ligne par
+        # titre, indentée par niveau ; le clic y amène le curseur.
+        self._toc_open = True                     # la colonne s'ouvre sur les notes titrées
+        self._toc_key = []
+        self.toc_toggle = Gtk.ToggleButton(icon_name="view-list-symbolic", valign=Gtk.Align.CENTER,
+                                           css_classes=["flat"], sensitive=False,  # pas de titre : inactif, jamais muet
+                                           active=True,  # la colonne est ouverte par défaut
+                                           tooltip_text=tr("No heading in this note"))
+        self.toc_toggle.connect("toggled", self._on_toc_toggled)
+        title_row.append(self.toc_toggle)
+        title_row.append(self.note_help_btn)
+        self.toc_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE,
+                                    css_classes=["navigation-sidebar"])
+        self.toc_list.connect("row-selected", self._on_toc_row)
+        self.toc_panel = Gtk.ScrolledWindow(child=self.toc_list, vexpand=True, width_request=200,
+                                            hscrollbar_policy=Gtk.PolicyType.NEVER)
+        self.toc_panel.set_visible(False)
         self.note_view = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, vexpand=True,
                                       top_margin=8, bottom_margin=8, left_margin=10, right_margin=10)
         self.note_buffer = self.note_view.get_buffer()
@@ -116,13 +135,20 @@ class NotesMixin:
                          margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
         for w in (title_row, self.note_subtitle, editor_scroll):
             editor.append(w)
+        notes_paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
+        notes_paned.set_start_child(editor)
+        notes_paned.set_end_child(self.toc_panel)
+        notes_paned.set_resize_start_child(True)
+        notes_paned.set_shrink_start_child(True)
+        notes_paned.set_resize_end_child(False)      # la colonne garde sa largeur
+        notes_paned.set_shrink_end_child(False)
 
         self.notes_empty = Adw.StatusPage(icon_name="document-edit-symbolic", vexpand=True,
                                           title=tr("Your notes"),
                                           description=tr("Pick a game on the left to write a note."))
         self.notes_right = Gtk.Stack()
         self.notes_right.add_named(self.notes_empty, "empty")
-        self.notes_right.add_named(editor, "editor")
+        self.notes_right.add_named(notes_paned, "editor")
         self.notes_right.set_visible_child_name("empty")
 
         paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
@@ -237,6 +263,7 @@ class NotesMixin:
             for name in self._md_tag_names:
                 buf.remove_tag_by_name(name, start, end)
             self._note_tasks = []
+            tocs = []
             ins = buf.get_iter_at_mark(buf.get_insert())
             cursor_line = ins.get_line()
             count = buf.get_line_count()
@@ -252,6 +279,10 @@ class NotesMixin:
                     in_code = not in_code
                     continue
                 cursor_col = ins.get_offset() - ls.get_offset() if lineno == cursor_line else -1
+                if not in_code:
+                    lvl = heading_level(raw)
+                    if lvl:
+                        tocs.append((lineno, lvl, heading_text(raw) or ""))
                 line = line_elements(raw, in_code)
                 for el in line.elements:
                     if self._hide_markers(el, lineno, cursor_line, cursor_col):
@@ -261,10 +292,13 @@ class NotesMixin:
                         self._apply_tag(buf, ls, f"md-{el.kind}", el.cstart, el.cend)
                 if line.indent:
                     self._apply_tag(buf, ls, f"md-indent{line.indent}", 0, le.get_offset() - ls.get_offset())
+                task_open = False
                 if line.task:
                     ts, te, checked = line.task
-                    if lineno == cursor_line:
-                        # curseur sur la ligne : la syntaxe brute reste visible et modifiable (Obsidian)
+                    # La syntaxe `[ ]` brute ne réapparaît que sous le curseur
+                    # exact ; partout ailleurs, la vraie case prend sa place.
+                    task_open = markers_revealed([(ts, te)], cursor_col)
+                    if task_open:
                         if line.marker:
                             self._apply_tag(buf, ls, "md-list", *line.marker)
                     else:
@@ -275,8 +309,9 @@ class NotesMixin:
                         self._note_tasks.append((ls.get_offset() + start, ls.get_offset() + te, checked))
                 elif line.marker:
                     self._apply_tag(buf, ls, "md-list", *line.marker)
-                if line.checked and lineno != cursor_line:   # pas de surlignage en édition
+                if line.checked and not task_open:   # barré masqué tant que `[ ]` n'est pas sous le curseur
                     self._apply_tag(buf, ls, "md-checked", *line.checked)
+            self._set_toc(tocs)
         finally:
             self._md_applying = False
             self.note_check_area.queue_draw()
@@ -285,16 +320,53 @@ class NotesMixin:
     def _hide_markers(el, lineno, cursor_line, cursor_col):
         """Faut-il masquer les marqueurs de cet élément ?
 
-        On les révèle (donc renvoie False) quand le curseur est dessus : sur la
-        ligne pour un marqueur de bloc (`#`, `>`), à l'intérieur pour une mise en
-        forme en ligne (`**`, `*`, `` ` ``…)."""
-        if el.block:
-            return lineno != cursor_line
-        if cursor_col < 0 or not el.markers:
-            return True
-        xs = [el.cstart, el.cend] + [a for a, b in el.markers]
-        ys = [el.cstart, el.cend] + [b for a, b in el.markers]
-        return not (min(xs) <= cursor_col < max(ys))
+        La syntaxe reste masquée tant que le curseur n'est pas posé EXACTEMENT
+        sur elle — marqueur de bloc (`#`, `>`) comme mise en forme en ligne
+        (`**`, `*`, `` ` ``…) : on ne voit les `#` d'un titre que le moment d'y
+        écrire ou d'y revenir."""
+        return not markers_revealed(el.markers, cursor_col)
+
+    # ---------- sommaire ----------
+    def _set_toc(self, entries):
+        """Remplit la colonne du sommaire ; ne la refait que si les titres ont bougé.
+
+        `entries` : liste de (numéro de ligne, niveau, texte), dans l'ordre.
+        L'indentation suit le niveau : `Titre 1` / `  Titre 2` / `    Titre 3`."""
+        key = [(lvl, txt) for _ln, lvl, txt in entries]
+        if key == getattr(self, "_toc_key", []):
+            return
+        self._toc_key = key
+        while self.toc_list.get_first_child() is not None:
+            self.toc_list.remove(self.toc_list.get_first_child())
+        for lineno, lvl, txt in entries:
+            row = Gtk.ListBoxRow()
+            row.set_child(Gtk.Label(label=txt, xalign=0, ellipsize=Pango.EllipsizeMode.END,
+                                    margin_start=6 + 12 * (lvl - 1), margin_top=3, margin_bottom=3,
+                                    tooltip_text=tr("Jump to “{t}”", t=txt)))
+            row._lineno = lineno
+            self.toc_list.append(row)
+        self.toc_toggle.set_sensitive(bool(entries))
+        self.toc_toggle.set_tooltip_text(
+            tr("Table of contents") if entries else tr("No heading in this note"))
+        self._update_toc_visibility()
+
+    def _on_toc_toggled(self, btn):
+        self._toc_open = btn.get_active()
+        self._update_toc_visibility()
+
+    def _update_toc_visibility(self):
+        """La colonne ne monte que s'il y a des titres ET qu'elle est dépliée."""
+        self.toc_panel.set_visible(self._toc_open and bool(self._toc_key))
+
+    def _on_toc_row(self, _listbox, row):
+        """Clic sur une ligne du sommaire : curseur + défilement sur le titre."""
+        if row is None:                      # sélection perdue au rebuild : rien à faire
+            return
+        buf = self.note_buffer
+        it = buf.get_iter_at_line(min(row._lineno, buf.get_line_count() - 1))[1]
+        buf.place_cursor(it)
+        self.note_view.scroll_to_iter(it, 0.0, 0.0, 0.0, False)
+        self.note_view.grab_focus()
 
     @staticmethod
     def _apply_tag(buf, line_start, name, a, b):
@@ -755,6 +827,7 @@ class NotesMixin:
     def _clear_note_editor(self):
         self.notes_game_id = None
         self._note_dirty = False
+        self._set_toc([])
         self.notes_right.set_visible_child_name("empty")
 
     # ---------- édition et enregistrement ----------
