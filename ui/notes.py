@@ -84,7 +84,8 @@ class NotesMixin:
         self.note_help_btn.connect("clicked", self._on_note_help)
         title_row = Gtk.Box(spacing=6)
         title_row.append(self.note_title)
-        title_row.append(self.note_help_btn)
+        # Le bouton d'aide n'est ajouté qu'APRÈS le bouton du sommaire (plus bas) :
+        # ajouté ici ET là, il serait parenté deux fois (gtk_box_append: critical).
         self.note_subtitle = Gtk.Label(xalign=0, css_classes=["dim-label"])
         # Sommaire : colonne dépliable à DROITE de l'éditeur — une ligne par
         # titre, indentée par niveau ; le clic y amène le curseur.
