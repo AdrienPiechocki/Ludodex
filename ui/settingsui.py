@@ -418,8 +418,8 @@ class SettingsMixin:
         return False
 
     def _on_covers(self, *_):
-        if not P.sgdb_key():
-            return self._toast_settings(tr("Enter the API key first (then confirm with ✓)"))
+        # Pas de garde sur la clé : le CDN de Steam fournit sans clé, les jeux Steam
+        # sont donc couverts même quand SteamGridDB est hors d'atteinte.
         if getattr(self, "_covering", False):
             return self._toast_settings(tr("Already fetching"))
         self._covering = True
@@ -437,7 +437,14 @@ class SettingsMixin:
                 con = P.db()
                 con.execute("UPDATE games SET cover_fetched=0 WHERE cover_path=''")  # relance manuelle : on retente tout
                 con.commit()
-                n = P.fetch_missing_covers(con, limit=500, progress=progress)
+                # `include_not_installed=True` : c'est un geste EXPLICITE de
+                # l'utilisateur qui demande toutes les couvertures manquantes. Sans
+                # lui, la boucle limite à `installed=1` — et les 236 démos de la
+                # base ne sont JAMAIS installées : elles restaient hors d'atteinte,
+                # malgré le retrait du « Demo » qui leur trouvait pourtant le jeu
+                # complet (mesuré : 15/25 couvertes une fois sélectionnées).
+                n = P.fetch_missing_covers(con, limit=500, progress=progress,
+                                           include_not_installed=True)
                 con.close()
             except Exception as e:
                 errors.append(str(e))
@@ -495,7 +502,7 @@ class SettingsMixin:
         return False
 
     def _fetch_covers_bg(self, include_not_installed=False):
-        if not P.sgdb_key() or getattr(self, "_covering", False):
+        if getattr(self, "_covering", False):
             return
         self._covering = True
 

@@ -349,13 +349,25 @@ def steam_id64(con):
     return steam_id_setting(con) or detect_steam_id64()
 
 
-def steam_appid(con, gid):
-    """Appid du jeu (`source='steam'`), ou None : une autre origine n'a pas
-    d'équivalent Steam, et un `ext_id` non numérique n'est pas un appid."""
-    r = con.execute("SELECT source, ext_id FROM games WHERE id=?", (gid,)).fetchone()
-    if r is None or r["source"] != "steam" or not r["ext_id"].isdigit():
+def steam_appid_of(g):
+    """Appid lisible dans une ligne de `games`, ou None : une autre origine n'a pas
+    d'équivalent Steam, et un `ext_id` non numérique n'est pas un appid (commande,
+    chemin de ROM, JSON…) — l'appid ne sert qu'à bâtir une URL, mieux vaut ne pas
+    en fabriquer une au hasard."""
+    try:
+        source, ext = g["source"], g["ext_id"]
+    except (IndexError, KeyError, TypeError):
         return None
-    return int(r["ext_id"])
+    if source != "steam" or not str(ext or "").isdigit():
+        return None
+    return int(ext)
+
+
+def steam_appid(con, gid):
+    """Appid du jeu, ou None. La règle tient dans `steam_appid_of`, lue aussi par
+    les couvertures : une seule définition de « c'est un appid »."""
+    r = con.execute("SELECT source, ext_id FROM games WHERE id=?", (gid,)).fetchone()
+    return steam_appid_of(r) if r is not None else None
 
 
 def appmanifest_path(appid):

@@ -166,9 +166,7 @@ def main():
             print(tr("[{source}] {name}: {state} | attempt: {fetched} | SGDB id: {sgdb}",
                   source=g["source"], name=g["name"], state=state, fetched=fetched, sgdb=g["sgdb_id"] or "-"))
     elif args.cmd == "covers":
-        if not sgdb_key():
-            raise SystemExit(tr("No API key: set STEAMGRIDDB_API_KEY (at the top of picker.py or as an environment variable)."))
-        if args.retry:
+        if args.retry:  # sans clé, le CDN de Steam s'en charge quand même
             con.execute("UPDATE games SET cover_fetched=0 WHERE cover_path=''")
             con.commit()
         print(tr("{n} cover(s) fetched", n=fetch_missing_covers(con, args.limit, progress=print)))
