@@ -683,9 +683,7 @@ class LibraryMixin:
 
     def _open_add_game(self, *_):
         win = Adw.Dialog(content_width=440, title=tr("Add a game"))
-        group = Adw.PreferencesGroup(
-            description=tr("E.g. prismlauncher --launch \"Minecraft\", or the path to an AppImage or script."),
-            margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
+        group = Adw.PreferencesGroup(margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
         name = Adw.EntryRow(title=tr("Name"))
         cmd = Adw.EntryRow(title=tr("Executable or launch command"))
         browse = Gtk.Button(icon_name="document-open-symbolic", valign=Gtk.Align.CENTER,
@@ -715,7 +713,7 @@ class LibraryMixin:
                 if not name.get_text().strip():  # nom proposé d'après le fichier
                     base = path.replace("\\", "/").rsplit("/", 1)[-1]
                     name.set_text(base[:-9] if base.lower().endswith(".appimage") else base)
-            dlg.open(win, None, done)
+            dlg.open(self, None, done)  # parent = la fenêtre : FileDialog.open() refuse un Adw.Dialog
         browse.connect("clicked", on_browse)
 
         def on_add(*_):

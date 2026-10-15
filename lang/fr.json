@@ -57,7 +57,6 @@
   "“{title}” added": "« {title} » ajouté",
   "Choose the executable": "Choisir l'exécutable",
   "Choose the executable or AppImage": "Choisir l'exécutable ou l'AppImage",
-  "E.g. prismlauncher --launch \"Minecraft\", or the path to an AppImage or script.": "Ex : prismlauncher --launch \"Minecraft\", ou le chemin d'une AppImage ou d'un script.",
   "Language": "Langue",
   "Show hidden games": "Afficher les jeux masqués",
   "Show not installed games": "Afficher les jeux non installés",
