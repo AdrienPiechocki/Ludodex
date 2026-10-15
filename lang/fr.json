@@ -422,5 +422,8 @@
   "Its files leave your computer. The game stays in Ludodex until the next import.": "Ses fichiers quittent votre ordinateur. Le jeu reste dans Ludodex jusqu'à la prochaine importation.",
   "Uninstallation opened · the library updates on the next import": "Désinstallation ouverte · la bibliothèque se met à jour à la prochaine importation",
   "Couldn't open the uninstallation": "Impossible d'ouvrir la désinstallation",
-  "! couldn't open the uninstall: {e}": "! impossible d'ouvrir la désinstallation : {e}"
+  "! couldn't open the uninstall: {e}": "! impossible d'ouvrir la désinstallation : {e}",
+  "Open {name}": "Ouvrir {name}",
+  "Couldn't open the launcher": "Impossible d'ouvrir le lanceur",
+  "! couldn't open the launcher: {e}": "! impossible d'ouvrir le lanceur : {e}"
 }

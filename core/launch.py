@@ -243,6 +243,51 @@ def install(g):
     return True
 
 
+# Ce que le play d'une collection ouvre pour sa source : son CLIENT par le protocole
+# qu'il a déclaré lui-même (gestionnaire de schéma, Flatpak compris) — Steam ouvre sa
+# fenêtre par `steam://nav/games` (« Opens a Steam window » — Steam browser protocol) ;
+# Flatpak, qui n'a pas de client, ouvre le catalogue flathub.org dans le navigateur.
+LAUNCHER_URIS = {"steam": "steam://nav/games", "itch": "itch://",
+                 "heroic": "heroic://", "epic": "com.epicgames.launcher://",
+                 "gog": "goggalaxy://", "flatpak": "https://flathub.org"}
+
+
+def launcher_command(source, osname=None):
+    """Commande ouvrant le launcher de `source` (son client lui-même, pas un jeu),
+    ou None : cette source n'a rien à ouvrir — Imported est une commande arbitraire
+    de l'utilisateur. L'interface n'affiche le bouton que si ce rendu est non vide,
+    donc jamais de bouton muet."""
+    uri = LAUNCHER_URIS.get(source)
+    if uri:
+        return uri_command(uri, osname)
+    if source == "lutris":  # son protocole est rejeté (`lutris lutris://` sort en 1) : son binaire
+        exe = shutil.which("lutris")
+        if exe:
+            return [exe]
+        return None if platform.is_windows(osname) else ["flatpak", "run", "net.lutris.Lutris"]
+    if source == "retroarch":  # aucun protocole : son exécutable, PATH puis flatpak
+        exe = retroarch_exe(osname) or shutil.which("retroarch")
+        if exe:
+            return [exe]
+        return None if platform.is_windows(osname) else ["flatpak", "run", "org.libretro.RetroArch"]
+    return None
+
+
+def open_launcher(source):
+    """Ouvre le launcher de la plateforme de `source`. False si elle n'en a pas ou si
+    le spawn casse. Comme `install`, on ne peut pas savoir si le gestionnaire d'URI a
+    réellement trouvé le client — seule la sortie du processus le dirait, et l'attendre
+    bloquerait l'interface (xdg-open peut suivre le client jusqu'à la fermer)."""
+    cmd = launcher_command(source)
+    if cmd is None:
+        return False
+    e = _detached(cmd)
+    if e is not None:
+        print(tr("! couldn't open the launcher: {e}", e=e))
+        return False
+    return True
+
+
 _LEG_CACHE = {}
 
 

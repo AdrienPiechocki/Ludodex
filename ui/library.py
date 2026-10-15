@@ -407,6 +407,12 @@ class LibraryMixin:
         self._add_row_click(row)
         row.add_suffix(Gtk.Label(label=str(c["n"]), css_classes=["dim-label"], valign=Gtk.Align.CENTER))
         if c["kind"] == "auto":  # collection automatique : ni renommable ni supprimable
+            if P.launcher_command(c["auto_source"]):  # à droite du compte : ouvrir le client
+                play = Gtk.Button(icon_name="media-playback-start-symbolic", css_classes=["flat"],
+                                  valign=Gtk.Align.CENTER,
+                                  tooltip_text=tr("Open {name}", name=self._col_label(c)))
+                play.connect("clicked", lambda _b, src=c["auto_source"]: self._on_open_launcher(src))
+                row.add_suffix(play)
             return row
         pop = Gtk.Popover()
         menu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2,
@@ -544,6 +550,13 @@ class LibraryMixin:
                 self._refresh_collections()
         dlg.connect("response", on_resp)
         dlg.present(self)
+
+    def _on_open_launcher(self, source):
+        """Le play des collections automatiques : ouvrir le client de la plateforme
+        (Steam, Lutris…), lui-même et pas un jeu. Rien à dire quand ça réussit —
+        la fenêtre du client EST le retour. Toast seulement si le spawn a cassé."""
+        if not P.open_launcher(source):
+            self.toasts.add_toast(Adw.Toast.new(tr("Couldn't open the launcher")))
 
     def _on_show_hidden(self, chk):
         self.show_hidden = chk.get_active()
