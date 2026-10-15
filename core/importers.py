@@ -187,17 +187,26 @@ def _first(d, *keys, default=""):
 def parse_legendary(data):
     """Jeux installés d'un `installed.json` de Legendary/gogdl (Epic ou GOG via Heroic).
 
-    Accepte un dict {id: objet} ou une liste d'objets ; ignore ce qui n'est pas un objet.
+    Legendary écrit un dict plat {app_name: objet} ; gogdl (les GOG de Heroic)
+    enveloppe sa liste sous la clé `installed` et n'y écrit AUCUN titre — le nom
+    vient alors du dossier d'installation, sinon de l'identifiant. Un DLC marqué
+    `is_dlc` n'est pas un jeu : on l'écarte.
     """
+    if isinstance(data, dict) and isinstance(data.get("installed"), list):
+        data = data["installed"]
     items = data.items() if isinstance(data, dict) else ((None, e) for e in data) if isinstance(data, list) else []
     out = []
     for key, e in items:
-        if not isinstance(e, dict):
+        if not isinstance(e, dict) or e.get("is_dlc"):
             continue
         ext = _first(e, "app_name", "appName", "app_id", default=key or "")
         if not ext:
             continue
-        out.append({"ext_id": str(ext), "name": str(_first(e, "title", "name", "app_title", default=ext))})
+        nom = _first(e, "title", "name", "app_title")
+        if not nom:
+            chemin = _first(e, "install_path")
+            nom = pathlib.Path(str(chemin)).name if chemin else ext
+        out.append({"ext_id": str(ext), "name": str(nom)})
     return out
 
 
