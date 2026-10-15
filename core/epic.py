@@ -4,7 +4,8 @@ r"""epic.py — la SESSION DU LANCEUR Epic officiel sert à charger les jeux pos
 Le lanceur Epic ne range nulle part la liste de ce que l'utilisateur possède : ses
 seuls fichiers (`LauncherInstalled.dat`, les `*.item`) ne listent que les
 installations. Il garde en revanche SON PROPRE jeton de connexion, dans
-`GameUserSettings.ini` (`%LOCALAPPDATA%\EpicGamesLauncher\Saved\Config\Windows`),
+`GameUserSettings.ini` (dans le préfixe Wine :
+`drive_c/users/*/AppData/Local/EpicGamesLauncher/Saved/Config/Windows`),
 section `[RememberMe]`, clé `Data` : base64, dessous un JSON `[{...}]` — ou le même
 JSON chiffré AES-256-ECB avec la clé publiée à côté du lanceur. C'est exactement ce
 que `legendary auth --import` relit (« Import refresh token from EGL installation »,
@@ -21,8 +22,8 @@ Ce module fait donc trois choses, dans cet ordre de confiance :
    requête par jeu inconnu, donc en parallèle, la première fois seulement.
 
 Sans session — pas de lanceur, aucun jeton lisible, Epic qui refuse — on renvoie
-rien : hors Windows c'est le cas normal. Les pannes réelles (réseau) remontent,
-pour être annoncées par l'appelant.
+rien : sans lanceur Epic sous Wine, c'est le cas normal. Les pannes réelles
+(réseau) remontent, pour être annoncées par l'appelant.
 """
 import base64
 import json
@@ -64,9 +65,9 @@ class EpicError(Exception):
 
 # ---------- le jeton du lanceur ----------
 
-def settings_files(osname=None, env=None, home=None):
-    """`GameUserSettings.ini` du lanceur Epic officiel (Windows natif, ou via Wine)."""
-    return [d / "GameUserSettings.ini" for d in platform.epic_settings_dirs(osname, env, home)]
+def settings_files(env=None, home=None):
+    """`GameUserSettings.ini` du lanceur Epic officiel, lu dans le préfixe Wine."""
+    return [d / "GameUserSettings.ini" for d in platform.epic_settings_dirs(home=home)]
 
 
 def _section_value(texte, section, cle):
@@ -130,11 +131,11 @@ def _jeton_du_json(brut):
     return str(jeton) if jeton else None
 
 
-def cles_cache(osname=None, env=None, home=None):
+def cles_cache(env=None, home=None):
     """Clés de chiffrement mises en cache par `cles_de_legendary`, ou [] si le cache
     est absent ou illisible."""
     try:
-        data = json.loads((platform.data_dir(osname, env, home) / DATA_KEYS_CACHE_NAME)
+        data = json.loads((platform.data_dir(env, home) / DATA_KEYS_CACHE_NAME)
                           .read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return []
@@ -142,21 +143,21 @@ def cles_cache(osname=None, env=None, home=None):
     return [str(c) for c in cles if isinstance(c, str)] if isinstance(cles, list) else []
 
 
-def cles_de_legendary(fetch=None, osname=None, env=None, home=None):
+def cles_de_legendary(fetch=None, env=None, home=None):
     """Clés PUBLIÉES par legendary (`version.json` → `egl_config.data_keys`), mises
     en cache pour les imports suivants — la même source que `legendary auth --import`.
 
     La clé du `Data` change à chaque version du lanceur : sans ce repli, un lanceur
     mis à jour rend son jeton illisible et les possédés disparaissent en silence.
     Toute panne (réseau, réponse inattendue) retombe sur le cache sans crier."""
-    cles = cles_cache(osname, env, home)
+    cles = cles_cache(env, home)
     try:
         # timeout court : ce petit JSON ne vaut pas 15 s d'attente sur un réseau mort
         res = _http_json(LEGENDARY_VERSION_URL, timeout=5, fetch=fetch)
         publiees = res["egl_config"]["data_keys"]
         cles = list(dict.fromkeys(
             [*cles, *(str(c) for c in publiees if isinstance(c, str))]))
-        chemin = platform.data_dir(osname, env, home) / DATA_KEYS_CACHE_NAME
+        chemin = platform.data_dir(env, home) / DATA_KEYS_CACHE_NAME
         chemin.parent.mkdir(parents=True, exist_ok=True)
         temp = chemin.with_name(chemin.name + ".tmp")
         temp.write_text(json.dumps({"keys": cles}), encoding="utf-8")
@@ -166,13 +167,13 @@ def cles_de_legendary(fetch=None, osname=None, env=None, home=None):
     return cles
 
 
-def launcher_refresh_token(osname=None, env=None, home=None, fetch=None):
+def launcher_refresh_token(env=None, home=None, fetch=None):
     """Jeton de rafraîchissement du lanceur, lu EN LECTURE SEULE, ou None.
 
     Le champ est chiffré avec une clé qui change à chaque version du lanceur : on
     essaie celles embarquées, puis celles en cache, puis la publication de legendary
     — une panne réseau ne rend donc illisible qu'un jeton déjà inconnu des trois."""
-    for path in settings_files(osname, env, home):
+    for path in settings_files(env, home):
         try:
             texte = path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
@@ -181,9 +182,9 @@ def launcher_refresh_token(osname=None, env=None, home=None, fetch=None):
         if not valeur:
             continue
         jeton = (parse_remember_me(valeur)
-                 or parse_remember_me(valeur, keys=cles_cache(osname, env, home))
+                 or parse_remember_me(valeur, keys=cles_cache(env, home))
                  or parse_remember_me(
-                     valeur, keys=cles_de_legendary(fetch=fetch, osname=osname,
+                     valeur, keys=cles_de_legendary(fetch=fetch, 
                                                     env=env, home=home)))
         if jeton:
             return jeton
@@ -310,29 +311,29 @@ def _aes_ecb_decrypt(cle, brut):
 
 # ---------- la session ----------
 
-def session_path(osname=None, env=None, home=None):
+def session_path(env=None, home=None):
     """Notre propre session, dans NOTRE dossier de données (0600 : c'est un jeton)."""
-    return platform.data_dir(osname, env, home) / SESSION_NAME
+    return platform.data_dir(env, home) / SESSION_NAME
 
 
-def load_session(osname=None, env=None, home=None):
+def load_session(env=None, home=None):
     try:
-        data = json.loads(session_path(osname, env, home).read_text(encoding="utf-8"))
+        data = json.loads(session_path(env, home).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     return data if isinstance(data, dict) and data.get("access_token") else None
 
 
-def save_session(res, osname=None, env=None, home=None):
+def save_session(res, env=None, home=None):
     """Conserve la session retournée par oauth — y compris le jeton de rafraîchissement
     tourné, si Epic en a renvoyé un : c'est NOTRE session, plus jamais celle du
     lanceur qu'il faille retoucher."""
-    ancien = load_session(osname, env, home) or {}
+    ancien = load_session(env, home) or {}
     valide_jusqua = time.time() + float(res.get("expires_in") or 3600) - MARGE_SEC
     sess = {"access_token": res["access_token"],
             "refresh_token": res.get("refresh_token") or ancien.get("refresh_token"),
             "valid_until": valide_jusqua}
-    path = session_path(osname, env, home)
+    path = session_path(env, home)
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_name(path.name + ".tmp")
     temp.write_text(json.dumps(sess), encoding="utf-8")
@@ -341,9 +342,9 @@ def save_session(res, osname=None, env=None, home=None):
     return sess
 
 
-def clear_session(osname=None, env=None, home=None):
+def clear_session(env=None, home=None):
     try:
-        session_path(osname, env, home).unlink()
+        session_path(env, home).unlink()
     except OSError:
         pass
 
@@ -353,28 +354,28 @@ def _cache_key(asset):
     return f"{asset['namespace']}/{asset['catalog_id']}"
 
 
-def load_catalog_cache(osname=None, env=None, home=None):
+def load_catalog_cache(env=None, home=None):
     """Cache des titres déjà lus au catalogue : {clé, titre | null} — `null` veut dire
     « lu, mais pas un jeu » (DLC, jeton, moteur). C'est ce fichier qui empêche chaque
     démarrage de repayer le catalogue de tous les DLC : Playnite range la même chose
     dans `catalogcache`, legendary dans ses fichiers de métadonnées."""
     try:
-        data = json.loads(catalog_cache_path(osname, env, home).read_text(encoding="utf-8"))
+        data = json.loads(catalog_cache_path(env, home).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
     return data if isinstance(data, dict) else {}
 
 
-def save_catalog_cache(cache, osname=None, env=None, home=None):
-    path = catalog_cache_path(osname, env, home)
+def save_catalog_cache(cache, env=None, home=None):
+    path = catalog_cache_path(env, home)
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_name(path.name + ".tmp")
     temp.write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
     os.replace(temp, path)
 
 
-def catalog_cache_path(osname=None, env=None, home=None):
-    return platform.data_dir(osname, env, home) / CATALOG_CACHE_NAME
+def catalog_cache_path(env=None, home=None):
+    return platform.data_dir(env, home) / CATALOG_CACHE_NAME
 
 
 def _http_json(url, data=None, headers=None, timeout=15, fetch=None):
@@ -412,25 +413,25 @@ def start_session(refresh_token, fetch=None):
     return res
 
 
-def ensure_session(fetch=None, now=None, osname=None, env=None, home=None):
+def ensure_session(fetch=None, now=None, env=None, home=None):
     """Session valide : LA NOTRE d'abord, celle du lanceur seulement en repli.
 
     L'ordre compte : le fichier du lanceur n'est lu que quand nous n'avons plus rien
     de valable, ce qui limite à une fois par expire notre emprunt à sa session — on
     ne le modifie jamais, on ne fait que le LIRE."""
     now = time.time() if now is None else now
-    ancien = load_session(osname, env, home)
+    ancien = load_session(env, home)
     if ancien and float(ancien.get("valid_until") or 0) > now:
         return ancien
     candidats = list(dict.fromkeys(
         [t for t in ((ancien or {}).get("refresh_token"),
-                     launcher_refresh_token(osname, env, home, fetch=fetch)) if t]))
+                     launcher_refresh_token(env, home, fetch=fetch)) if t]))
     for jeton in candidats:
         try:
             res = start_session(jeton, fetch=fetch)
         except EpicError:  # jeton refusé : le suivant, sinon rien du tout
             continue
-        return save_session(res, osname, env, home)
+        return save_session(res, env, home)
     return None
 
 
@@ -542,7 +543,7 @@ def catalog_titles(access_token, assets, fetch=None, workers=6):
     return titres
 
 
-def epic_owned_games(known=(), fetch=None, workers=6, osname=None, env=None, home=None):
+def epic_owned_games(known=(), fetch=None, workers=6, env=None, home=None):
     """Jeux possédés sur Epic, via la session du LANCEUR -> [{ext_id, name}].
 
     Trois portes d'entrée, du moins cher au plus cher, et aucune ne se referme
@@ -553,20 +554,20 @@ def epic_owned_games(known=(), fetch=None, workers=6, osname=None, env=None, hom
     Pas de session : rien, en silence, sauf si le lanceur est présent sans jeton
     lisible, auquel cas c'est dit (un ami qui voit toujours sa bibliothèque vide a
     besoin de savoir pourquoi)."""
-    sess = ensure_session(fetch=fetch, osname=osname, env=env, home=home)
+    sess = ensure_session(fetch=fetch, env=env, home=home)
     if not sess:
-        if any(p.exists() for p in settings_files(osname, env, home)):
+        if any(p.exists() for p in settings_files(env, home)):
             print("! Epic Games : session impossible (jeton introuvable ou refusé)")
         return []
     try:
         records = fetch_library(sess["access_token"], fetch=fetch)
     except EpicError:
-        clear_session(osname, env, home)  # session refusée : on en reprend une neuve
-        sess = ensure_session(fetch=fetch, osname=osname, env=env, home=home)
+        clear_session(env, home)  # session refusée : on en reprend une neuve
+        sess = ensure_session(fetch=fetch, env=env, home=home)
         if not sess:
             raise
         records = fetch_library(sess["access_token"], fetch=fetch)
-    cache = load_catalog_cache(osname, env, home)
+    cache = load_catalog_cache(env, home)
     assets = [a for a in (parse_asset(r) for r in records)
               if a and a["ext_id"] not in known]
     manquants = [a for a in assets if _cache_key(a) not in cache]
@@ -577,7 +578,7 @@ def epic_owned_games(known=(), fetch=None, workers=6, osname=None, env=None, hom
             for a in manquants:
                 if a["ext_id"] in resultats:
                     cache[_cache_key(a)] = resultats[a["ext_id"]]
-            save_catalog_cache(cache, osname, env, home)
+            save_catalog_cache(cache, env, home)
     out = []
     for a in assets:
         titre = cache.get(_cache_key(a))

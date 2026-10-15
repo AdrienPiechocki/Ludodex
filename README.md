@@ -63,21 +63,9 @@ python3 gui.py          # graphical interface
 python3 picker.py --help  # command line
 ```
 
-### Windows
-
-`gi` (PyGObject) and `cairo` (PyCairo) ship **no Windows wheels on PyPI**, so `pip install pygobject` cannot work: GTK 4 and libadwaita have to come from [MSYS2](https://www.msys2.org/) (recommended, `docs/WINDOWS.md` has the gvsbuild alternative for a python.org interpreter).
-
-```bat
-setup-windows.bat        :: pacman: Python, PyGObject, PyCairo, PyYAML, GTK4, libadwaita, icons
-ludodex-cli.bat --help   :: command line, checks the install
-ludodex.bat              # graphical interface (pythonw.exe)
-```
-
-The launchers look for MSYS2 in `C:\msys64` (`ucrt64`, then `mingw64`) and set up `PATH` themselves.
-
 ### Standalone build (PyInstaller)
 
-`./build.sh` (Linux) or `build.bat` (Windows) produces `build/ludodex/` with `ludodex` (interface), `ludodex-cli` (CLI) and `_internal/` (embedded Python, GTK4, libadwaita and translations). See `ludodex.spec`; a bundle is only valid for the OS it was built on.
+`./build.sh` produces `build/ludodex/` with `ludodex` (interface), `ludodex-cli` (CLI) and `_internal/` (embedded Python, GTK4, libadwaita and translations). See `ludodex.spec`.
 
 ## Usage
 
@@ -120,9 +108,7 @@ python3 picker.py tracker status "OpenMW"
 
 ## Data
 
-The local database is a SQLite file:
-- Linux: `~/.local/share/ludodex/games.db`
-- Windows: `%LOCALAPPDATA%\ludodex\games.db`
+The local database is a SQLite file: `~/.local/share/ludodex/games.db`
 
 The data folder also holds the covers and the SteamGridDB API key. A legacy `gamepicker` folder is picked up automatically (once). Backup = copy `games.db`.
 
@@ -142,13 +128,10 @@ ui/           GTK4 interface: main, theme, pickview, library, retrospec,
               notes, markdown, achievements, settingsui
 lang/         translations (en = base, fr)
 examples/     sample files (e.g. openmw-achievements.yaml)
-share/        application logo: master PNG, hicolor sizes, Windows .ico
+share/        application logo: master PNG, hicolor sizes
 local.ludodex.desktop  Linux launcher (installed to ~/.local/share/applications)
 build.sh      standalone PyInstaller build (ludodex.spec)
-build.bat     same build under Windows
-setup-windows.bat  installs every Windows dependency via MSYS2 (pacman)
 requirements.txt   the only pip dependency (PyYAML); gi/cairo come from the OS
-docs/         platform notes (WINDOWS.md)
 ```
 
 ## License

@@ -35,28 +35,20 @@ def available():
 
 
 def _code(raw):
-    """`fr_FR.UTF-8@euro` -> `fr` ; sert à la fois aux variables POSIX et à la locale Windows."""
+    """`fr_FR.UTF-8@euro` -> `fr` ; sert à normaliser les variables POSIX."""
     return raw.split(".")[0].split("@")[0].split("_")[0].lower()
 
 
 def detect():
     """Langue du système si un fichier existe pour elle ; sinon la langue de base.
 
-    Windows n'a ni `LANG` ni `LC_*` : on retombe sur la locale de l'utilisateur,
-    que la bibliothèque standard sait lire (`locale.getwindowslocale`)."""
+    Lue dans les variables POSIX (`LC_ALL`, `LC_MESSAGES`, `LANG`, `LANGUAGE`,
+    par ordre de priorité)."""
     codes = {c for c, _ in available()}
     for var in ("LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE"):
         for part in os.environ.get(var, "").split(":"):
             if _code(part) in codes:
                 return _code(part)
-    if hasattr(locale, "getwindowslocale"):  # Windows : langue de l'interface utilisateur
-        try:
-            brut = locale.getwindowslocale()
-        except (ValueError, locale.Error):   # locale exotique : jamais bloquant au démarrage
-            brut = ""
-        code = _code(brut or "")
-        if code in codes:
-            return code
     return BASE
 
 

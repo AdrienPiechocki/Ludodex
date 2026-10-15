@@ -18,11 +18,8 @@ Notes :
   `sys._MEIPASS/lang` une fois l'application gelée.
 - `share/icons/` embarque le logo de l'application (`local.ludodex`) au layout
   hicolor : `ui/theme.py` le cherche déjà dans `sys._MEIPASS/share/icons`.
-- `icon` (ludodex.ico) n'est actif que sous Windows : l'EXE porte alors le logo
-  dans l'Explorateur et la barre des tâches ; Linux l'ignore.
 """
 
-import sys
 
 # Traductions de l'application (i18n.py les lit à côté du bundle) + logo.
 datas = [
@@ -70,7 +67,6 @@ exe_gui = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    icon="share/ludodex.ico" if sys.platform == "win32" else None,  # logo (Windows)
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -105,7 +101,6 @@ exe_cli = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    icon="share/ludodex.ico" if sys.platform == "win32" else None,  # logo (Windows)
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,

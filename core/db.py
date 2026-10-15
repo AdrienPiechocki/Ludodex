@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS steam_achievements (
 );
 """
 
-# Base des autres sources (Lutris / itch.io / Flatpak / RetroArch) : selon l'OS (vide si la plateforme n'existe pas).
+# Base des autres sources (Lutris / itch.io / Flatpak / RetroArch).
 LUTRIS_DBS = lutris_dbs()
 ITCH_DBS = itch_dbs()
 FLATPAK_DIRS = flatpak_dirs()
@@ -89,7 +89,7 @@ FLATPAK_IGNORE = {"com.valvesoftware.Steam", "net.lutris.Lutris", "org.libretro.
 # AUTO_SOURCES / ensure_auto_collections vivent ici (db) pour éviter un cycle db -> collections.
 AUTO_SOURCES = [("steam", "Steam"), ("itch", "Itch"), ("flatpak", "Flatpak"),
                 ("lutris", "Lutris"), ("retroarch", "RetroArch"),
-                ("heroic", "Heroic"), ("epic", "Epic Games"), ("gog", "GOG Galaxy"),
+                ("heroic", "Heroic"), ("epic", "Epic Games"),
                 ("custom", "Imported")]
 
 
@@ -233,13 +233,10 @@ def _ts(s):
 def _ro(path):
     """Ouvre une base EXISTANTE en lecture seule — `mode=ro` n'en crée jamais une.
 
-    Le chemin passe par une URI (`Path.as_uri()`), seule forme que SQLite
-    interprète correctement partout. Sans elle, sous Windows, `file:C:\\Users\\
-    itch.db?mode=ro` est lu comme un nom de fichier ordinaire : antislashs non
-    séparateurs, lettre de lecteur ignorée, et le `?` coupe le chemin (doc
-    SQLite §3.1 : un chemin absolu Windows devient `file:///C:/...`). Les
-    espaces, `#` et `%` sont échappés `%HH`, ce qu'une simple interpolation
-    ne fait pas — un `#` ouvre une « frange » que SQLite ignore."""
+    Le chemin passe par une URI (`Path.as_uri()`), la forme que SQLite interprète
+    de façon identique partout ; les espaces, `#` et `%` y sont échappés `%HH`,
+    qu'une simple interpolation ne saurait pas faire — un `#` ouvrirait une
+    « frange » que SQLite ignore."""
     con = sqlite3.connect(f"{pathlib.Path(path).absolute().as_uri()}?mode=ro", uri=True)
     con.row_factory = sqlite3.Row
     return con

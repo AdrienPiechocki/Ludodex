@@ -5,7 +5,7 @@ from .db import get_setting, set_setting
 # ---------- plateformes à importer ----------
 IMPORT_SOURCES = [("steam", "Steam"), ("itch", "Itch"), ("flatpak", "Flatpak"),
                   ("lutris", "Lutris"), ("retroarch", "RetroArch"),
-                  ("heroic", "Heroic"), ("epic", "Epic Games"), ("gog", "GOG Galaxy")]
+                  ("heroic", "Heroic"), ("epic", "Epic Games")]
 _IMPORT_KEYS = {src for src, _ in IMPORT_SOURCES}
 
 

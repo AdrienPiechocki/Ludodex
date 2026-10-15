@@ -8,14 +8,14 @@ from urllib.parse import quote
 from i18n import tr
 from . import platform
 from .db import LUTRIS_DBS, _ro
-from .platform import uri_command, split_command, join_command, popen_kwargs, retroarch_exe
+from .platform import uri_command, split_command, join_command
 from .steam import steam_appid_of
 
 
-def default_command(g, osname=None):
+def default_command(g):
     src, ext = g["source"], g["ext_id"]
     if src == "steam":
-        return uri_command(f"steam://rungameid/{ext}", osname), None
+        return uri_command(f"steam://rungameid/{ext}"), None
     if src == "flatpak":
         return ["flatpak", "run", ext], None
     if src == "lutris":
@@ -24,19 +24,17 @@ def default_command(g, osname=None):
         return (["lutris", uri] if kind == "native" else ["flatpak", "run", "net.lutris.Lutris", uri]), None
     if src == "retroarch":
         d = json.loads(ext)
-        # sous Windows, rétroarch.exe est cherché dans les dossiers d'installation
-        base = (["flatpak", "run", "org.libretro.RetroArch"] if d["f"]
-                else [retroarch_exe(osname) or "retroarch"])
+        base = ["flatpak", "run", "org.libretro.RetroArch"] if d["f"] else ["retroarch"]
         return base + ["-L", d["core"], d["content"]], None
     if src == "itch":
-        return uri_command(f"itch://caves/{ext}/launch", osname), None
+        return uri_command(f"itch://caves/{ext}/launch"), None
     if src == "heroic":
-        return uri_command(heroic_uri(ext), osname), None
+        return uri_command(heroic_uri(ext)), None
     if src == "epic":
-        return uri_command(f"com.epicgames.launcher://apps/{ext}?action=launch", osname), None
-    if ext.startswith("custom:") or src == "gog":
+        return uri_command(f"com.epicgames.launcher://apps/{ext}?action=launch"), None
+    if ext.startswith("custom:"):
         raise ValueError(tr("missing command"))
-    return parse_command(ext, osname)
+    return parse_command(ext)
 
 
 ENV_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
@@ -65,14 +63,14 @@ def heroic_uri(ext):
     return f"heroic://launch?appName={quote(str(ext), safe='')}"
 
 
-def parse_command(text, osname=None):
+def parse_command(text):
     """Chemin brut (même avec des espaces) ou commande complète -> (argv, dossier de travail)."""
     text = text.strip()
     path = pathlib.Path(os.path.expanduser(text))
     if text and path.is_file():
         return [str(path)], str(path.parent)
     try:
-        argv = [os.path.expanduser(a) for a in split_command(text, osname)]
+        argv = [os.path.expanduser(a) for a in split_command(text)]
     except ValueError:
         raise ValueError(tr("unclosed quotes")) from None
     if not argv:
@@ -82,14 +80,14 @@ def parse_command(text, osname=None):
     return argv, (str(first.parent) if first.is_file() else None)
 
 
-def launch_command(g, osname=None):
+def launch_command(g):
     """Commande personnalisée du jeu si elle existe, sinon celle de sa source."""
     ov = g["launch_override"] if "launch_override" in g.keys() else ""
-    return parse_command(ov, osname) if ov else default_command(g, osname)
+    return parse_command(ov) if ov else default_command(g)
 
 
-def launch_text(g, use_override=True, osname=None):
-    return join_command((launch_command if use_override else default_command)(g, osname)[0], osname)
+def launch_text(g, use_override=True):
+    return join_command((launch_command if use_override else default_command)(g)[0])
 
 
 def check_command(text):
@@ -171,7 +169,8 @@ def launch(con, g, on_exit=None):
         env, argv = split_env(cmd)
         if not argv:
             raise ValueError(tr("empty command"))
-        proc = subprocess.Popen(argv, cwd=cwd, env={**os.environ, **env} if env else None, **popen_kwargs())
+        proc = subprocess.Popen(argv, cwd=cwd, env={**os.environ, **env} if env else None,
+                                start_new_session=True)
     except (OSError, ValueError) as e:
         print(tr("! couldn't launch: {e}", e=e))
         return False
@@ -232,17 +231,17 @@ def lutris_installer_count(slug, timeout=4):
         return None
 
 
-def install_command(g, osname=None):
+def install_command(g):
     """Commande installant le jeu, ou None : sa source ne sait pas installer.
 
     LE point de décision : l'interface n'affiche « Installer » que si cette fonction
     renvoie un argv, donc jamais de bouton muet. Steam passe par son appid (`steam_appid_of`,
     seule source de la règle « c'est un appid »), Flatpak par une vraie commande —
     d'où un argv rendu plutôt qu'une URI — et Lutris par le slug relu plus haut.
-    GOG n'a aucune commande de lancement et une ROM ne se « télécharge » pas.
-    Epic natif, lui, installe par `com.epicgames.launcher://apps/{AppName}?action=install`
-    : c'est le `GameInstallUrlMask` du plugin Epic de Playnite, dont le commentaire
-    dit l'action réelle (« technically works » — seul son dialogue est en vieux
+    Une ROM ne se « télécharge » pas. Epic, lui, installe par
+    `com.epicgames.launcher://apps/{AppName}?action=install` : c'est le
+    `GameInstallUrlMask` du plugin Epic de Playnite, dont le commentaire dit
+    l'action réelle (« technically works » — seul son dialogue est en vieux
     style, d'où le choix de Playnite d'ouvrir la bibliothèque à la place)."""
     try:
         src, ext = g["source"], g["ext_id"]
@@ -250,20 +249,20 @@ def install_command(g, osname=None):
         return None
     if src == "steam":
         appid = steam_appid_of(g)
-        return uri_command(f"steam://install/{appid}", osname) if appid else None
+        return uri_command(f"steam://install/{appid}") if appid else None
     if src == "flatpak":
         return ["flatpak", "install", "-y", str(ext)]
     if src == "heroic":
-        return uri_command(heroic_uri(ext), osname)
+        return uri_command(heroic_uri(ext))
     if src == "epic":
-        return uri_command(f"com.epicgames.launcher://apps/{ext}?action=install", osname)
+        return uri_command(f"com.epicgames.launcher://apps/{ext}?action=install")
     if src == "lutris":
         uri = lutris_install_uri(ext)
         if uri is None:
             return None
         # Lutris est lui-même un flatpak : le chemin est celui du lancement.
         return (["flatpak", "run", "net.lutris.Lutris", uri] if str(ext).split(":", 1)[0] == "flatpak"
-                else uri_command(uri, osname))
+                else uri_command(uri))
     return None
 
 
@@ -317,27 +316,23 @@ def install(g):
 # Flatpak, qui n'a pas de client, ouvre le catalogue flathub.org dans le navigateur.
 LAUNCHER_URIS = {"steam": "steam://nav/games", "itch": "itch://",
                  "heroic": "heroic://", "epic": "com.epicgames.launcher://",
-                 "gog": "goggalaxy://", "flatpak": "https://flathub.org"}
+                 "flatpak": "https://flathub.org"}
 
 
-def launcher_command(source, osname=None):
+def launcher_command(source):
     """Commande ouvrant le launcher de `source` (son client lui-même, pas un jeu),
     ou None : cette source n'a rien à ouvrir — Imported est une commande arbitraire
     de l'utilisateur. L'interface n'affiche le bouton que si ce rendu est non vide,
     donc jamais de bouton muet."""
     uri = LAUNCHER_URIS.get(source)
     if uri:
-        return uri_command(uri, osname)
+        return uri_command(uri)
     if source == "lutris":  # son protocole est rejeté (`lutris lutris://` sort en 1) : son binaire
         exe = shutil.which("lutris")
-        if exe:
-            return [exe]
-        return None if platform.is_windows(osname) else ["flatpak", "run", "net.lutris.Lutris"]
+        return [exe] if exe else ["flatpak", "run", "net.lutris.Lutris"]
     if source == "retroarch":  # aucun protocole : son exécutable, PATH puis flatpak
-        exe = retroarch_exe(osname) or shutil.which("retroarch")
-        if exe:
-            return [exe]
-        return None if platform.is_windows(osname) else ["flatpak", "run", "org.libretro.RetroArch"]
+        exe = shutil.which("retroarch")
+        return [exe] if exe else ["flatpak", "run", "org.libretro.RetroArch"]
     return None
 
 
@@ -424,7 +419,7 @@ LUTRIS_UNINSTALL = (
 )
 
 
-def uninstall_command(g, osname=None):
+def uninstall_command(g):
     """Commande désinstallant le jeu, ou None : sa source ne sait pas désinstaller.
 
     Le miroir exact de `install_command` — même rôle, même mécanisme — mais la liste des
@@ -442,11 +437,10 @@ def uninstall_command(g, osname=None):
       dans un python qui l'importe (voir `LUTRIS_UNINSTALL`).
 
     RetroArch est écarté parce que `ext_id` est le chemin d'une ROM : ce fichier
-    appartient à l'utilisateur, pas à Ludodex. itch, GOG
-    et Epic natifs n'ont chez nous aucune commande de retrait documentée — pour Epic,
-    Playnite lui-même ne fait qu'ouvrir `com.epicgames.launcher://store/library`, une
-    ouverture de page n'étant pas une désinstallation, et `gogdl` — l'outil GOG de
-    Heroic — n'a pas de `uninstall` du tout.
+    appartient à l'utilisateur, pas à Ludodex. itch et Epic natifs n'ont chez nous
+    aucune commande de retrait documentée — pour Epic, Playnite lui-même ne fait
+    qu'ouvrir `com.epicgames.launcher://store/library`, une ouverture de page
+    n'étant pas une désinstallation.
     Heroic, lui, passe par `legendary uninstall`, à condition que le binaire soit là et
     que ce soit LUI qui ait installé le jeu (voir `legendary_install_dir`)."""
     try:
@@ -455,12 +449,10 @@ def uninstall_command(g, osname=None):
         return None
     if src == "steam":
         appid = steam_appid_of(g)
-        return uri_command(f"steam://uninstall/{appid}", osname) if appid else None
+        return uri_command(f"steam://uninstall/{appid}") if appid else None
     if src == "flatpak":
         return ["flatpak", "uninstall", "-y", str(ext)]
     if src == "lutris":
-        if platform.is_windows(osname):
-            return None
         try:
             kind, gid = str(ext).split(":", 1)
             gid = int(gid)

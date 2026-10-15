@@ -7,7 +7,7 @@
 #   - _internal/   : Python, GTK4, libadwaita, icônes et traductions embarqués.
 #
 # Prérequis : PyInstaller (`python3 -m pip install pyinstaller`), GTK4 et
-# PyGObject installés sur le système (voir docs/WINDOWS.md pour MSYS2).
+# PyGObject installés sur le système.
 #
 # Les intermédiaires de compilation vont dans .build-cache/ (ignorable).
 set -eu

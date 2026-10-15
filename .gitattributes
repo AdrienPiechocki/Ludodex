@@ -1,5 +1,2 @@
 # Auto detect text files and perform LF normalization
 * text=auto
-
-# cmd.exe casse sur les fins de ligne LF : les .bat restent en CRLF partout
-*.bat text eol=crlf

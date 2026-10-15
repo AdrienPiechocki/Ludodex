@@ -106,15 +106,11 @@ def _install_css():
 
 def _chemins_icones():
     """Les emplacements où un thème d'icônes PEUT vivre au-delà de
-    XDG_DATA_DIRS : le bundle gelé (PyInstaller), l'installation MSYS2
-    (C:\\msys64\\ucrt64\\share) et GTK_DATA_PREFIX si posé. Seuls les
-    dossiers réellement présents sont retenus."""
+    XDG_DATA_DIRS : le bundle gelé (PyInstaller) et le dépôt en développement.
+    Seuls les dossiers réellement présents sont retenus."""
     candidats = []
     if (froid := getattr(sys, "_MEIPASS", None)):  # exécutable gelé
         candidats.append(Path(froid) / "share" / "icons")
-    candidats.append(Path(sys.base_prefix) / "share" / "icons")  # route MSYS2
-    if prefixe := os.environ.get("GTK_DATA_PREFIX"):  # route gvsbuild
-        candidats.append(Path(prefixe) / "share" / "icons")
     candidats.append(Path(__file__).resolve().parent.parent / "share" / "icons")  # dépôt
     # Doublons écartés (gelé : __file__ est DANS _MEIPASS) + dossiers absents.
     return list(dict.fromkeys(str(c) for c in candidats if c.is_dir()))
@@ -123,18 +119,17 @@ def _chemins_icones():
 def assurer_icones():
     """Que les icônes des boutons se trouvent, sur quelque système que ce soit.
 
-    GTK4 reconstruit son chemin de recherche depuis XDG_DATA_DIRS. Sous
-    Windows cette variable n'existe pas : GLib retombe sur « le share\ du
-    paquet de la DLL, si cela peut être déterminé », et le thème symbolique —
-    qui vit pourtant DANS l'installation — reste introuvable : les boutons
-    perdent alors leurs icônes une par une (carrés « image manquante »).
+    GTK4 reconstruit son chemin de recherche depuis XDG_DATA_DIRS, mais le bundle
+    gelé y échappe : sans réparation, le thème symbolique — qui vit pourtant DANS
+    l'installation — reste introuvable et les boutons perdent leurs icônes une
+    par une (carrés « image manquante »).
 
     Deux réparations, dans l'ordre : on ajoute les emplacements réels au
     thème ; puis, si une icône ordinaire est encore introuvable alors
     qu'Adwaita est bien dans le chemin, c'est le NOM de thème actif qui est
-    mort (défaut GTK sur Windows, ou thème du bureau sans dossier) : on
-    repasse à Adwaita. Un environnement sain — sentinel déjà présente —
-    n'est touché nulle part.
+    mort (défaut GTK, ou thème du bureau sans dossier) : on repasse à
+    Adwaita. Un environnement sain — sentinel déjà présente — n'est touché
+    nulle part.
     """
     disp = Gdk.Display.get_default()
     if disp is None:
