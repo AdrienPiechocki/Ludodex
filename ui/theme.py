@@ -23,7 +23,11 @@ CSS = """
 .ph-5 { background: linear-gradient(160deg, #2190a4, #0e5560); }
 .game-title-bar { background: linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.8));
                   color: white; font-weight: bold; padding: 22px 8px 7px 8px; }
+/* Les deux grises de la grille : le non installé reste coloré mais passé,
+   le masqué descend d'un cran — plus transparent ET désaturé — pour qu'un
+   masqué se reconnaisse à la nuance quand les paliers se mêlent. */
 .dim-tile { opacity: 0.45; }
+.hid-tile { opacity: 0.35; filter: grayscale(0.75); }
 .navigation-sidebar row.col-sep { min-height: 0; padding: 0; background: transparent; }
 .navigation-sidebar row.col-sep separator { margin: 3px 8px; }
 .navigation-sidebar row.col-on { background-color: @accent_bg_color; color: @accent_fg_color; }

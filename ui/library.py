@@ -168,11 +168,9 @@ class LibraryMixin:
         by = {"name": g["name"].casefold(), "recent": -g["last_played"], "played": -g["playtime_min"]}[self.lib_sort]
         if self.lib_group:
             # « Regrouper les jeux » : installés, puis non installés, puis masqués
-            # — les masqués restent en dernier même installés
-            palier = 2 if g["hidden"] else (0 if g["installed"] else 1)
-        else:
-            palier = g["hidden"]  # hors regroupement : seuls les masqués passent en dernier
-        return (palier, by, g["name"].casefold())
+            # — le masqué l'emporte, même installé
+            return (2 if g["hidden"] else (0 if g["installed"] else 1), by, g["name"].casefold())
+        return (by, g["name"].casefold())  # décoché : le tri choisi seul, AUCUN palier
 
     def _sort_func(self, a, b):
         ka, kb = self._sort_key(a._game), self._sort_key(b._game)
@@ -341,7 +339,9 @@ class LibraryMixin:
         play.connect("clicked", lambda _b, gid=gid: self._quick_launch(gid))
         cover.add_overlay(bar)
         cover.add_overlay(play)
-        if g["hidden"] or not g["installed"]:
+        if g["hidden"]:
+            cover.add_css_class("hid-tile")  # masqué : un cran plus grisé que le non installé
+        elif not g["installed"]:
             cover.add_css_class("dim-tile")
 
         def on_hover(ctrl, _p):
