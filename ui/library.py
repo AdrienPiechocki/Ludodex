@@ -37,6 +37,27 @@ class LibraryMixin:
         self.search_bar = Gtk.SearchBar(child=Adw.Clamp(maximum_size=420, child=self.search))
         self.search_bar.connect_entry(self.search)
 
+        # La barre d'outils de la liste : les commandes de la bibliothèque vivent
+        # AU-DESSUS des tuiles, dans le volet qui les porte, et non plus dans
+        # l'en-tête de la fenêtre (qui ne garde qu'Importer, les onglets et les
+        # Réglages). Trier et Filtrer y sont deux menus distincts.
+        self.search_btn = Gtk.ToggleButton(icon_name="system-search-symbolic", label=tr("Search"))
+        self.search_btn.bind_property("active", self.search_bar, "search-mode-enabled",
+                                      GObject.BindingFlags.BIDIRECTIONAL)
+        self.sort_btn = Gtk.MenuButton(icon_name="view-sort-descending-symbolic", label=tr("Sort"),
+                                       menu_model=self._build_sort_menu())
+        self.filter_btn = Gtk.MenuButton(icon_name="view-filter-symbolic", label=tr("Filter"),
+                                         menu_model=self._build_filter_menu())
+        self.not_installed_chk = Gtk.CheckButton(label=tr("Show not installed games"),
+                                                 active=self.show_not_installed)
+        self.not_installed_chk.connect("toggled", self._on_show_not_installed)
+        self.add_btn = Gtk.Button(icon_name="list-add-symbolic", label=tr("Add a game"))
+        self.add_btn.connect("clicked", self._open_add_game)
+        lib_bar = Gtk.Box(spacing=6, margin_top=8, margin_bottom=4, margin_start=12, margin_end=12,
+                          halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER, css_classes=["toolbar"])
+        for w in (self.search_btn, self.sort_btn, self.filter_btn, self.not_installed_chk, self.add_btn):
+            lib_bar.append(w)
+
         self.lib_flow = Gtk.FlowBox(valign=Gtk.Align.START, homogeneous=True, selection_mode=Gtk.SelectionMode.NONE,
                                     activate_on_single_click=True, min_children_per_line=2, max_children_per_line=12,
                                     column_spacing=14, row_spacing=14,
@@ -51,6 +72,7 @@ class LibraryMixin:
         self.lib_stack.add_named(self.lib_empty, "empty")
 
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        content.append(lib_bar)
         content.append(self.search_bar)
         content.append(self.lib_stack)
 
@@ -78,18 +100,25 @@ class LibraryMixin:
         return paned
 
     def _build_sort_menu(self):
+        """Menus « Trier » et « Filtrer » de la barre de la liste — leurs deux
+        actions d'état sont créées ici (les deux menus les partagent), le
+        premier appel venant du bouton « Trier »."""
         for name, initial, callback in (("lib-sort", self.lib_sort, self._on_sort),
                                         ("lib-filter", self.lib_filter, self._on_filter)):
             act = Gio.SimpleAction.new_stateful(name, GLib.VariantType.new("s"), GLib.Variant.new_string(initial))
             act.connect("activate", callback)
             self.add_action(act)
-        menu, sort_sec, filter_sec = Gio.Menu(), Gio.Menu(), Gio.Menu()
+        menu, sort_sec = Gio.Menu(), Gio.Menu()
         for key, label in (("name", tr("Name")), ("recent", tr("Last played")), ("played", tr("Most played"))):
             sort_sec.append(label, f"win.lib-sort::{key}")
+        menu.append_section(tr("Sort by"), sort_sec)
+        return menu
+
+    def _build_filter_menu(self):
+        menu, filter_sec = Gio.Menu(), Gio.Menu()
         filter_sec.append(tr("All"), "win.lib-filter::all")
         for s in STATUTS:
             filter_sec.append(P.status_label(s), f"win.lib-filter::{s}")
-        menu.append_section(tr("Sort by"), sort_sec)
         menu.append_section(tr("Status"), filter_sec)
         return menu
 
@@ -106,9 +135,6 @@ class LibraryMixin:
 
     def _on_page_changed(self, *_):
         page = self.stack.get_visible_child_name()
-        on_lib = page == "lib"
-        for w in getattr(self, "lib_widgets", []):
-            w.set_visible(on_lib)
         if page == "retro":
             self._refresh_retro()
         if page == "notes":
@@ -565,8 +591,14 @@ class LibraryMixin:
         self._refresh_covers_summary()  # le compte des couvertures suit les jeux affichés
 
     def _on_show_not_installed(self, chk):
-        self.show_not_installed = chk.get_active()
-        P.set_setting(self.con, "show_not_installed", "1" if self.show_not_installed else "0")
+        act = chk.get_active()
+        self.show_not_installed = act
+        P.set_setting(self.con, "show_not_installed", "1" if act else "0")
+        # la même case vit aussi dans les Réglages : les deux restent d'accord
+        # (le retentonnement de l'autre rappelle ce handler, l'égalité l'y arrête)
+        for other in (getattr(self, "not_installed_chk", None), getattr(self, "_show_not_installed_chk", None)):
+            if other is not None and other is not chk and other.get_active() != act:
+                other.set_active(act)
         self._build_lib()
         self._reset_pick()  # filtre du tirage : la proposition en cours est caduque
         self._refresh_covers_summary()  # le compte des couvertures suit les jeux affichés

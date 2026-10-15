@@ -5,7 +5,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 gi.require_version("GdkPixbuf", "2.0")
-from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, GObject, Gtk, Pango
+from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango
 
 import picker as P
 from i18n import available, get_lang, tr
@@ -61,24 +61,16 @@ class Win(PickViewMixin, LibraryMixin, RetroMixin, NotesMixin, AchievementsMixin
         stack.connect("notify::visible-child-name", self._on_page_changed)
         self._build_lib()
 
+        # L'en-tête ne garde que l'import, les onglets et les réglages : les
+        # commandes de la bibliothèque (recherche, tri, filtre, non-installés,
+        # ajout) vivent dans la barre au-dessus des tuiles, sur la page elle-même
         refresh = Gtk.Button(icon_name="view-refresh-symbolic", tooltip_text=tr("Import games"))
         refresh.connect("clicked", self._on_import)
         header = Adw.HeaderBar(title_widget=self._switcher)
         header.pack_start(refresh)
-        add_btn = Gtk.Button(icon_name="list-add-symbolic", tooltip_text=tr("Add a game"))
-        add_btn.connect("clicked", self._open_add_game)
-        header.pack_start(add_btn)
         settings = Gtk.Button(icon_name="preferences-system-symbolic", tooltip_text=tr("Settings"))
         settings.connect("clicked", self._open_settings)
         header.pack_end(settings)
-        self.sort_btn = Gtk.MenuButton(icon_name="view-sort-descending-symbolic", tooltip_text=tr("Sort and filter"),
-                                       menu_model=self._build_sort_menu())
-        self.search_btn = Gtk.ToggleButton(icon_name="system-search-symbolic", tooltip_text=tr("Search"))
-        self.search_btn.bind_property("active", self.search_bar, "search-mode-enabled",
-                                      GObject.BindingFlags.BIDIRECTIONAL)
-        header.pack_end(self.sort_btn)
-        header.pack_end(self.search_btn)
-        self.lib_widgets = [add_btn, self.sort_btn, self.search_btn]  # boutons propres à la bibliothèque
         self._on_page_changed()
         self._settings_win = None
 

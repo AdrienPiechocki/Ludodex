@@ -205,7 +205,7 @@
   "Nothing recognised. Check: grep -h 'adding PID' ~/.local/share/Steam/logs/*.txt | head": "Rien reconnu. Vérifie : grep -h 'adding PID' ~/.local/share/Steam/logs/*.txt | head",
   "Search games…": "Rechercher un jeu…",
   "Search": "Rechercher",
-  "Sort and filter": "Trier et filtrer",
+  "Filter": "Filtrer",
   "Sort by": "Trier par",
   "Last played": "Dernière partie",
   "Most played": "Les plus joués",
