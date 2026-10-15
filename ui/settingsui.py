@@ -14,29 +14,44 @@ from i18n import available, get_lang, tr
 class SettingsMixin:
 
     def _open_settings(self, *_):
-        # Les réglages propres à un module n'apparaissent que sur la page de ce module ;
-        # les réglages généraux (langue, modules, plateformes, couvertures) restent visibles partout.
-        scope = self.stack.get_visible_child_name() or "lib"
+        # Trois onglets fixes — Général / Modules / Connexions : le contenu ne dépend
+        # plus de la page principale active, chaque réglage vit à son onglet.
         if self._settings_win:
-            if getattr(self, "_settings_scope", None) == scope:
-                return self._settings_win.present(self)
-            self._settings_win.close()  # la page active a changé : on reconstruit les bons réglages
-            self._settings_win = None
-        self._settings_scope = scope
+            return self._settings_win.present(self)
         self._module_sw = self._import_sw = self._auto_rows = None
         self._hide_short_scale = self._hide_short_row = None
         self._retro_enable_sw = None
         self._lib_group = self._auto_group = self._retro_group = self._pick_group = None
         self._pick_owned_chk = None
-        self._show_hidden_chk = self._show_not_installed_chk = None
-        self._ach_show_hidden_chk = self._ra_user_row = self._ra_key_row = None
+        self._show_hidden_chk = self._group_games_chk = None
+        self._ach_show_hidden_chk = self._ach_show_hidden_row = None
+        self._ra_user_row = self._ra_key_row = None
         self._ra_sync_row = self._ra_enabled_sw = None   # groupes réouvrables à l'identique
         self._steam_key_row = self._steam_id_row = None
         self._steam_sync_row = self._steam_enabled_sw = self._steam_sync_btn = None
-        self._notes_group = self._notes_font_spin = None   # curseur de la page précédente
-        page = Adw.PreferencesPage()
+        self._notes_group = self._notes_font_spin = None   # curseur réaffiché à l'identique
+        self._settings_stack = self._settings_switcher = self._settings_overlay = None
 
-        # --- réglages généraux (toutes pages) ---
+        # L'ossature : trois pages empilées sous un sélecteur d'onglets porté par
+        # l'en-tête (le même motif que la fenêtre principale), les toasts DANS le
+        # dialogue — une notification qui se perdrait derrière ne dirait rien.
+        stack = Adw.ViewStack(vexpand=True, hexpand=True)
+        pages = {}
+        for name, cle, icone in (("general", "General", "preferences-system-symbolic"),
+                                 ("modules", "Modules", "view-grid-symbolic"),
+                                 ("connections", "Connections", "network-workgroup-symbolic")):
+            pg = Adw.PreferencesPage()
+            stack.add_titled_with_icon(pg, name, tr(cle), icone)
+            pages[name] = pg
+        switcher = Adw.ViewSwitcher(stack=stack, policy=Adw.ViewSwitcherPolicy.WIDE)
+        overlay = Adw.ToastOverlay(child=stack)
+        toolbar = Adw.ToolbarView()
+        toolbar.add_top_bar(Adw.HeaderBar(title_widget=switcher))
+        toolbar.set_content(overlay)
+        self._settings_stack, self._settings_switcher, self._settings_overlay = stack, switcher, overlay
+
+        # --- onglet Général : langue, puis plateformes à importer ---
+        page = pages["general"]
         lang_group = Adw.PreferencesGroup()
         langs = available()  # une entrée par fichier lang/*.json, nommée dans sa propre langue
         lang_row = Adw.ComboRow(title=tr("Language"), model=Gtk.StringList.new([n for _, n in langs]),
@@ -44,6 +59,20 @@ class SettingsMixin:
         lang_row.connect("notify::selected", self._on_lang)  # connecté après le choix initial : pas de faux déclenchement
         lang_group.add(lang_row)
         page.add(lang_group)
+
+        imp_group = Adw.PreferencesGroup(
+            title=tr("Platforms to import"),
+            description=tr("Uncheck a platform to hide its games everywhere; nothing is deleted."))
+        self._import_sw = {}
+        for src, label in P.IMPORT_SOURCES:
+            sw = Adw.SwitchRow(title=tr(label), active=P.source_enabled(self.con, src))
+            sw.connect("notify::active", self._on_import_source, src)
+            imp_group.add(sw)
+            self._import_sw[src] = sw
+        page.add(imp_group)
+
+        # --- onglet Modules : quels écrans existent, puis le réglage de chacun ---
+        page = pages["modules"]
         mod_group = Adw.PreferencesGroup(
             title=tr("Modules"),
             description=tr("Hide a screen from the main window. Nothing is deleted."))
@@ -56,183 +85,107 @@ class SettingsMixin:
             self._module_sw[name] = sw
         page.add(mod_group)
 
-        # --- réglages du module actif ---
-        if scope == "lib":
-            self._lib_group = lib_group = Adw.PreferencesGroup(title=tr("Library"))
-            chk = Gtk.CheckButton(active=self.show_hidden, valign=Gtk.Align.CENTER)
-            chk.connect("toggled", self._on_show_hidden)
-            chk_row = Adw.ActionRow(title=tr("Show hidden games"), activatable_widget=chk)
-            chk_row.add_prefix(chk)
-            lib_group.add(chk_row)
-            self._show_hidden_chk = chk  # référence pour les tests
-            nchk = Gtk.CheckButton(active=self.show_not_installed, valign=Gtk.Align.CENTER)
-            nchk.connect("toggled", self._on_show_not_installed)
-            nrow = Adw.ActionRow(title=tr("Show not installed games"), activatable_widget=nchk)
-            nrow.add_prefix(nchk)
-            lib_group.add(nrow)
-            self._show_not_installed_chk = nchk  # référence pour les tests
-            page.add(lib_group)
-            self._auto_group = auto_group = Adw.PreferencesGroup(title=tr("Automatic collections"))
-            self._auto_rows = {}
-            for src, label in P.AUTO_SOURCES:
-                sw = Adw.SwitchRow(title=tr(label), active=P.auto_collection_enabled(self.con, src))
-                sw.connect("notify::active", self._on_auto_collection, src)
-                auto_group.add(sw)
-                self._auto_rows[src] = sw
-                if src != "custom" and not P.source_enabled(self.con, src):
-                    sw.set_visible(False)  # plateforme désactivée → sa collection auto disparaît aussi
-            page.add(auto_group)
-        elif scope == "retro":
-            self._retro_group = retro_group = Adw.PreferencesGroup(title=tr("Retrospective"))
-            rscale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, digits=0, draw_value=True,
-                               value_pos=Gtk.PositionType.RIGHT, valign=Gtk.Align.CENTER, width_request=180)
-            rscale.set_round_digits(0)
-            rscale.set_adjustment(Gtk.Adjustment(lower=0, upper=15, step_increment=1, page_increment=1))
-            rscale.set_value(self.hide_short_min)
-            rrow = Adw.ActionRow(title=self._hide_short_label(self.hide_short_min),
-                                 subtitle=tr("In the timelines"))
-            rrow.add_suffix(rscale)
+        # Bibliothèque : le masquage des jeux. Les non-installés, eux, ont leur œil
+        # dans la barre d'outils — un seul pilote, plus deux cases à tenir d'accord.
+        self._lib_group = lib_group = Adw.PreferencesGroup(title=tr("Library"))
+        chk = Gtk.CheckButton(active=self.show_hidden, valign=Gtk.Align.CENTER)
+        chk.connect("toggled", self._on_show_hidden)
+        chk_row = Adw.ActionRow(title=tr("Show hidden games"), activatable_widget=chk)
+        chk_row.add_prefix(chk)
+        lib_group.add(chk_row)
+        self._show_hidden_chk = chk  # référence pour les tests
+        # ordre de la grille : trois paliers — coché par défaut
+        gchk = Gtk.CheckButton(active=self.lib_group, valign=Gtk.Align.CENTER)
+        gchk.connect("toggled", self._on_group_games)
+        grow = Adw.ActionRow(title=tr("Group games"),
+                             subtitle=tr("Installed, then not installed, then hidden"),
+                             activatable_widget=gchk)
+        grow.add_prefix(gchk)
+        lib_group.add(grow)
+        self._group_games_chk = gchk  # référence pour les tests
+        page.add(lib_group)
 
-            def _on_scale(scale, row=rrow):
-                v = int(scale.get_value())
-                row.set_title(self._hide_short_label(v))
-                self._on_hide_short(v)
+        self._auto_group = auto_group = Adw.PreferencesGroup(title=tr("Automatic collections"))
+        self._auto_rows = {}
+        for src, label in P.AUTO_SOURCES:
+            sw = Adw.SwitchRow(title=tr(label), active=P.auto_collection_enabled(self.con, src))
+            sw.connect("notify::active", self._on_auto_collection, src)
+            auto_group.add(sw)
+            self._auto_rows[src] = sw
+            if src != "custom" and not P.source_enabled(self.con, src):
+                sw.set_visible(False)  # plateforme désactivée → sa collection auto disparaît aussi
+        page.add(auto_group)
 
-            rscale.connect("value-changed", _on_scale)
-            retro_group.add(rrow)
-            page.add(retro_group)
-            self._hide_short_scale = rscale  # références pour les tests
-            self._hide_short_row = rrow
+        # Choisir : le tirage tient compte des jeux non installés
+        self._pick_group = pick_group = Adw.PreferencesGroup(title=tr("Pick"))
+        pchk = Gtk.CheckButton(active=self.pick_owned, valign=Gtk.Align.CENTER)
+        pchk.connect("toggled", self._on_pick_owned)
+        prow = Adw.ActionRow(title=tr("Take not installed games into account"),
+                             subtitle=tr("In the draw and its tags"),
+                             activatable_widget=pchk)
+        prow.add_prefix(pchk)
+        pick_group.add(prow)
+        page.add(pick_group)
+        self._pick_owned_chk = pchk  # référence pour les tests
 
-            timelines = Adw.PreferencesGroup(title=tr("Timelines"))
-            self._retro_enable_sw = {}
-            for kind, label in (("week", "This week"), ("month", "This month"), ("year", "This year")):
-                sw = Adw.SwitchRow(title=tr(label), active=P.retro_enabled(self.con, kind))
-                sw.connect("notify::active", self._on_retro_enable, kind)
-                timelines.add(sw)
-                self._retro_enable_sw[kind] = sw
-            page.add(timelines)
-        elif scope == "pick":
-            self._pick_group = pick_group = Adw.PreferencesGroup(title=tr("Pick"))
-            pchk = Gtk.CheckButton(active=self.pick_owned, valign=Gtk.Align.CENTER)
-            pchk.connect("toggled", self._on_pick_owned)
-            prow = Adw.ActionRow(title=tr("Take not installed games into account"),
-                                 subtitle=tr("In the draw and its tags"),
-                                 activatable_widget=pchk)
-            prow.add_prefix(pchk)
-            pick_group.add(prow)
-            page.add(pick_group)
-            self._pick_owned_chk = pchk  # référence pour les tests
-        elif scope == "notes":
-            notes_group = Adw.PreferencesGroup(title=tr("Notes"))
-            spin = Adw.SpinRow.new_with_range(8, 40, 1)
-            spin.set_title(tr("Text size"))
-            spin.set_subtitle(tr("In points"))
-            spin.set_value(self.notes_font_size)
-            spin.connect("notify::value", self._on_notes_font)  # connecté après la valeur initiale
-            notes_group.add(spin)
-            page.add(notes_group)
-            self._notes_group = notes_group   # référence pour les tests
-            self._notes_font_spin = spin
-        elif scope == "achievements":
-            # Réglages des succès : le masquage des succès secrets, puis le
-            # compte RetroAchievements (source unique avec le dialogue de la page).
-            ach_group = Adw.PreferencesGroup(title=tr("Achievements"))
-            chk = Gtk.CheckButton(active=P.show_hidden(self.con), valign=Gtk.Align.CENTER)
-            chk.connect("toggled", self._on_ach_show_hidden)
-            chk_row = Adw.ActionRow(title=tr("Reveal hidden achievements"),
-                                    subtitle=tr("Names and descriptions shown, even while locked"),
-                                    activatable_widget=chk)
-            chk_row.add_prefix(chk)
-            ach_group.add(chk_row)
-            self._ach_show_hidden_chk = chk  # référence pour les tests
-            self._ach_show_hidden_row = chk_row  # référence pour les tests
-            page.add(ach_group)
+        # Rétrospective : le seuil des sessions courtes, puis les frises visibles
+        self._retro_group = retro_group = Adw.PreferencesGroup(title=tr("Retrospective"))
+        rscale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, digits=0, draw_value=True,
+                           value_pos=Gtk.PositionType.RIGHT, valign=Gtk.Align.CENTER, width_request=180)
+        rscale.set_round_digits(0)
+        rscale.set_adjustment(Gtk.Adjustment(lower=0, upper=15, step_increment=1, page_increment=1))
+        rscale.set_value(self.hide_short_min)
+        rrow = Adw.ActionRow(title=self._hide_short_label(self.hide_short_min),
+                             subtitle=tr("In the timelines"))
+        rrow.add_suffix(rscale)
 
-            ra_group = Adw.PreferencesGroup(
-                title="RetroAchievements",
-                description=tr("The key is on your account's control panel page "
-                               "(retroachievements.org/controlpanel.php)."))
-            # Coupé : plus aucun succès RA affiché nulle part, les jeux RA-seuls
-            # quittent la liste de gauche, aucun appel réseau — et le groupe
-            # s'éteint sous les yeux plutôt que de rester cliquable pour rien.
-            enabled = P.ra_enabled(self.con)
-            sw = Adw.SwitchRow(title=tr("Use RetroAchievements"),
-                               subtitle=tr("Show and sync achievements from retroachievements.org"),
-                               active=enabled)
-            sw.connect("notify::active", self._on_ra_enabled)
-            ra_group.add(sw)
-            self._ra_enabled_sw = sw  # référence pour les tests
-            user_row = Adw.EntryRow(title=tr("Username"), text=P.ra_user(self.con),
-                                    show_apply_button=True)
-            user_row.connect("apply", self._on_ra_credentials)
-            ra_group.add(user_row)
-            key_row = Adw.PasswordEntryRow(title=tr("Web API key"), text=P.ra_key(self.con),
-                                           show_apply_button=True)
-            key_row.connect("apply", self._on_ra_credentials)
-            ra_group.add(key_row)
-            sync_row = Adw.ActionRow(title=tr("Link my games"),
-                                     subtitle=tr("Match your played games and download "
-                                                 "their achievements"))
-            sync_btn = Gtk.Button(label=tr("Sync account"), valign=Gtk.Align.CENTER,
-                                  css_classes=["suggested-action"])
-            sync_btn.connect("clicked", self._on_ra_sync)
-            sync_row.add_suffix(sync_btn)
-            ra_group.add(sync_row)
-            for w in (user_row, key_row, sync_row):
-                w.set_sensitive(enabled)
-            self._ra_user_row, self._ra_key_row, self._ra_sync_row = user_row, key_row, sync_row
-            page.add(ra_group)
+        def _on_scale(scale, row=rrow):
+            v = int(scale.get_value())
+            row.set_title(self._hide_short_label(v))
+            self._on_hide_short(v)
 
-            # Même chose pour Steam : une troisième source de succès, coupable
-            # d'un trait. « Steam » est une marque : comme « RetroAchievements »,
-            # le titre de groupe n'est pas traduit.
-            st_group = Adw.PreferencesGroup(
-                title="Steam",
-                description=tr("The key can be generated on steamcommunity.com/dev/apikey."))
-            st_enabled = P.steam_enabled(self.con)
-            st_sw = Adw.SwitchRow(title=tr("Use Steam achievements"),
-                                  subtitle=tr("Show and sync achievements from your Steam account"),
-                                  active=st_enabled)
-            st_sw.connect("notify::active", self._on_steam_enabled)
-            st_group.add(st_sw)
-            self._steam_enabled_sw = st_sw  # référence pour les tests
-            # Pas de `subtitle` sur une Adw.EntryRow : l'indication sur l'ID va
-            # donc dans le titre de la ligne — une seule ligne, une seule lecture.
-            st_key_row = Adw.PasswordEntryRow(title=tr("Web API key"),
-                                              text=P.steam_api_key(self.con),
-                                              show_apply_button=True)
-            st_key_row.connect("apply", self._on_steam_credentials)
-            st_group.add(st_key_row)
-            st_id_row = Adw.EntryRow(title=tr("Steam ID (in your profile URL)"),
-                                     text=P.steam_id64(self.con), show_apply_button=True)
-            st_id_row.connect("apply", self._on_steam_credentials)
-            st_group.add(st_id_row)
-            st_sync_row = Adw.ActionRow(title=tr("Sync my games"),
-                                        subtitle=tr("Download the achievements of your games "
-                                                    "on Steam"))
-            st_sync_btn = Gtk.Button(label=tr("Sync account"), valign=Gtk.Align.CENTER,
-                                     css_classes=["suggested-action"])
-            st_sync_btn.connect("clicked", self._on_steam_sync)
-            st_sync_row.add_suffix(st_sync_btn)
-            st_group.add(st_sync_row)
-            for w in (st_key_row, st_id_row, st_sync_row):
-                w.set_sensitive(st_enabled)
-            self._steam_key_row, self._steam_id_row, self._steam_sync_row, \
-                self._steam_sync_btn = st_key_row, st_id_row, st_sync_row, st_sync_btn
-            page.add(st_group)
+        rscale.connect("value-changed", _on_scale)
+        retro_group.add(rrow)
+        page.add(retro_group)
+        self._hide_short_scale = rscale  # références pour les tests
+        self._hide_short_row = rrow
 
-        # --- suite des réglages généraux ---
-        imp_group = Adw.PreferencesGroup(
-            title=tr("Platforms to import"),
-            description=tr("Uncheck a platform to hide its games everywhere; nothing is deleted."))
-        self._import_sw = {}
-        for src, label in P.IMPORT_SOURCES:
-            sw = Adw.SwitchRow(title=tr(label), active=P.source_enabled(self.con, src))
-            sw.connect("notify::active", self._on_import_source, src)
-            imp_group.add(sw)
-            self._import_sw[src] = sw
-        page.add(imp_group)
+        timelines = Adw.PreferencesGroup(title=tr("Timelines"))
+        self._retro_enable_sw = {}
+        for kind, label in (("week", "This week"), ("month", "This month"), ("year", "This year")):
+            sw = Adw.SwitchRow(title=tr(label), active=P.retro_enabled(self.con, kind))
+            sw.connect("notify::active", self._on_retro_enable, kind)
+            timelines.add(sw)
+            self._retro_enable_sw[kind] = sw
+        page.add(timelines)
+
+        # Notes : la taille du texte
+        notes_group = Adw.PreferencesGroup(title=tr("Notes"))
+        spin = Adw.SpinRow.new_with_range(8, 40, 1)
+        spin.set_title(tr("Text size"))
+        spin.set_subtitle(tr("In points"))
+        spin.set_value(self.notes_font_size)
+        spin.connect("notify::value", self._on_notes_font)  # connecté après la valeur initiale
+        notes_group.add(spin)
+        page.add(notes_group)
+        self._notes_group = notes_group   # référence pour les tests
+        self._notes_font_spin = spin
+
+        # Succès : le masquage des succès secrets
+        ach_group = Adw.PreferencesGroup(title=tr("Achievements"))
+        chk = Gtk.CheckButton(active=P.show_hidden(self.con), valign=Gtk.Align.CENTER)
+        chk.connect("toggled", self._on_ach_show_hidden)
+        chk_row = Adw.ActionRow(title=tr("Reveal hidden achievements"),
+                                subtitle=tr("Names and descriptions shown, even while locked"),
+                                activatable_widget=chk)
+        chk_row.add_prefix(chk)
+        ach_group.add(chk_row)
+        self._ach_show_hidden_chk = chk  # référence pour les tests
+        self._ach_show_hidden_row = chk_row  # référence pour les tests
+        page.add(ach_group)
+
+        # --- onglet Connexions : SteamGridDB, puis RetroAchievements et Steam ---
+        page = pages["connections"]
         group = Adw.PreferencesGroup(
             title=tr("Covers (SteamGridDB)"),
             description=tr("Generate the API key in your account preferences on steamgriddb.com."))
@@ -246,8 +199,82 @@ class SettingsMixin:
         group.add(self.cover_row)
         page.add(group)
 
-        win = Adw.PreferencesDialog(search_enabled=False, content_width=440, content_height=460)
-        win.add(page)
+        # Le compte RetroAchievements (source unique avec le dialogue de la page).
+        ra_group = Adw.PreferencesGroup(
+            title="RetroAchievements",
+            description=tr("The key is on your account's control panel page "
+                           "(retroachievements.org/controlpanel.php)."))
+        # Coupé : plus aucun succès RA affiché nulle part, les jeux RA-seuls
+        # quittent la liste de gauche, aucun appel réseau — et le groupe
+        # s'éteint sous les yeux plutôt que de rester cliquable pour rien.
+        enabled = P.ra_enabled(self.con)
+        sw = Adw.SwitchRow(title=tr("Use RetroAchievements"),
+                           subtitle=tr("Show and sync achievements from retroachievements.org"),
+                           active=enabled)
+        sw.connect("notify::active", self._on_ra_enabled)
+        ra_group.add(sw)
+        self._ra_enabled_sw = sw  # référence pour les tests
+        user_row = Adw.EntryRow(title=tr("Username"), text=P.ra_user(self.con),
+                                show_apply_button=True)
+        user_row.connect("apply", self._on_ra_credentials)
+        ra_group.add(user_row)
+        key_row = Adw.PasswordEntryRow(title=tr("Web API key"), text=P.ra_key(self.con),
+                                       show_apply_button=True)
+        key_row.connect("apply", self._on_ra_credentials)
+        ra_group.add(key_row)
+        sync_row = Adw.ActionRow(title=tr("Link my games"),
+                                 subtitle=tr("Match your played games and download "
+                                             "their achievements"))
+        sync_btn = Gtk.Button(label=tr("Sync account"), valign=Gtk.Align.CENTER,
+                              css_classes=["suggested-action"])
+        sync_btn.connect("clicked", self._on_ra_sync)
+        sync_row.add_suffix(sync_btn)
+        ra_group.add(sync_row)
+        for w in (user_row, key_row, sync_row):
+            w.set_sensitive(enabled)
+        self._ra_user_row, self._ra_key_row, self._ra_sync_row = user_row, key_row, sync_row
+        page.add(ra_group)
+
+        # Même chose pour Steam : une troisième source de succès, coupable
+        # d'un trait. « Steam » est une marque : comme « RetroAchievements »,
+        # le titre de groupe n'est pas traduit.
+        st_group = Adw.PreferencesGroup(
+            title="Steam",
+            description=tr("The key can be generated on steamcommunity.com/dev/apikey."))
+        st_enabled = P.steam_enabled(self.con)
+        st_sw = Adw.SwitchRow(title=tr("Use Steam achievements"),
+                              subtitle=tr("Show and sync achievements from your Steam account"),
+                              active=st_enabled)
+        st_sw.connect("notify::active", self._on_steam_enabled)
+        st_group.add(st_sw)
+        self._steam_enabled_sw = st_sw  # référence pour les tests
+        # Pas de `subtitle` sur une Adw.EntryRow : l'indication sur l'ID va
+        # donc dans le titre de la ligne — une seule ligne, une seule lecture.
+        st_key_row = Adw.PasswordEntryRow(title=tr("Web API key"),
+                                          text=P.steam_api_key(self.con),
+                                          show_apply_button=True)
+        st_key_row.connect("apply", self._on_steam_credentials)
+        st_group.add(st_key_row)
+        st_id_row = Adw.EntryRow(title=tr("Steam ID (in your profile URL)"),
+                                 text=P.steam_id64(self.con), show_apply_button=True)
+        st_id_row.connect("apply", self._on_steam_credentials)
+        st_group.add(st_id_row)
+        st_sync_row = Adw.ActionRow(title=tr("Sync my games"),
+                                    subtitle=tr("Download the achievements of your games "
+                                                "on Steam"))
+        st_sync_btn = Gtk.Button(label=tr("Sync account"), valign=Gtk.Align.CENTER,
+                                 css_classes=["suggested-action"])
+        st_sync_btn.connect("clicked", self._on_steam_sync)
+        st_sync_row.add_suffix(st_sync_btn)
+        st_group.add(st_sync_row)
+        for w in (st_key_row, st_id_row, st_sync_row):
+            w.set_sensitive(st_enabled)
+        self._steam_key_row, self._steam_id_row, self._steam_sync_row, \
+            self._steam_sync_btn = st_key_row, st_id_row, st_sync_row, st_sync_btn
+        page.add(st_group)
+
+        win = Adw.Dialog(content_width=560, content_height=560)
+        win.set_child(toolbar)
         win.connect("closed", self._on_settings_closed)
         self._settings_win = win
         win.present(self)
@@ -284,7 +311,7 @@ class SettingsMixin:
         if self._settings_win:
             self._settings_win.close()
         new = Win(app, do_import=False)  # pas de nouvel import : rien n'a changé dans la bibliothèque
-        new.present()
+        new._present()
         new._open_settings()
         self.close()
         return False
@@ -294,7 +321,10 @@ class SettingsMixin:
         return False
 
     def _toast_settings(self, msg):
-        (self._settings_win or self.toasts).add_toast(Adw.Toast.new(GLib.markup_escape_text(msg)))
+        """Toast DANS le dialogue ouvert — celui de la fenêtre se perdrait derrière."""
+        cible = self._settings_overlay if self._settings_win is not None else None
+        (cible if cible is not None else self.toasts).add_toast(
+            Adw.Toast.new(GLib.markup_escape_text(msg)))
 
     def _on_key(self, row):
         P.save_sgdb_key(row.get_text())

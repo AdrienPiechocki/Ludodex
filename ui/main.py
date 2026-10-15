@@ -47,6 +47,9 @@ class Win(PickViewMixin, LibraryMixin, RetroMixin, NotesMixin, AchievementsMixin
         if self.lib_sort not in ("name", "recent", "played"):
             self.lib_sort = "name"
         self.lib_filter = "all"
+        # regroupement en trois paliers (installés > non installés > masqués) :
+        # coché par défaut — seule une valeur explicite « 0 » le désactive
+        self.lib_group = P.get_setting(self.con, "lib_group") != "0"
         self.col_selected, self.col_game_ids, self._building_cols = set(), set(), False
         self._tiles, self._cover_queue, self._tex_cache, self._lib_gen = [], [], {}, 0
         # toutes les pages sont construites (leur état sert ailleurs) ; seuls les modules
@@ -137,14 +140,22 @@ class Win(PickViewMixin, LibraryMixin, RetroMixin, NotesMixin, AchievementsMixin
         s'en charge, `close_session` est sans effet dans ce cas."""
         GLib.idle_add(lambda: (P.close_session(self.con, sid), False)[1])
 
+    def _present(self):
+        """Présente la fenêtre — maximisée. Démarrage comme reconstruction après
+        changement de langue : deux chemins, une seule façon d'ouvrir."""
+        self.present()
+        self.maximize()
+
 
 class App(Adw.Application):
     def __init__(self):
         super().__init__(application_id="local.ludodex")
 
     def do_activate(self):
-        win = self.props.active_window or Win(self)
-        win.present()
+        if (ancienne := self.props.active_window) is None:
+            Win(self)._present()   # démarrage : ouverture maximisée
+        else:
+            ancienne.present()     # réactivation d'une instance déjà ouverte : on ne rebascule pas
 
 
 if __name__ == "__main__":

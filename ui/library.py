@@ -166,7 +166,13 @@ class LibraryMixin:
 
     def _sort_key(self, g):
         by = {"name": g["name"].casefold(), "recent": -g["last_played"], "played": -g["playtime_min"]}[self.lib_sort]
-        return (g["hidden"], by, g["name"].casefold())  # les jeux masqués passent toujours en dernier
+        if self.lib_group:
+            # « Regrouper les jeux » : installés, puis non installés, puis masqués
+            # — les masqués restent en dernier même installés
+            palier = 2 if g["hidden"] else (0 if g["installed"] else 1)
+        else:
+            palier = g["hidden"]  # hors regroupement : seuls les masqués passent en dernier
+        return (palier, by, g["name"].casefold())
 
     def _sort_func(self, a, b):
         ka, kb = self._sort_key(a._game), self._sort_key(b._game)
@@ -599,16 +605,21 @@ class LibraryMixin:
         act = chk.get_active()
         self.show_not_installed = act
         P.set_setting(self.con, "show_not_installed", "1" if act else "0")
-        # la même case vit aussi dans les Réglages : les deux restent d'accord
-        # (le retentonnement de l'autre rappelle ce handler, l'égalité l'y arrête)
-        for other in (getattr(self, "not_installed_chk", None), getattr(self, "_show_not_installed_chk", None)):
-            if other is not None and other is not chk and other.get_active() != act:
-                other.set_active(act)
+        # L'œil de la barre est SEUL pilote : la case a quitté les Réglages pour
+        # ne plus y être dupliquée — plus rien à tenir d'accord.
         self._build_lib()
         self._reset_pick()  # filtre du tirage : la proposition en cours est caduque
         self._refresh_covers_summary()  # le compte des couvertures suit les jeux affichés
         if self.show_not_installed:  # couvertures récupérées à la demande
             self._fetch_covers_bg(include_not_installed=True)
+
+    def _on_group_games(self, chk):
+        """« Regrouper les jeux » : la grille passe à trois paliers — installés,
+        puis non installés, puis masqués — ou reste mélangée selon le tri choisi.
+        Le contenu ne change pas : seul l'ordre bouge, d'où un simple recalage."""
+        self.lib_group = chk.get_active()
+        P.set_setting(self.con, "lib_group", "1" if self.lib_group else "0")
+        self.lib_flow.invalidate_sort()
 
     def _lib_subtitle(self, gid, status):
         inst, hid, pt = self.con.execute("SELECT installed, hidden, playtime_min FROM games WHERE id=?", (gid,)).fetchone()
