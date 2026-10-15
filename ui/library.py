@@ -41,17 +41,22 @@ class LibraryMixin:
         # AU-DESSUS des tuiles, dans le volet qui les porte, et non plus dans
         # l'en-tête de la fenêtre (qui ne garde qu'Importer, les onglets et les
         # Réglages). Trier et Filtrer y sont deux menus distincts.
-        self.search_btn = Gtk.ToggleButton(icon_name="system-search-symbolic", label=tr("Search"))
+        # Tous les boutons sont ICÔNES SEULES : les libellés sont portés par les
+        # info-bulles, sinon la rangée déborde la barre centrée de peu de largeur.
+        self.search_btn = Gtk.ToggleButton(icon_name="system-search-symbolic", tooltip_text=tr("Search"))
         self.search_btn.bind_property("active", self.search_bar, "search-mode-enabled",
                                       GObject.BindingFlags.BIDIRECTIONAL)
-        self.sort_btn = Gtk.MenuButton(icon_name="view-sort-descending-symbolic", label=tr("Sort"),
+        self.sort_btn = Gtk.MenuButton(icon_name="view-sort-descending-symbolic", tooltip_text=tr("Sort"),
                                        menu_model=self._build_sort_menu())
-        self.filter_btn = Gtk.MenuButton(icon_name="view-filter-symbolic", label=tr("Filter"),
+        self.filter_btn = Gtk.MenuButton(icon_name="view-filter-symbolic", tooltip_text=tr("Filter"),
                                          menu_model=self._build_filter_menu())
-        self.not_installed_chk = Gtk.CheckButton(label=tr("Show not installed games"),
-                                                 active=self.show_not_installed)
+        # Sans libellé, une CheckButton ne montrerait que la coche, muette sur son
+        # objet : un ToggleButton à icône porte l'état dans son symbole actif/inactif.
+        self.not_installed_chk = Gtk.ToggleButton(icon_name="image-x-generic-symbolic",
+                                                  tooltip_text=tr("Show not installed games"),
+                                                  active=self.show_not_installed)
         self.not_installed_chk.connect("toggled", self._on_show_not_installed)
-        self.add_btn = Gtk.Button(icon_name="list-add-symbolic", label=tr("Add a game"))
+        self.add_btn = Gtk.Button(icon_name="list-add-symbolic", tooltip_text=tr("Add a game"))
         self.add_btn.connect("clicked", self._open_add_game)
         lib_bar = Gtk.Box(spacing=6, margin_top=8, margin_bottom=4, margin_start=12, margin_end=12,
                           halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER, css_classes=["toolbar"])
