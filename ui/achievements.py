@@ -82,7 +82,7 @@ class AchievementsMixin:
         # du volet de 260 px. Les libellés complets (dont « Personnalisés »)
         # vivent dans le menu, avec une coche sur le choix courant, et
         # l'infobulle répète le choix en cours.
-        self.ach_source_btn = self._ach_menu_button("view-filter-symbolic",
+        self.ach_source_btn = self._ach_menu_button("object-select-symbolic",
                                                     tr("Filter by source"), "source")
         self.ach_sort_btn = self._ach_menu_button("view-sort-ascending-symbolic",
                                                   tr("Sort"), "sort")
@@ -158,7 +158,7 @@ class AchievementsMixin:
         setup_btn = Gtk.Button(label=tr("Set up a tracker"), halign=Gtk.Align.CENTER,
                                css_classes=["pill", "suggested-action"])
         setup_btn.connect("clicked", lambda *_: self._open_tracker_dialog())
-        self.ach_empty = Adw.StatusPage(icon_name="emblem-ok-symbolic", vexpand=True,
+        self.ach_empty = Adw.StatusPage(icon_name="starred-symbolic", vexpand=True,
                                         title=tr("Achievement tracker"),
                                         description=tr("Attach a YAML file of achievements and a game "
                                                        "log file to follow them."))

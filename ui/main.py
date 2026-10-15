@@ -9,7 +9,7 @@ from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango
 
 import picker as P
 from i18n import available, get_lang, tr
-from .theme import _install_css
+from .theme import _install_css, assurer_icones
 from .pickview import PickViewMixin
 from .library import LibraryMixin
 from .retrospec import RetroMixin
@@ -25,6 +25,7 @@ class Win(PickViewMixin, LibraryMixin, RetroMixin, NotesMixin, AchievementsMixin
     def __init__(self, app, do_import=True):
         super().__init__(application=app, title="Ludodex", default_width=1000, default_height=720)
         _install_css()
+        assurer_icones()
         self.con = P.db()
         moved = P.import_all(self.con) if do_import else []  # met aussi à jour temps de jeu, sessions et rangement
         self.pool, self.current, self._tires = [], None, set()
@@ -42,7 +43,7 @@ class Win(PickViewMixin, LibraryMixin, RetroMixin, NotesMixin, AchievementsMixin
                            "lib": (tr("Library"), "view-grid-symbolic"),
                            "retro": (tr("Retrospective"), "document-open-recent-symbolic"),
                            "notes": (tr("Notes"), "document-edit-symbolic"),
-                           "achievements": (tr("Achievements"), "emblem-ok-symbolic")}
+                           "achievements": (tr("Achievements"), "starred-symbolic")}
         self.lib_sort = P.get_setting(self.con, "lib_sort")
         if self.lib_sort not in ("name", "recent", "played"):
             self.lib_sort = "name"

@@ -246,7 +246,7 @@ class PickViewMixin:
         # Sans quoi le tick suivant remettrait l'offset à l'ancienne valeur et le
         # gagnant atterrit hors centre.
         self.roulette_bande._sur_largeur = self._bordure_a_change
-        self.status_page = Adw.StatusPage(icon_name="input-gaming-symbolic", title=tr("What to play?"),
+        self.status_page = Adw.StatusPage(icon_name="media-playlist-shuffle-symbolic", title=tr("What to play?"),
                                           description=tr("Press the button and the app decides."),
                                           height_request=ROULETTE_H + 40, vexpand=True)
         # Nom `pick_zone`, PAS `pick_stack` : ce nom désigne déjà, plus bas, le

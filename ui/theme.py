@@ -5,6 +5,10 @@ gi.require_version("Adw", "1")
 gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, GObject, Gtk, Pango
 
+import os
+import sys
+from pathlib import Path
+
 import picker as P
 from i18n import available, get_lang, tr
 
@@ -98,3 +102,49 @@ def _install_css():
         prov.load_from_data(CSS.encode())
     Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
     _css_done = True
+
+
+def _chemins_icones():
+    """Les emplacements où un thème d'icônes PEUT vivre au-delà de
+    XDG_DATA_DIRS : le bundle gelé (PyInstaller), l'installation MSYS2
+    (C:\\msys64\\ucrt64\\share) et GTK_DATA_PREFIX si posé. Seuls les
+    dossiers réellement présents sont retenus."""
+    candidats = []
+    if (froid := getattr(sys, "_MEIPASS", None)):  # exécutable gelé
+        candidats.append(Path(froid) / "share" / "icons")
+    candidats.append(Path(sys.base_prefix) / "share" / "icons")  # route MSYS2
+    if prefixe := os.environ.get("GTK_DATA_PREFIX"):  # route gvsbuild
+        candidats.append(Path(prefixe) / "share" / "icons")
+    return [str(c) for c in candidats if c.is_dir()]
+
+
+def assurer_icones():
+    """Que les icônes des boutons se trouvent, sur quelque système que ce soit.
+
+    GTK4 reconstruit son chemin de recherche depuis XDG_DATA_DIRS. Sous
+    Windows cette variable n'existe pas : GLib retombe sur « le share\ du
+    paquet de la DLL, si cela peut être déterminé », et le thème symbolique —
+    qui vit pourtant DANS l'installation — reste introuvable : les boutons
+    perdent alors leurs icônes une par une (carrés « image manquante »).
+
+    Deux réparations, dans l'ordre : on ajoute les emplacements réels au
+    thème ; puis, si une icône ordinaire est encore introuvable alors
+    qu'Adwaita est bien dans le chemin, c'est le NOM de thème actif qui est
+    mort (défaut GTK sur Windows, ou thème du bureau sans dossier) : on
+    repasse à Adwaita. Un environnement sain — sentinel déjà présente —
+    n'est touché nulle part.
+    """
+    disp = Gdk.Display.get_default()
+    if disp is None:
+        return
+    theme = Gtk.IconTheme.get_for_display(disp)
+    for chemin in _chemins_icones():
+        theme.add_search_path(chemin)
+    # Sentinelle : absente des ressources GTK intégrées (donc THÈME réellement
+    # cassé), présente dans Adwaita comme dans breeze.
+    if theme.has_icon("view-sort-descending-symbolic"):
+        return  # le thème actif s'en sort : rien à réparer
+    if not any((Path(chemin) / "Adwaita").is_dir() for chemin in theme.get_search_path()):
+        return  # Adwaita n'est pas là non plus : rien d'autre à quoi se fier
+    if (reglages := Gtk.Settings.get_default()) is not None:
+        reglages.set_property("gtk-icon-theme-name", "Adwaita")
