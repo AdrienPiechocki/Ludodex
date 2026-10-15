@@ -27,10 +27,10 @@ a single package suite, and the repo launchers are already ready.
    ```
 
    This script calls `pacman` with the full package list
-   (`mingw-w64-ucrt-x86_64-python`, `-python-gobject`, `-python-cairo`,
-   `-python-yaml`, `-gtk4`, `-libadwaita`, `-adwaita-icon-theme`,
-   `-hicolor-icon-theme`). You can also install them by hand from the
-   MSYS2 terminal `C:\msys64\ucrt64.exe`.
+   (`mingw-w64-ucrt-x86_64-python`, `-python-pip`, `-python-gobject`,
+   `-python-cairo`, `-python-yaml`, `-gtk4`, `-libadwaita`,
+   `-adwaita-icon-theme`, `-hicolor-icon-theme`). You can also install them by
+   hand from the MSYS2 terminal `C:\msys64\ucrt64.exe`.
 
 3. Smoke-check it in one go:
 
@@ -86,12 +86,18 @@ and `_internal\` (embedded Python, GTK 4, libadwaita, icons and translations) �
 the same content as `build.sh` on Linux. A bundle built on Linux contains
 `.so` files: it is **useless** on Windows, and vice versa.
 
+`build.bat` installs PyInstaller itself through pip, so it needs `-python-pip`
+from the MSYS2 suite (`setup-windows.bat`): MSYS2's Python ships **without** pip.
+If pip is missing, the script stops with an explicit message instead of
+`No module named pip`.
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---|---|---|
 | `ModuleNotFoundError: No module named 'gi'` | PyGObject missing from the interpreter being run | Route A: `setup-windows.bat`. Route B: the gvsbuild wheels, inside a venv |
 | `ModuleNotFoundError: No module named 'yaml'` | PyYAML missing | Route A: `-python-yaml` ; route B: `pip install -r requirements.txt` |
+| `No module named pip` when running `build.bat` | MSYS2's Python ships without pip | Relaunch `setup-windows.bat` (it installs `-python-pip`) |
 | `DLL load failed` at startup | GTK DLLs not on the PATH | Route A: launch through `ludodex.bat` (it sets up PATH); route B: add `C:\gtk\bin` |
 | `This application failed to start because no Qt…` / empty window | GTK can't find its icons | Install `adwaita-icon-theme` (route A) |
 | Grey "image missing" squares instead of button icons (sort, filter, gear, tabs) | Without `XDG_DATA_DIRS` — a variable that doesn't exist on Windows — GTK can't find the symbolic theme that is actually installed | The app repairs itself at startup (`assurer_icones()`: adds the bundle and MSYS2 paths, then switches to Adwaita); otherwise install `adwaita-icon-theme` (route A) |
@@ -102,11 +108,13 @@ the same content as `build.sh` on Linux. A bundle built on Linux contains
 
 `core/platform.py` concentrates **all** of the OS dependency and is tested
 with injected parameters: `%LOCALAPPDATA%` paths, Steam and GOG registry,
-`os.startfile` for URLs, `cmd /c start` for launch URIs (`steam://`,
+`galaxy-2.0.db` (the Galaxy client's own database, where owned-but-not-installed
+games live), `os.startfile` for URLs, `cmd /c start` for launch URIs (`steam://`,
 `itch://`…), non-POSIX command splitting (`shlex` keeps backslashes),
 `CREATE_NEW_PROCESS_GROUP`. Linux sources (Flatpak, Lutris) are neutralized:
 their databases are simply not found on Windows, so no game is imported
-from them.
+from them — and Lutris has no Windows client at all (no binary, no protocol
+handler), so its "open the client" button can't exist on Windows.
 
 All core file reads go through explicit UTF-8: game names come from
 Steam/Heroic/Epic files in UTF-8, while the default Windows code page is

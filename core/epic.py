@@ -47,11 +47,14 @@ CATALOG_URL = "https://catalog-public-service-prod06.ol.epicgames.com/catalog/ap
 
 # Clés de chiffrement du `Data` du lanceur, publiées avec lui (la clé change à chaque
 # version du lanceur ; celle-ci accompagne la 15.18.2, relevée dans
-# `api.legendary.gl/v1/version.json` → `egl_config.data_keys`).
+# `api.legendary.gl/v1/version.json` → `egl_config.data_keys`). Les clés courantes
+# sont relues chez legendary au besoin — `DATA_KEYS` n'est que le secours embarqué.
 DATA_KEYS = ("A09C853C9E95409BB94D707EADEFA52E",)
+LEGENDARY_VERSION_URL = "https://api.legendary.gl/v1/version.json"
 
 SESSION_NAME = "epic_session.json"
 CATALOG_CACHE_NAME = "epic_catalog.json"
+DATA_KEYS_CACHE_NAME = "epic_data_keys.json"
 MARGE_SEC = 600  # réutiliser une session qui n'a plus 10 minutes (règle de legendary)
 
 
@@ -127,15 +130,61 @@ def _jeton_du_json(brut):
     return str(jeton) if jeton else None
 
 
-def launcher_refresh_token(osname=None, env=None, home=None):
-    """Jeton de rafraîchissement du lanceur, lu EN LECTURE SEULE, ou None."""
+def cles_cache(osname=None, env=None, home=None):
+    """Clés de chiffrement mises en cache par `cles_de_legendary`, ou [] si le cache
+    est absent ou illisible."""
+    try:
+        data = json.loads((platform.data_dir(osname, env, home) / DATA_KEYS_CACHE_NAME)
+                          .read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    cles = data.get("keys") if isinstance(data, dict) else data
+    return [str(c) for c in cles if isinstance(c, str)] if isinstance(cles, list) else []
+
+
+def cles_de_legendary(fetch=None, osname=None, env=None, home=None):
+    """Clés PUBLIÉES par legendary (`version.json` → `egl_config.data_keys`), mises
+    en cache pour les imports suivants — la même source que `legendary auth --import`.
+
+    La clé du `Data` change à chaque version du lanceur : sans ce repli, un lanceur
+    mis à jour rend son jeton illisible et les possédés disparaissent en silence.
+    Toute panne (réseau, réponse inattendue) retombe sur le cache sans crier."""
+    cles = cles_cache(osname, env, home)
+    try:
+        # timeout court : ce petit JSON ne vaut pas 15 s d'attente sur un réseau mort
+        res = _http_json(LEGENDARY_VERSION_URL, timeout=5, fetch=fetch)
+        publiees = res["egl_config"]["data_keys"]
+        cles = list(dict.fromkeys(
+            [*cles, *(str(c) for c in publiees if isinstance(c, str))]))
+        chemin = platform.data_dir(osname, env, home) / DATA_KEYS_CACHE_NAME
+        chemin.parent.mkdir(parents=True, exist_ok=True)
+        temp = chemin.with_name(chemin.name + ".tmp")
+        temp.write_text(json.dumps({"keys": cles}), encoding="utf-8")
+        os.replace(temp, chemin)
+    except Exception:  # réseau coupé, clé absente... : le cache tient lieu de secours
+        pass
+    return cles
+
+
+def launcher_refresh_token(osname=None, env=None, home=None, fetch=None):
+    """Jeton de rafraîchissement du lanceur, lu EN LECTURE SEULE, ou None.
+
+    Le champ est chiffré avec une clé qui change à chaque version du lanceur : on
+    essaie celles embarquées, puis celles en cache, puis la publication de legendary
+    — une panne réseau ne rend donc illisible qu'un jeton déjà inconnu des trois."""
     for path in settings_files(osname, env, home):
         try:
             texte = path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
         valeur = _section_value(texte, "RememberMe", "Data")
-        jeton = parse_remember_me(valeur) if valeur else None
+        if not valeur:
+            continue
+        jeton = (parse_remember_me(valeur)
+                 or parse_remember_me(valeur, keys=cles_cache(osname, env, home))
+                 or parse_remember_me(
+                     valeur, keys=cles_de_legendary(fetch=fetch, osname=osname,
+                                                    env=env, home=home)))
         if jeton:
             return jeton
     return None
@@ -375,7 +424,7 @@ def ensure_session(fetch=None, now=None, osname=None, env=None, home=None):
         return ancien
     candidats = list(dict.fromkeys(
         [t for t in ((ancien or {}).get("refresh_token"),
-                     launcher_refresh_token(osname, env, home)) if t]))
+                     launcher_refresh_token(osname, env, home, fetch=fetch)) if t]))
     for jeton in candidats:
         try:
             res = start_session(jeton, fetch=fetch)

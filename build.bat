@@ -14,6 +14,12 @@ if exist "%MSYS%\ucrt64\bin\python.exe" (
 )
 set "PATH=%PYBIN%;%PATH%"
 
+"%PYBIN%\python.exe" -m pip --version >nul 2>&1
+if errorlevel 1 (
+    echo pip est absent de l interpreteur MSYS2 - relance setup-windows.bat.
+    exit /b 1
+)
+
 "%PYBIN%\python.exe" -m pip install --quiet pyinstaller
 if errorlevel 1 (
     echo Impossible d installer PyInstaller.

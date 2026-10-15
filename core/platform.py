@@ -220,15 +220,29 @@ def gog_registry_games():
     return out
 
 
-def retroarch_exe(osname=None, roots=None):
-    """`retroarch.exe` sous Windows (souvent hors PATH) ; None ailleurs, où le PATH suffit.
+def gog_galaxy_db(osname=None, env=None):
+    """`galaxy-2.0.db` de GOG Galaxy (Windows) : la bibliothèque complète — installés
+    ET possédés, que le registre ne voit pas. None ailleurs : pas de client Windows."""
+    if not is_windows(osname):
+        return None
+    base = _env(env).get("PROGRAMDATA") or "C:/ProgramData"
+    return pathlib.Path(base) / "GOG.com" / "Galaxy" / "storage" / "galaxy-2.0.db"
 
-    Cherche dans les dossiers d'installation habituels. `roots` sert aux tests."""
+
+def retroarch_exe(osname=None, roots=None, env=None, steam_paths=None):
+    r"""`retroarch.exe` sous Windows (souvent hors PATH) ; None ailleurs, où le PATH suffit.
+
+    Cherche dans les emplacements habituels : ProgramFiles, puis les installations
+    STEAM (`steamapps\common\RetroArch` — la plus courante, invisible du PATH).
+    `roots`/`steam_paths` servent aux tests."""
     if not is_windows(osname):
         return None
     if roots is None:
+        env = _env(env)
         roots = [pathlib.Path(p) / "RetroArch"
-                 for p in (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)")) if p]
+                 for p in (env.get("ProgramFiles"), env.get("ProgramFiles(x86)")) if p]
+        steam = _windows_steam_paths() if steam_paths is None else steam_paths
+        roots += [pathlib.Path(p) / "steamapps" / "common" / "RetroArch" for p in steam]
     for base in roots:
         exe = base / "retroarch.exe"
         if exe.is_file():

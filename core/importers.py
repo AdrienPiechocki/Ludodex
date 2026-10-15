@@ -382,18 +382,78 @@ def import_epic(con, fetch=None):
     return n
 
 
+def parse_gog_galaxy(src):
+    """Jeux GOG NATIFS possédés vus par `galaxy-2.0.db` -> [{ext_id, name}].
+
+    `ProductPurchaseDates` (possédés) ∩ pièces `title`, moins les extensions listées
+    par la pièce `dlcs` (un DLC n'est pas un jeu), et seuls les produits `gog_…` :
+    Galaxy y importe aussi ceux de Steam. Un achat sans titre affichable n'a aucune
+    raison d'être en base."""
+    titres = {}
+    for r in src.execute("""SELECT gp.releaseKey, gp.value FROM GamePieces gp
+                            JOIN GamePieceTypes gt ON gt.id = gp.gamePieceTypeId
+                            WHERE gt.type = 'title'
+                              AND gp.releaseKey LIKE 'gog\\_%' ESCAPE '\\'
+                              AND gp.releaseKey IN
+                                  (SELECT gameReleaseKey FROM ProductPurchaseDates)"""):
+        try:
+            titre = (json.loads(r["value"]) or {}).get("title")
+        except (ValueError, AttributeError, TypeError):
+            continue
+        if titre:
+            titres[r["releaseKey"]] = str(titre)
+    exts = set()
+    for r in src.execute("""SELECT gp.value FROM GamePieces gp
+                            JOIN GamePieceTypes gt ON gt.id = gp.gamePieceTypeId
+                            WHERE gt.type = 'dlcs'"""):
+        try:
+            items = (json.loads(r["value"]) or {}).get("dlcs") or []
+        except (ValueError, AttributeError, TypeError):
+            continue
+        for it in items:
+            exts.add(it if isinstance(it, str) else str((it or {}).get("releaseKey") or ""))
+    return [{"ext_id": k[len("gog_"):], "name": titres[k]}
+            for k in sorted(titres) if k not in exts]
+
+
+def gog_possedes():
+    """Jeux possédés lus dans `galaxy-2.0.db`, ou [] (absent, verrouillé, schéma
+    inconnu — le registre reste seul alors maître des installations)."""
+    path = platform.gog_galaxy_db()
+    if not path or not path.exists():
+        return []
+    try:
+        src = _ro(path)
+        try:
+            return parse_gog_galaxy(src)
+        finally:
+            src.close()
+    except sqlite3.Error:  # Galaxy en cours de verrouillage, tables manquantes...
+        return []
+
+
 def import_gog(con):
+    """Registre (installés) + `galaxy-2.0.db` (possédés) : les deux faces d'une même
+    bibliothèque. Le registre ne listant QUE les installations, une de ses absences
+    signifie « rien d'installé » — à condition que Galaxy parle, lui."""
     entries = parse_gog_registry(platform.gog_registry_games())
-    if not entries:
+    possedes = gog_possedes()
+    if not entries and not possedes:
         return 0
     con.execute("UPDATE games SET installed=0 WHERE source='gog'")
     n = 0
+    vus = set()
     for g in entries:
         upsert(con, "gog", g["ext_id"], g["name"])
         if g["command"]:  # ne jamais écraser une commande personnalisée par l'utilisateur
             con.execute("UPDATE games SET launch_override=? WHERE source='gog' AND ext_id=? AND launch_override=''",
                         (g["command"], g["ext_id"]))
+        vus.add(g["ext_id"])
         n += 1
+    for g in possedes:  # possédés sans dégrader ni doubler les installés du registre
+        if g["ext_id"] not in vus:
+            upsert_owned(con, "gog", g["ext_id"], g["name"])
+            n += 1
     return n
 
 
