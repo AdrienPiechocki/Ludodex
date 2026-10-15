@@ -2,6 +2,7 @@
 """launch.py — construction et exécution des commandes de lancement, d'installation et
 de désinstallation."""
 import json, os, pathlib, re, shutil, subprocess, time
+import urllib.error, urllib.request
 from urllib.parse import quote
 
 from i18n import tr
@@ -174,6 +175,25 @@ def lutris_install_uri(ext):
     return None
 
 
+LUTRIS_CATALOGUE = "https://lutris.net/api/installers/"
+
+
+def lutris_installer_count(slug, timeout=4):
+    """Nombre d'installateurs que lutris.net range derrière `slug`, ou None si on ne
+    sait pas.
+
+    Lutris se tait quand ce compte est nul : `get_installers()` renvoie `[]`, aucune
+    fenêtre d'installation n'apparaît et l'application sort en 0 sans un mot (constaté
+    sur `lutris lutris:install/hedgewars`, dont le catalogue ne compte rien). Seule une
+    certitude — la réponse JSON du catalogue — bloque ; tout le reste, réseau mort ou
+    page illisible, laisse passer : Lutris restant juge de sa maison."""
+    try:
+        with urllib.request.urlopen(LUTRIS_CATALOGUE + quote(slug), timeout=timeout) as r:
+            return int(json.load(r)["count"])
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def install_command(g, osname=None):
     """Commande installant le jeu, ou None : sa source ne sait pas installer.
 
@@ -231,10 +251,20 @@ def install(g):
 
     Contrairement à `launch`, rien n'est enregistré : le jeu n'a pas démarré, une
     session serait fausse. Ludodex apprend l'installation à la prochaine importation,
-    quand la source a écrit ses fichiers."""
+    quand la source a écrit ses fichiers.
+
+    Lutris est la seule source qu'on INTERROGE avant d'ouvrir : sans installateur au
+    slug, il ne montre rien et sort en 0 (`lutris_installer_count`), et le «⬇» de
+    complaisance ferait croire à une fenêtre jamais ouverte. La question ne coûte que
+    quelques centaines de millisecondes, au clic — jamais au dressage d'un menu."""
     cmd = install_command(g)
     if cmd is None:
         return False
+    if g["source"] == "lutris":
+        uri = lutris_install_uri(g["ext_id"])
+        if uri and lutris_installer_count(uri.rsplit("/", 1)[-1]) == 0:
+            print(tr("! no Lutris installer for this game"))
+            return False
     e = _detached(cmd)
     if e is not None:
         print(tr("! couldn't open the installation: {e}", e=e))
@@ -323,6 +353,39 @@ def legendary_install_dir(ext):
     return None
 
 
+# Ce que la fenêtre « Désinstaller » de Lutris exécute chez elle — seule voie de
+# retrait : ni `lutris:uninstall/` (absent de son parseur), ni option de CLI. Trois
+# relevés de sa source, sans quoi rien ne fonctionne :
+# 1. le bootstrap GTK3 de son point d'entrée : sans lui, `game.py` importe Gtk sans
+#    version, charge Gdk 4.0 par défaut et saute sur `require_version("Gdk", "3.0")` ;
+# 2. une boucle GLib : son corbeillage est une chaîne de callbacks DBus, et un
+#    processus qui se termine meurt avant même que le message ne parte ;
+# 3. un achèvement : ce portail (`org.freedesktop.portal.Trash`) est REFUSÉ sur
+#    nombreux bureaux (« could not be moved to the trash — you will need to delete it
+#    yourself », constaté ici), auquel cas Lutris laisse les fichiers sur le disque.
+#    Notre contrat à l'écran dit « Ses fichiers quittent votre ordinateur » : le
+#    dossier qui tient encore après la pompe part pour de bon, par la garde de Lutris
+#    lui-même (`delete_folder` refuse `~`).
+LUTRIS_UNINSTALL = (
+    "import os, time, gi\n"
+    "gi.require_version('Gtk', '3.0')\n"
+    "gi.require_version('Gdk', '3.0')\n"
+    "from lutris.game import Game\n"
+    "from lutris.util.system import delete_folder\n"
+    "from gi.repository import GLib\n"
+    "g = Game({gid})\n"
+    "d = g.directory\n"
+    "g.uninstall(delete_files=True)\n"
+    "ctx = GLib.MainContext.default()\n"
+    "for _ in range(500):\n"
+    "    while ctx.pending():\n"
+    "        ctx.iteration(False)\n"
+    "    time.sleep(0.01)\n"
+    "if d and os.path.isdir(d):\n"
+    "    delete_folder(d)\n"
+)
+
+
 def uninstall_command(g, osname=None):
     """Commande désinstallant le jeu, ou None : sa source ne sait pas désinstaller.
 
@@ -335,11 +398,13 @@ def uninstall_command(g, osname=None):
       this device? ») : jamais de retrait silencieux. L'appid vient de `steam_appid_of`.
     - **Flatpak** — `flatpak uninstall -y {id}`, qui ouvre la place mais laisse les
       données `~/.var/app` en place.
+    - **Lutris** — par sa propre porte : ni `lutris:uninstall/` (absent de son parseur,
+      lu dans sa source) ni option de CLI (`--help` complet) ; seule sa méthode Python
+      `Game.uninstall` sait retirer les fichiers et le marqueur `installed`, rappelée
+      dans un python qui l'importe (voir `LUTRIS_UNINSTALL`).
 
-    Lutris est écarté pour l'inverse de la raison qui l'admettait côté installation :
-    son parseur (`lutris/gui/application.py`) n'accepte que `rungame`, `rungameid` et
-    `install` — le slug existe, l'action non. RetroArch l'est parce que `ext_id` est le
-    chemin d'une ROM : ce fichier appartient à l'utilisateur, pas à Ludodex. itch, GOG
+    RetroArch est écarté parce que `ext_id` est le chemin d'une ROM : ce fichier
+    appartient à l'utilisateur, pas à Ludodex. itch, GOG
     et Epic natifs n'ont chez nous aucune commande de retrait documentée — pour Epic,
     Playnite lui-même ne fait qu'ouvrir `com.epicgames.launcher://store/library`, une
     ouverture de page n'étant pas une désinstallation, et `gogdl` — l'outil GOG de
@@ -355,6 +420,20 @@ def uninstall_command(g, osname=None):
         return uri_command(f"steam://uninstall/{appid}", osname) if appid else None
     if src == "flatpak":
         return ["flatpak", "uninstall", "-y", str(ext)]
+    if src == "lutris":
+        if platform.is_windows(osname):
+            return None
+        try:
+            kind, gid = str(ext).split(":", 1)
+            gid = int(gid)
+        except ValueError:  # pas de deux-points, ou id non numérique
+            return None
+        script = LUTRIS_UNINSTALL.format(gid=gid)
+        if kind == "native":  # le python qui importe Lutris, pas celui de Ludodex
+            py = shutil.which("python3")
+            return [py, "-c", script] if py and shutil.which("lutris") else None
+        return (["flatpak", "run", "--command=python3", "net.lutris.Lutris", "-c", script]
+                if shutil.which("flatpak") else None)
     if src == "heroic":
         d = legendary_install_dir(ext)
         if d is None or shutil.which("legendary") is None:

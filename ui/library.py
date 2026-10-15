@@ -760,10 +760,10 @@ class LibraryMixin:
             icon("starred-symbolic", tr("Achievements"), lambda *_: self._goto_ach_game(gid, win))
         # Un seul bouton destructeur à l'emplacement, jamais les deux. La source
         # qui sait RETIRER LES FICHIERS l'emporte : « Désinstaller », c'est
-        # `uninstall_command` qui tranche, pour Steam et Flatpak. Partout ailleurs —
-        # jeu déjà retiré du disque, mais aussi ajouté à la main (custom) ou installé
-        # sans désinstallation possible (RetroArch, itch, Lutris) — la même poubelle
-        # porte « Supprimer », qui ne retire que la FICHE.
+        # `uninstall_command` qui tranche, pour Steam, Flatpak et Lutris. Partout
+        # ailleurs — jeu déjà retiré du disque, mais aussi ajouté à la main (custom)
+        # ou installé sans désinstallation possible (RetroArch, itch) — la même
+        # poubelle porte « Supprimer », qui ne retire que la FICHE.
         if g["installed"] and P.uninstall_command(g) is not None:
             icon("user-trash-symbolic", tr("Uninstall"), lambda *_: self._on_uninstall(gid, win), destructive=True)
         else:
