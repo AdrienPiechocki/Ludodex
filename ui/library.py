@@ -52,7 +52,7 @@ class LibraryMixin:
                                          menu_model=self._build_filter_menu())
         # Sans libellé, une CheckButton ne montrerait que la coche, muette sur son
         # objet : un ToggleButton à icône porte l'état dans son symbole actif/inactif.
-        self.not_installed_chk = Gtk.ToggleButton(icon_name="image-x-generic-symbolic",
+        self.not_installed_chk = Gtk.ToggleButton(icon_name="view-reveal-symbolic",
                                                   tooltip_text=tr("Show not installed games"),
                                                   active=self.show_not_installed)
         self.not_installed_chk.connect("toggled", self._on_show_not_installed)
