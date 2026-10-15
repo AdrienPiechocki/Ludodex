@@ -427,7 +427,7 @@ class AchievementsMixin:
         if kind == "source":
             return [tr("All sources"), tr("RetroAchievements"), tr("Steam"),
                     tr("Custom achievements")]
-        return [tr("Name A→Z"), tr("Completion")]
+        return [tr("Name A→Z"), tr("Name Z→A"), tr("Completion")]  # l'ordre suit ACH_GAME_SORTS
 
     def _refill_ach_menu(self, btn):
         """Reconstruit les lignes du menu au moment de l'ouvrir : la coche suit

@@ -206,7 +206,9 @@ def achievement_games(con):
 
 
 # ---------- tri et filtre de la liste des jeux (volet gauche des succès) ----------
-ACH_GAME_SORTS = ("name", "completion")
+# L'ordre de la tuple EST l'ordre du menu (les libellés la suivent, index pour
+# index) : « name » (le tri par défaut) ouvre la liste à l'indice 0
+ACH_GAME_SORTS = ("name", "name_desc", "completion")
 ACH_GAME_SOURCES = ("all", "ra", "steam", "custom")
 
 
@@ -236,6 +238,8 @@ def filter_sort_game_rows(rows, comp, sort="name", source="all"):
             d, t = comp.get(gid, (0.0, 0))
             return d / t if t else 0.0
         rows = sorted(rows, key=lambda r: (-_taux(r[0]), r[1].lower()))
+    elif sort == "name_desc":
+        rows = sorted(rows, key=lambda r: r[1].lower(), reverse=True)
     else:
         rows = sorted(rows, key=lambda r: r[1].lower())
     return rows
