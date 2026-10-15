@@ -89,8 +89,7 @@ FLATPAK_IGNORE = {"com.valvesoftware.Steam", "net.lutris.Lutris", "org.libretro.
 # AUTO_SOURCES / ensure_auto_collections vivent ici (db) pour éviter un cycle db -> collections.
 AUTO_SOURCES = [("steam", "Steam"), ("itch", "Itch"), ("flatpak", "Flatpak"),
                 ("lutris", "Lutris"), ("retroarch", "RetroArch"),
-                ("heroic", "Heroic"), ("epic", "Epic Games"),
-                ("custom", "Imported")]
+                ("heroic", "Heroic"), ("custom", "Imported")]
 
 
 def db():

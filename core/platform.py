@@ -4,8 +4,7 @@
 Chaque fonction accepte `env` / `home` injectés : les chemins se testent donc
 depuis n'importe quelle machine. Le reste du code ne fait que consommer ces
 fonctions. Ludodex est LINUX-ONLY : aucun registre, aucun `cmd start`, aucun
-chemin Windows — les bibliothèques Epic et GOG viennent de Heroic, et le
-lanceur Epic officiel n'est lu que sous Wine.
+chemin Windows — les bibliothèques Epic et GOG viennent de Heroic.
 """
 import os, pathlib, shlex, shutil, subprocess
 
@@ -100,26 +99,11 @@ def heroic_dirs(env=None, home=None):
 
 
 def legendary_dirs(env=None, home=None):
-    """Dossiers de config de Legendary (Epic) : ceux embarqués par Heroic + l'installation autonome."""
+    """Dossiers de config de Legendary, le moteur d'Epic de Heroic : ceux embarqués par
+    Heroic + l'installation autonome."""
     home = _home(home)
     return [d / "legendaryConfig" / "legendary" for d in heroic_dirs(env, home)] + \
            [home / ".config/legendary"]
-
-
-def epic_programdata(home=None):
-    """Dossier « .../Epic » du lanceur Epic officiel sous Wine (`ProgramData`)."""
-    return [_home(home) / ".wine/drive_c/ProgramData/Epic"]
-
-
-def epic_settings_dirs(home=None):
-    """Dossiers `Saved/Config/Windows` du lanceur Epic officiel sous Wine.
-
-    C'est là que `GameUserSettings.ini` garde, sous `[RememberMe] Data`, la session du
-    compte — la seule chose qu'il soit possible de réutiliser : sa bibliothèque, lui,
-    n'est écrite nulle part. Le nom du user Windows n'est pas connu d'avance,
-    d'où le `glob`."""
-    return sorted(_home(home).glob(".wine/drive_c/users/*/AppData/Local/EpicGamesLauncher/"
-                                   "Saved/Config/Windows"))
 
 
 def uri_command(uri):

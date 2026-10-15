@@ -7,7 +7,7 @@ from .db import upsert, upsert_owned, _ts, _ro, LUTRIS_DBS, ITCH_DBS, FLATPAK_DI
 from .tags import clean_tags, LUTRIS_API
 from .steam import import_steam
 from .launch import default_command, parse_command, split_env, check_command
-from . import platform, epic
+from . import platform
 from .sources import source_enabled
 from .stats import refresh_stats, auto_tidy
 from .game_collections import AUTO_SOURCES
@@ -201,32 +201,6 @@ def parse_legendary(data):
     return out
 
 
-def parse_launcher_installed(data):
-    """`LauncherInstalled.dat` du lanceur Epic officiel -> liste d'objets {ext_id, name}."""
-    out = []
-    for e in (data.get("InstallationList") or []) if isinstance(data, dict) else []:
-        if not isinstance(e, dict):
-            continue
-        ext = _first(e, "AppName", "app_name", "AppId")
-        if not ext:
-            continue
-        out.append({"ext_id": str(ext), "name": str(_first(e, "DisplayName", "AppName", default=ext))})
-    return out
-
-
-def parse_epic_manifest(data):
-    """Manifeste `.item` d'un jeu Epic -> {ext_id, name}, ou None si ce n'est pas un jeu."""
-    if not isinstance(data, dict):
-        return None
-    cats = data.get("AppCategories") or []
-    if cats and "games" not in cats:  # moteurs, plugins, applications...
-        return None
-    ext = _first(data, "AppName", "CatalogItemId", "app_name")
-    if not ext:
-        return None
-    return {"ext_id": str(ext), "name": str(_first(data, "DisplayName", "AppName", default=ext))}
-
-
 HEROIC_LIBS = (("legendary_library.json", "library"), ("gog_library.json", "games"))
 
 
@@ -240,7 +214,7 @@ def heroic_library_files():
     """(fichier, clé JSON) des bibliothèques que Heroic met en cache après ses requêtes.
 
     Toute la bibliothèque, installée ou non — la seule source hors ligne des jeux
-    possédés : le lanceur Epic officiel ne range que ses installations.
+    possédés : personne d'autre n'écrit la liste de ce que le joueur possède.
     """
     return [(d / "store_cache" / name, key)
             for d in platform.heroic_dirs() for name, key in HEROIC_LIBS]
@@ -306,61 +280,9 @@ def import_heroic(con):
     return n
 
 
-def epic_game_files():
-    """(fichier LauncherInstalled.dat, dossier des manifestes .item) par installation Epic."""
-    return [(base / "UnrealEngineLauncher" / "LauncherInstalled.dat",
-             base / "EpicGamesLauncher" / "Data" / "Manifests")
-            for base in platform.epic_programdata()]
-
-
-def import_epic(con, fetch=None):
-    """Installations Epic (ses fichiers) et jeux possédés (sa SESSION, `core/epic.py`).
-
-    Deux phases et non une : les installations viennent de fichiers LOCAUX, elles
-    doivent survivre à un réseau en panne. Les possédés, eux, ne sont ajoutés qu'avec
-    un titre (catalogue) — un jeu sans nom affichable n'aurait aucune raison d'être
-    en base. `fetch` est le transport HTTP, injecté par les tests.
-    """
-    sources = epic_game_files()
-    # Les fichiers disent qui est installé : plus de fichier, plus rien d'installé.
-    con.execute("UPDATE games SET installed=0 WHERE source='epic'")
-    n = 0
-    for dat, man in sources:
-        games = {}
-        if dat.exists():  # liste des installés (noms = codes internes)
-            try:
-                data = json.loads(dat.read_text(encoding="utf-8", errors="ignore"))
-            except (OSError, ValueError):
-                data = {}
-            for g in parse_launcher_installed(data):
-                games[g["ext_id"]] = g
-        if man.is_dir():  # manifestes : plus riches (nom d'affichage)
-            for f in sorted(man.glob("*.item")):
-                try:
-                    data = json.loads(f.read_text(encoding="utf-8", errors="ignore"))
-                except (OSError, ValueError):
-                    continue
-                g = parse_epic_manifest(data)
-                if g:
-                    games[g["ext_id"]] = g
-        for g in games.values():
-            upsert(con, "epic", g["ext_id"], g["name"])
-            n += 1
-    try:  # phase réseau : une panne ne doit pas effacer les installations ci-dessus
-        connus = {r[0] for r in con.execute("SELECT ext_id FROM games WHERE source='epic'")}
-        owned = epic.epic_owned_games(known=connus, fetch=fetch)
-    except Exception as e:
-        print(f"! Epic Games : {e}")
-        owned = []
-    for g in owned:
-        upsert_owned(con, "epic", g["ext_id"], g["name"])
-        n += 1
-    return n
-
-
 IMPORTERS = {"Steam": import_steam, "Lutris": import_lutris, "Flatpak": import_flatpak,
              "Itch": import_itch, "RetroArch": import_retroarch,
-             "Heroic": import_heroic, "Epic Games": import_epic}
+             "Heroic": import_heroic}
 
 
 def import_all(con):

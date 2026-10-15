@@ -30,8 +30,6 @@ def default_command(g):
         return uri_command(f"itch://caves/{ext}/launch"), None
     if src == "heroic":
         return uri_command(heroic_uri(ext)), None
-    if src == "epic":
-        return uri_command(f"com.epicgames.launcher://apps/{ext}?action=launch"), None
     if ext.startswith("custom:"):
         raise ValueError(tr("missing command"))
     return parse_command(ext)
@@ -238,11 +236,7 @@ def install_command(g):
     renvoie un argv, donc jamais de bouton muet. Steam passe par son appid (`steam_appid_of`,
     seule source de la règle « c'est un appid »), Flatpak par une vraie commande —
     d'où un argv rendu plutôt qu'une URI — et Lutris par le slug relu plus haut.
-    Une ROM ne se « télécharge » pas. Epic, lui, installe par
-    `com.epicgames.launcher://apps/{AppName}?action=install` : c'est le
-    `GameInstallUrlMask` du plugin Epic de Playnite, dont le commentaire dit
-    l'action réelle (« technically works » — seul son dialogue est en vieux
-    style, d'où le choix de Playnite d'ouvrir la bibliothèque à la place)."""
+    Une ROM ne se « télécharge » pas."""
     try:
         src, ext = g["source"], g["ext_id"]
     except (IndexError, KeyError, TypeError):
@@ -254,8 +248,6 @@ def install_command(g):
         return ["flatpak", "install", "-y", str(ext)]
     if src == "heroic":
         return uri_command(heroic_uri(ext))
-    if src == "epic":
-        return uri_command(f"com.epicgames.launcher://apps/{ext}?action=install")
     if src == "lutris":
         uri = lutris_install_uri(ext)
         if uri is None:
@@ -315,8 +307,7 @@ def install(g):
 # fenêtre par `steam://nav/games` (« Opens a Steam window » — Steam browser protocol) ;
 # Flatpak, qui n'a pas de client, ouvre le catalogue flathub.org dans le navigateur.
 LAUNCHER_URIS = {"steam": "steam://nav/games", "itch": "itch://",
-                 "heroic": "heroic://", "epic": "com.epicgames.launcher://",
-                 "flatpak": "https://flathub.org"}
+                 "heroic": "heroic://", "flatpak": "https://flathub.org"}
 
 
 def launcher_command(source):
@@ -437,11 +428,9 @@ def uninstall_command(g):
       dans un python qui l'importe (voir `LUTRIS_UNINSTALL`).
 
     RetroArch est écarté parce que `ext_id` est le chemin d'une ROM : ce fichier
-    appartient à l'utilisateur, pas à Ludodex. itch et Epic natifs n'ont chez nous
-    aucune commande de retrait documentée — pour Epic, Playnite lui-même ne fait
-    qu'ouvrir `com.epicgames.launcher://store/library`, une ouverture de page
-    n'étant pas une désinstallation.
-    Heroic, lui, passe par `legendary uninstall`, à condition que le binaire soit là et
+    appartient à l'utilisateur, pas à Ludodex. itch n'a chez nous aucune commande
+    de retrait documentée.
+    Heroic passe par `legendary uninstall`, à condition que le binaire soit là et
     que ce soit LUI qui ait installé le jeu (voir `legendary_install_dir`)."""
     try:
         src, ext = g["source"], g["ext_id"]
