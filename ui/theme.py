@@ -115,7 +115,9 @@ def _chemins_icones():
     candidats.append(Path(sys.base_prefix) / "share" / "icons")  # route MSYS2
     if prefixe := os.environ.get("GTK_DATA_PREFIX"):  # route gvsbuild
         candidats.append(Path(prefixe) / "share" / "icons")
-    return [str(c) for c in candidats if c.is_dir()]
+    candidats.append(Path(__file__).resolve().parent.parent / "share" / "icons")  # dépôt
+    # Doublons écartés (gelé : __file__ est DANS _MEIPASS) + dossiers absents.
+    return list(dict.fromkeys(str(c) for c in candidats if c.is_dir()))
 
 
 def assurer_icones():

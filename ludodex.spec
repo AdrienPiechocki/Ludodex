@@ -16,11 +16,18 @@ Notes :
   GTK4 (l'application planterait au démarrage).
 - `lang/` est copié tel quel ; `i18n.py` lit les traductions depuis
   `sys._MEIPASS/lang` une fois l'application gelée.
+- `share/icons/` embarque le logo de l'application (`local.ludodex`) au layout
+  hicolor : `ui/theme.py` le cherche déjà dans `sys._MEIPASS/share/icons`.
+- `icon` (ludodex.ico) n'est actif que sous Windows : l'EXE porte alors le logo
+  dans l'Explorateur et la barre des tâches ; Linux l'ignore.
 """
 
-# Traductions de l'application (i18n.py les lit à côté du bundle).
+import sys
+
+# Traductions de l'application (i18n.py les lit à côté du bundle) + logo.
 datas = [
     ("lang", "lang"),
+    ("share/icons", "share/icons"),
 ]
 
 # Version de Gtk à collecter (cf. note en tête de fichier) et jeux d'icônes /
@@ -63,6 +70,7 @@ exe_gui = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
+    icon="share/ludodex.ico" if sys.platform == "win32" else None,  # logo (Windows)
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -97,6 +105,7 @@ exe_cli = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
+    icon="share/ludodex.ico" if sys.platform == "win32" else None,  # logo (Windows)
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,

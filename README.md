@@ -142,6 +142,8 @@ ui/           GTK4 interface: main, theme, pickview, library, retrospec,
               notes, markdown, achievements, settingsui
 lang/         translations (en = base, fr)
 examples/     sample files (e.g. openmw-achievements.yaml)
+share/        application logo: master PNG, hicolor sizes, Windows .ico
+local.ludodex.desktop  Linux launcher (installed to ~/.local/share/applications)
 build.sh      standalone PyInstaller build (ludodex.spec)
 build.bat     same build under Windows
 setup-windows.bat  installs every Windows dependency via MSYS2 (pacman)

@@ -24,6 +24,7 @@ class Win(PickViewMixin, LibraryMixin, RetroMixin, NotesMixin, AchievementsMixin
 
     def __init__(self, app, do_import=True):
         super().__init__(application=app, title="Ludodex", default_width=1000, default_height=720)
+        self.set_icon_name("local.ludodex")  # le logo (manette) : fenêtre, alt-tab, barre des tâches
         _install_css()
         assurer_icones()
         self.con = P.db()

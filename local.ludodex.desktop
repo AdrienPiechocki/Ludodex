@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Ludodex
+GenericName=Game library
+Comment=Import your games, pick one at random and track your play sessions
+Comment[fr]=Importe vos jeux, en tire un au hasard et suit vos parties
+Exec=/home/adrien/Projets/Ludodex/build/ludodex/ludodex
+Icon=local.ludodex
+Terminal=false
+Categories=Game;
+StartupWMClass=local.ludodex
