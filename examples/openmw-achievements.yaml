@@ -1,37 +1,37 @@
-# Succès Morrowind + extensions + Tamriel Rebuilt pour Ludodex (module « Achievements »).
+# Morrowind + expansions + Tamriel Rebuilt achievements for Ludodex ("Achievements" module).
 #
-# À utiliser avec le mod OpenMW « Ludodex Logger » (LudodexLogger.zip) : le tracker lit
-# openmw.log. Chaque motif est une expression régulière en recherche libre, appliquée
-# ligne par ligne. Format des lignes produites par le mod :
+# To use with the OpenMW "Ludodex Logger" mod (LudodexLogger.zip): the tracker reads
+# openmw.log. Each pattern is a free-search regular expression, applied
+# line by line. Format of the lines produced by the mod:
 #   QUEST STARTED: <id>            QUEST UPDATE: <id> | stage=N      QUEST COMPLETE: <id>
-#   NPC KILLED: <nom> | id=...     CREATURE KILLED: <nom> | id=...   ENEMY ENCOUNTER: <nom> | id=...
+#   NPC KILLED: <name> | id=...    CREATURE KILLED: <name> | id=...  ENEMY ENCOUNTER: <name> | id=...
 #   LEVEL UP: N                    SKILL UP: <skill> | level=N       ATTRIBUTE UP: <attr> | value=N
-#   ITEM ACQUIRED: <nom> | xN | id=...                              SPELL LEARNED: <nom> | id=...
-#   FACTION JOINED: <nom> | id=<faction>   FACTION RANK: <nom> | rank=N | title=...
-#   LOCATION / REGION / INTERIOR DISCOVERED: <nom>                  CELL ENTERED: <nom> | exterior|interior
-#   NPC TALKED / BARTER OPENED / TRAINING OPENED / TRAVEL SERVICE OPENED: <nom>
-#   BOOK READ / SCROLL READ: <nom>   BOUNTY INCREASED|DECREASED: N   PLAYER DIED: Player   REST: started
+#   ITEM ACQUIRED: <name> | xN | id=...                              SPELL LEARNED: <name> | id=...
+#   FACTION JOINED: <name> | id=<faction>   FACTION RANK: <name> | rank=N | title=...
+#   LOCATION / REGION / INTERIOR DISCOVERED: <name>                  CELL ENTERED: <name> | exterior|interior
+#   NPC TALKED / BARTER OPENED / TRAINING OPENED / TRAVEL SERVICE OPENED: <name>
+#   BOOK READ / SCROLL READ: <name>   BOUNTY INCREASED|DECREASED: N   PLAYER DIED: Player   REST: started
 #
-# Notes :
-# - OpenMW met les ids de quêtes en minuscules : tous les succès sont en case_insensitive.
-# - Les stages « QUEST UPDATE » sont des correspondances exactes (stage=N) ou « >= N » (regex numérique).
-# - Les noms de lieux (villes, tombeaux...) sont ceux des cellules : motif en sous-chaîne, donc tolérant.
-# - Les préfixes d'ids Tamriel Rebuilt suivent la convention TR_m<carte>_<initiales>_<nom> :
-#   FG, MT, TT, IL confirmés ; MG, TG, HH, HT déduits de la convention, à vérifier dans ton log.
-# - Les motifs avec « . » à la place d'une apostrophe évitent les soucis de guillemets.
-# - Project Tamriel (Project Cyrodiil, Skyrim: Home of the Nords) : le guide d'ids de PT impose les préfixes PC_ et Sky_ ;
-#   les quêtes sont donc comptées avec pc_ et (sky|shotn)_ (à vérifier dans ton log). Les factions PT sont reconnues par
-#   leur id Tamriel_Data (t_cyr_..., t_sky_...). Les promotions utilisent « FACTION RANK: ... id=... » (mod mis à jour).
-# - hidden: true marque les succès dont le nom ou la description révèle une quête, une intrigue, un objet ou un secret.
-# - Poison Song (TR 26.08) : les ids des nouvelles quêtes ne sont pas publics, donc les succès reposent sur
-#   les lieux (CELL ENTERED), les factions (Indoril, Ordinators) et les titres de rang. Les titres de rang
-#   Indoril (Oathman, Kinsman, Concordant Minister, Illuminated Elder) viennent de l'UESP et peuvent différer
-#   du jeu ; le préfixe tr_m<n>_hi_ (House Indoril) est déduit de la convention d'ids de TR.
+# Notes:
+# - OpenMW lowercases quest ids: every achievement is case_insensitive.
+# - "QUEST UPDATE" stages are exact matches (stage=N) or ">= N" (numeric regex).
+# - Location names (cities, tombs...) are cell names: substring pattern, therefore tolerant.
+# - Tamriel Rebuilt id prefixes follow the TR_m<map>_<initials>_<name> convention:
+#   FG, MT, TT, IL confirmed; MG, TG, HH, HT deduced from the convention, check them in your log.
+# - Patterns using "." instead of an apostrophe avoid quoting trouble.
+# - Project Tamriel (Project Cyrodiil, Skyrim: Home of the Nords): the PT id guide mandates the PC_ and Sky_ prefixes;
+#   quests are therefore counted with pc_ and (sky|shotn)_ (check them in your log). PT factions are recognized by
+#   their Tamriel_Data id (t_cyr_..., t_sky_...). Rank promotions use "FACTION RANK: ... id=..." (mod updated).
+# - hidden: true marks achievements whose name or description reveals a quest, plot, item or secret.
+# - Poison Song (TR 26.08): the new quest ids are not public, so achievements rely on
+#   locations (CELL ENTERED), factions (Indoril, Ordinators) and rank titles. The Indoril rank
+#   titles (Oathman, Kinsman, Concordant Minister, Illuminated Elder) come from the UESP and may differ
+#   from the game; the tr_m<n>_hi_ (House Indoril) prefix is deduced from TR's id convention.
 
 achievements:
 
   # ======================================================================
-  # PROGRESSION GÉNÉRALE — quêtes (Morrowind + extensions + Tamriel Rebuilt)
+  # GENERAL PROGRESSION — quests (Morrowind + expansions + Tamriel Rebuilt)
   # ======================================================================
   - name: "First Steps"
     description: "Complete your first quest."
@@ -110,7 +110,7 @@ achievements:
     case_insensitive: true
 
   # ======================================================================
-  # TAMRIEL REBUILT — quêtes de la terre ferme (ids TR_m<n>_...)
+  # TAMRIEL REBUILT — mainland quests (ids TR_m<n>_...)
   # ======================================================================
   - name: "Mainland Mercenary"
     description: "Complete 10 Tamriel Rebuilt quests."
@@ -253,7 +253,7 @@ achievements:
     hidden: true
 
   # ======================================================================
-  # QUÊTE PRINCIPALE — Morrowind
+  # MAIN QUEST — Morrowind
   # ======================================================================
   - name: "Find the Spymaster"
     description: "Begin the main quest and set out for Balmora."
@@ -446,7 +446,7 @@ achievements:
     hidden: true
 
   # ======================================================================
-  # QUÊTES SECONDAIRES
+  # SIDE QUESTS
   # ======================================================================
   - name: "Fargoth's Ring"
     description: "Return Fargoth's ring."
@@ -730,7 +730,7 @@ achievements:
     case_insensitive: true
 
   # ======================================================================
-  # EXPLORATION — villes (CELL ENTERED, indépendant du type de cellule)
+  # EXPLORATION — cities (CELL ENTERED, independent of cell type)
   # ======================================================================
   - name: "Grand Tour of Vvardenfell"
     description: "Visit 21 towns and villages across Vvardenfell."
@@ -900,7 +900,7 @@ achievements:
     case_insensitive: true
 
   # ======================================================================
-  # EXPLORATION — lieux découverts
+  # EXPLORATION — discovered locations
   # ======================================================================
   - name: "Wanderer"
     description: "Discover 10 named outdoor locations."
@@ -1162,7 +1162,7 @@ achievements:
     case_insensitive: true
 
   # ======================================================================
-  # COMBAT — ennemis
+  # COMBAT — enemies
   # ======================================================================
   - name: "First Blood"
     description: "Kill your first NPC."
@@ -1441,7 +1441,7 @@ achievements:
     case_insensitive: true
 
   # ======================================================================
-  # NIVEAUX, COMPÉTENCES, ATTRIBUTS
+  # LEVELS, SKILLS, ATTRIBUTES
   # ======================================================================
   - name: "Ding!"
     description: "Gain a level."
@@ -1669,7 +1669,7 @@ achievements:
     case_insensitive: true
 
   # ======================================================================
-  # MAGIE
+  # MAGIC
   # ======================================================================
   - name: "Spellbook"
     description: "Learn your first spell."
@@ -1720,7 +1720,7 @@ achievements:
     case_insensitive: true
 
   # ======================================================================
-  # OBJETS, RICHESSE ET ARTEFACTS
+  # ITEMS, WEALTH AND ARTIFACTS
   # ======================================================================
   - name: "Wielder of the Tools"
     description: "Obtain Sunder, Keening and Wraithguard."
@@ -1891,7 +1891,7 @@ achievements:
     case_insensitive: true
 
   # ======================================================================
-  # SOCIAL, COMMERCE ET VOYAGES
+  # SOCIAL, TRADE AND TRAVEL
   # ======================================================================
   - name: "Small Talk"
     description: "Start 25 conversations."
@@ -2067,7 +2067,7 @@ achievements:
     case_insensitive: true
 
   # ======================================================================
-  # TAMRIEL REBUILT 26.08 « POISON SONG » — régions, lieux, Indoril et Ordinators
+  # TAMRIEL REBUILT 26.08 "POISON SONG" — regions, locations, Indoril and Ordinators
   # ======================================================================
   - name: "Orethan Fields"
     description: "Discover the Orethan Fields, a brand-new region of gardens and farmland that feeds Almalexia."
@@ -2743,7 +2743,7 @@ achievements:
     case_insensitive: true
 
   # ======================================================================
-  # PROJECT TAMRIEL — liens entre provinces
+  # PROJECT TAMRIEL — cross-province links
   # ======================================================================
   - name: "Across the Sea"
     description: "Take a ship between provinces: speak to Jurid Fast-Travel, Annine Golden-Blade or Cascus Daro."

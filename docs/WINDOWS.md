@@ -1,112 +1,113 @@
-# Ludodex sous Windows
+# Ludodex on Windows
 
-## Pourquoi « il manque les paquets » ne se règle pas par `pip install`
+## Why "missing packages" can't be fixed with `pip install`
 
-Ludodex n'a que **trois** dépendances Python : `gi` (PyGObject), `cairo` (PyCairo)
-et `yaml` (PyYAML).
+Ludodex has only **three** Python dependencies: `gi` (PyGObject), `cairo` (PyCairo)
+and `yaml` (PyYAML).
 
-- `PyYAML` s'installe par pip, sans problème ;
-- **`gi` et `cairo` n'ont aucun wheel Windows sur PyPI.** `pip install pygobject`
-  ne peut que compiler depuis les sources, ce qui exige les bibliothèques GTK 4,
-  GLib et GObject Introspection déjà installées. Sans elles, l'installation
-  échoue — et un `import gi` échoue, ce qui est exactement le symptôme initial.
+- `PyYAML` installs from pip without any trouble;
+- **`gi` and `cairo` have no Windows wheels on PyPI.** `pip install pygobject`
+  can only compile from source, which requires the GTK 4, GLib and GObject
+  Introspection libraries to be installed already. Without them the install
+  fails — and an `import gi` fails, which is exactly the initial symptom.
 
-Il faut donc faire venir GTK 4, libadwaita et PyGObject d'**un** de ces deux
-endroits. Ludodex est câblé pour le premier.
+GTK 4, libadwaita and PyGObject therefore have to come from **one** of these
+two places. Ludodex is wired for the first one.
 
-## Route A — MSYS2 (recommandée)
+## Route A — MSYS2 (recommended)
 
-GTK 4 + libadwaita + PyGObject + PyCairo + PyYAML + les icônes Adwaita, tout
-dans une seule suite de paquets, et les lanceurs du dépôt sont déjà prêts.
+GTK 4 + libadwaita + PyGObject + PyCairo + PyYAML + the Adwaita icons, all in
+a single package suite, and the repo launchers are already ready.
 
-1. Installe [MSYS2](https://www.msys2.org/) (emplacement par défaut `C:\msys64`).
-2. Dans le dossier du dépôt, lance :
+1. Install [MSYS2](https://www.msys2.org/) (default location `C:\msys64`).
+2. In the repo folder, run:
 
    ```bat
    setup-windows.bat
    ```
 
-   Ce script appelle `pacman` avec la liste complète des paquets
+   This script calls `pacman` with the full package list
    (`mingw-w64-ucrt-x86_64-python`, `-python-gobject`, `-python-cairo`,
    `-python-yaml`, `-gtk4`, `-libadwaita`, `-adwaita-icon-theme`,
-   `-hicolor-icon-theme`). Tu peux aussi les installer à la main depuis le
-   terminal MSYS2 `C:\msys64\ucrt64.exe`.
+   `-hicolor-icon-theme`). You can also install them by hand from the
+   MSYS2 terminal `C:\msys64\ucrt64.exe`.
 
-3. Vérifie d'un trait :
+3. Smoke-check it in one go:
 
    ```bat
    ludodex-cli.bat --help
    ludodex.bat
    ```
 
-`ludodex.bat` et `ludodex-cli.bat` cherchent `ucrt64` puis retombent sur
-`mingw64` : les deux environnements MSYS2 fonctionnent.
+`ludodex.bat` and `ludodex-cli.bat` look for `ucrt64` and fall back to
+`mingw64`: both MSYS2 environments work.
 
-> **Pour la CLI seule** (sans interface graphique), il ne faut que `python` et
-> `python-yaml` : `pacman -S --needed --noconfirm mingw-w64-ucrt-x86_64-python mingw-w64-ucrt-x86_64-python-yaml`
+> **For the CLI alone** (no GUI), you only need `python` and
+> `python-yaml`: `pacman -S --needed --noconfirm mingw-w64-ucrt-x86_64-python mingw-w64-ucrt-x86_64-python-yaml`
 
-## Route B — Python standard + gvsbuild
+## Route B — standard Python + gvsbuild
 
-Pour garder un Python de python.org (utile si tu develops ailleurs dans cet
-interpréteur) : les binaires GTK précompilés de [gvsbuild](https://github.com/wingtk/gvsbuild)
-viennent avec leurs wheels PyGObject/PyCairo.
+To keep a python.org Python (useful if you develop other things with that
+interpreter): the prebuilt GTK binaries from [gvsbuild](https://github.com/wingtk/gvsbuild)
+come with their PyGObject/PyCairo wheels.
 
 ```powershell
-# 1. binaires GTK + thème d'icônes (dézippe l'archive de la dernière release dans C:\gtk)
+# 1. GTK binaries + icon theme (unzip the latest release archive into C:\gtk)
 $env:Path = "C:\gtk\bin;" + $env:Path
 
-# 2. venv OBLIGATOIRE (les wheels gvsbuild ciblent l'interpréteur de compilation)
+# 2. venv REQUIRED (gvsbuild wheels target the interpreter they were built for)
 py -m venv .venv
 .venv\Scripts\activate.ps1
 
-# 3. wheels PyGObject/PyCairo livrés avec l'archive
+# 3. PyGObject/PyCairo wheels shipped with the archive
 pip install --force-reinstall (Resolve-Path C:\gtk\wheels\PyGObject*.whl)
 pip install --force-reinstall (Resolve-Path C:\gtk\wheels\pycairo*.whl)
 
-# 4. dépendances pip
+# 4. pip dependencies
 pip install -r requirements.txt
 python gui.py
 ```
 
-Deux pièges classiques de cette route, résolus par le venv et par `--force-reinstall` :
+Two classic traps on this route, fixed by the venv and by `--force-reinstall`:
 
-- `error: Cannot uninstall pycairo … no RECORD file` → un pycairo traîne dans
-  l'interpréteur système ; le venv l'évite ;
-- `ModuleNotFoundError: No module named 'gi'` alors que le wheel est installé →
-  les DLL GTK ne sont pas dans le PATH : `$env:Path = "C:\gtk\bin;" + $env:Path`.
+- `error: Cannot uninstall pycairo … no RECORD file` → a pycairo is lying
+  around in the system interpreter; the venv avoids it;
+- `ModuleNotFoundError: No module named 'gi'` although the wheel is installed →
+  the GTK DLLs are not on the PATH: `$env:Path = "C:\gtk\bin;" + $env:Path`.
 
-## Build autonome (PyInstaller)
+## Standalone build (PyInstaller)
 
 ```bat
 build.bat
 ```
 
-produit `build\ludodex\` avec `ludodex.exe` (interface), `ludodex-cli.exe` (CLI)
-et `_internal\` (Python, GTK 4, libadwaita, icônes et traductions embarqués) —
-le même contenu que `build.sh` sous Linux. Un binaire construit sous Linux
-contient des `.so` : il ne sert **rien** sous Windows, et inversement.
+produces `build\ludodex\` with `ludodex.exe` (GUI), `ludodex-cli.exe` (CLI)
+and `_internal\` (embedded Python, GTK 4, libadwaita, icons and translations) —
+the same content as `build.sh` on Linux. A bundle built on Linux contains
+`.so` files: it is **useless** on Windows, and vice versa.
 
-## Dépannage
+## Troubleshooting
 
-| Symptôme | Cause | Solution |
+| Symptom | Cause | Fix |
 |---|---|---|
-| `ModuleNotFoundError: No module named 'gi'` | PyGObject absent de l'interpréteur lancé | Route A : `setup-windows.bat`. Route B : les wheels gvsbuild, dans un venv |
-| `ModuleNotFoundError: No module named 'yaml'` | PyYAML absent | Route A : `-python-yaml` ; route B : `pip install -r requirements.txt` |
-| `DLL load failed` au démarrage | DLL GTK hors PATH | Route A : lancer par `ludodex.bat` (il prépare le PATH) ; route B : ajouter `C:\gtk\bin` |
-| `This application failed to start because no Qt…` / fenêtre vide | GTK ne trouve pas ses icônes | Installer `adwaita-icon-theme` (route A) |
-| `cmd` ignore une commande du `.bat` | fin de ligne LF | `.gitattributes` force `*.bat` en CRLF ; regénère avec `git checkout -- *.bat` |
-| L'interface démarre toujours en anglais | anciennes versions | `i18n.detect()` lit maintenant la locale Windows (`locale.getwindowslocale`) |
+| `ModuleNotFoundError: No module named 'gi'` | PyGObject missing from the interpreter being run | Route A: `setup-windows.bat`. Route B: the gvsbuild wheels, inside a venv |
+| `ModuleNotFoundError: No module named 'yaml'` | PyYAML missing | Route A: `-python-yaml` ; route B: `pip install -r requirements.txt` |
+| `DLL load failed` at startup | GTK DLLs not on the PATH | Route A: launch through `ludodex.bat` (it sets up PATH); route B: add `C:\gtk\bin` |
+| `This application failed to start because no Qt…` / empty window | GTK can't find its icons | Install `adwaita-icon-theme` (route A) |
+| Grey "image missing" squares instead of button icons (sort, filter, gear, tabs) | Without `XDG_DATA_DIRS` — a variable that doesn't exist on Windows — GTK can't find the symbolic theme that is actually installed | The app repairs itself at startup (`assurer_icones()`: adds the bundle and MSYS2 paths, then switches to Adwaita); otherwise install `adwaita-icon-theme` (route A) |
+| `cmd` ignores a command from a `.bat` | LF line endings | `.gitattributes` forces `*.bat` to CRLF; regenerate with `git checkout -- *.bat` |
+| The interface always starts in English | older versions | `i18n.detect()` now reads the Windows locale (`locale.getwindowslocale`) |
 
-## Ce qui est déjà portable
+## What is already portable
 
-`core/platform.py` concentre **toute** la dépendance à l'OS et se teste avec des
-paramètres injectés : chemins `%LOCALAPPDATA%`, registre Steam et GOG,
-`os.startfile` pour les URLs, `cmd /c start` pour les URI de lancement
-(`steam://`, `itch://`…), découpage de commande non POSIX (`shlex` conserve les
-antislashs), `CREATE_NEW_PROCESS_GROUP`. Les sources Linux (Flatpak, Lutris)
-sont neutralisées : leurs bases de données sont simplement introuvables sous
-Windows, donc aucun jeu n'en est importé.
+`core/platform.py` concentrates **all** of the OS dependency and is tested
+with injected parameters: `%LOCALAPPDATA%` paths, Steam and GOG registry,
+`os.startfile` for URLs, `cmd /c start` for launch URIs (`steam://`,
+`itch://`…), non-POSIX command splitting (`shlex` keeps backslashes),
+`CREATE_NEW_PROCESS_GROUP`. Linux sources (Flatpak, Lutris) are neutralized:
+their databases are simply not found on Windows, so no game is imported
+from them.
 
-Les lectures de fichiers du cœur passent toutes par UTF-8 explicite : les noms
-de jeux viennent de fichiers Steam/Heroic/Epic en UTF-8, alors que la page de
-codes Windows par défaut est cp1252.
+All core file reads go through explicit UTF-8: game names come from
+Steam/Heroic/Epic files in UTF-8, while the default Windows code page is
+cp1252.

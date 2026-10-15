@@ -1,17 +1,17 @@
-# Succès Minecraft Vanilla (En anglais, basé sur les annonces du chat) pour Ludodex.
+# Minecraft Vanilla achievements (in English, based on the chat announcements) for Ludodex.
 #
-# Format des lignes lues dans le log :
+# Format of the lines read from the log:
 #   System chat: <Player> has completed the challenge [<Achievement Name>]
 #   System chat: <Player> has completed the advancement [<Achievement Name>]
 #
-# Notes :
-# - Les noms des succès correspondent aux titres officiels en anglais de Minecraft Java Edition.
-# - hidden: true masque les succès secrets ou de fin de jeu.
+# Notes:
+# - Achievement names match the official English titles of Minecraft Java Edition.
+# - hidden: true masks secret or end-game achievements.
 
 achievements:
 
   # ======================================================================
-  # STORY (Histoire)
+  # STORY
   # ======================================================================
   - name: "Stone Age"
     description: "Mine stone with your new pickaxe."
@@ -120,7 +120,7 @@ achievements:
 
 
   # ======================================================================
-  # ADVENTURE (Aventure)
+  # ADVENTURE
   # ======================================================================
   - name: "Monster Hunter"
     description: "Kill any hostile monster."
@@ -156,7 +156,7 @@ achievements:
 
 
   # ======================================================================
-  # HUSBANDRY (Élevage et agriculture)
+  # HUSBANDRY
   # ======================================================================
   - name: "Tactical Fishing"
     description: "Catch a fish... without a fishing rod!"
@@ -185,7 +185,7 @@ achievements:
 
 
   # ======================================================================
-  # THE END (L'End)
+  # THE END
   # ======================================================================
   - name: "Free the End"
     description: "Defeat the Ender Dragon."
