@@ -357,12 +357,16 @@ class LibraryMixin:
         child._hay = " ".join((g["name"], g["tags"], g["store_tags"])).casefold()
         return child
 
-    def _lib_where(self, trailing=False):
-        """Filtre SQL de la grille : masqués et non-installés ne comptent/apparaissent que s'ils sont affichés."""
+    def _lib_where(self, trailing=False, sans_installe=False):
+        """Filtre SQL de la grille : masqués et non-installés ne comptent/apparaissent que s'ils sont affichés.
+
+        `sans_installe` : la page Notes garde les jeux non installés quel que soit le
+        réglage de la bibliothèque — une note ne se perd pas à cause d'un désinstall.
+        Les MASQUÉS restent filtrés partout : cachés volontairement, cas différent."""
         conds = []
         if not self.show_hidden:
             conds.append("hidden=0")
-        if not self.show_not_installed:
+        if not sans_installe and not self.show_not_installed:
             conds.append("installed=1")
         sc = P.source_cond(self.con)
         if sc:

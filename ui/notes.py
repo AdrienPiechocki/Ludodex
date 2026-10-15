@@ -747,15 +747,15 @@ class NotesMixin:
         self._fill_notes_list()
 
     def _has_notes(self):
-        """Un jeu noté est-il visible dans la liste (filtres bibliothèque) ?"""
+        """Un jeu noté est-il visible dans la liste (masqués filtrés, non-installés gardés) ?"""
         rows = self.con.execute(
-            f"SELECT notes FROM games {self._lib_where(trailing=True)}").fetchall()
+            f"SELECT notes FROM games {self._lib_where(trailing=True, sans_installe=True)}").fetchall()
         return any((r["notes"] or "").strip() for r in rows)
 
     def _note_games(self):
-        """Jeux proposés : mêmes filtres d'affichage que la bibliothèque, triés par nom."""
+        """Jeux proposés : filtres bibliothèque SAUF non-installés (gardés), triés par nom."""
         rows = self.con.execute(
-            f"SELECT id, name, notes FROM games {self._lib_where(trailing=True)}"
+            f"SELECT id, name, notes FROM games {self._lib_where(trailing=True, sans_installe=True)}"
             "ORDER BY name COLLATE NOCASE").fetchall()
         needle = self.notes_search.get_text().strip().casefold()
         if needle:

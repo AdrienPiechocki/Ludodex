@@ -513,7 +513,14 @@ class PickViewMixin:
         if g["store_tags"]:
             desc += "\n" + " · ".join(g["store_tags"].split(",")[:4])
         self.pick_desc.set_text(desc)
-        self.btn_yes.set_label(tr("Play") if g["installed"] else tr("Store page"))
+        # « Installer » seulement si la source sait installer (jamais de bouton muet) ;
+        # un jeu possédé sans installateur garde sa fiche magasin, seule action utile.
+        if g["installed"]:
+            self.btn_yes.set_label(tr("Play"))
+        elif P.install_command(g) is not None:
+            self.btn_yes.set_label(tr("Install"))
+        else:
+            self.btn_yes.set_label(tr("Store page"))
         self.pick_zone.set_visible_child_name("carrousel")
         self._rouler(g)
 
@@ -731,11 +738,17 @@ class PickViewMixin:
                 pic.add_css_class("roulette-flou")
 
     def _accept(self, *_):
-        """Valide la proposition : lance un jeu installé, ouvre la fiche magasin d'un jeu possédé."""
-        if self.current and not self.current["installed"]:
-            self._open_store(self.current)
+        """Valide la proposition : lance un jeu installé, ouvre l'installation d'un
+        jeu possédé qui sait s'installer, sa fiche magasin sinon."""
+        g = self.current
+        if not g:
+            return
+        if g["installed"]:
+            self._launch(g)
+        elif P.install_command(g) is not None:
+            self._install(g["id"])  # même chemin que la fiche : toast « Installation ouverte »
         else:
-            self._launch(self.current)
+            self._open_store(g)
 
     def _open_store(self, g):
         url = P.store_page(g)
