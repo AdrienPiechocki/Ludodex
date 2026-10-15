@@ -129,6 +129,14 @@ class Win(PickViewMixin, LibraryMixin, RetroMixin, NotesMixin, AchievementsMixin
         self._flush_note()               # une note en cours d'édition est enregistrée
         return False
 
+    def _on_game_exit(self, sid):
+        """Le processus d'un jeu que nous avons lancé vient de se terminer : sa
+        session se clôt ici, sur le FIL PRINCIPAL — le fil d'attente (un autre
+        fil) ne touche jamais à la connexion, et la session a pu être fermée
+        entre-temps (fermeture de l'application, lancement suivant) : le cœur
+        s'en charge, `close_session` est sans effet dans ce cas."""
+        GLib.idle_add(lambda: (P.close_session(self.con, sid), False)[1])
+
 
 class App(Adw.Application):
     def __init__(self):

@@ -755,7 +755,7 @@ class PickViewMixin:
         """Lance le jeu (ou ouvre sa fiche magasin). Le carrousel reste affiché et le
         jeu lancé reste net au centre : le message de réussite remplace le détail,
         pas la jaquette — c'est elle qui dit quel jeu est parti."""
-        ok = P.launch(self.con, g)
+        ok = P.launch(self.con, g, on_exit=self._on_game_exit)
         self.pick_name.set_text(g["name"])
         self.pick_desc.set_text(
             tr("▶ Launched. Have fun!") if ok else tr("Couldn't launch: is the game still installed?"))

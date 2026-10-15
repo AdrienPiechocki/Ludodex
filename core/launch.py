@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """launch.py — construction et exécution des commandes de lancement, d'installation et
 de désinstallation."""
-import json, os, pathlib, re, shutil, subprocess, time
+import json, os, pathlib, re, shutil, subprocess, threading, time
 import urllib.error, urllib.request
 from urllib.parse import quote
 
@@ -108,6 +108,8 @@ def set_launch_override(con, gid, text):
 
 
 PROGRESS_MIN_MINUTES = 5  # une session doit durer ce temps-là pour qu'un jeu passe en 'en_cours'
+EXIT_GRACE_SEC = 5        # se terminer avant ce délai, ce n'était pas le jeu : un passe-plat
+                          # (`xdg-open steam://…`) rend la main en quelques dizaines de ms
 
 
 def close_open_sessions(con, now=None):
@@ -131,21 +133,57 @@ def close_open_sessions(con, now=None):
     return len(rows)
 
 
-def launch(con, g):
+def close_session(con, sid, now=None):
+    """Clôt UNE session à sa vraie fin — le jeu s'est terminé (`EXIT_GRACE_SEC`).
+
+    La règle de statut est celle de `close_open_sessions` ; sans effet si la
+    session est déjà fermée (l'application a pu la clôturer avant, en se fermant,
+    ou un lancement suivant l'a fait)."""
+    now = int(time.time()) if now is None else now
+    row = con.execute("SELECT game_id, started FROM sessions WHERE id=? AND ended=0", (sid,)).fetchone()
+    if not row:
+        return False
+    minutes = max(0, (now - row["started"]) // 60)
+    con.execute("UPDATE sessions SET ended=?, minutes=? WHERE id=?", (now, minutes, sid))
+    if minutes >= PROGRESS_MIN_MINUTES:
+        con.execute("UPDATE games SET status='en_cours' "
+                    "WHERE id=? AND status IN ('backlog','pause')", (row["game_id"],))
+    con.commit()
+    return True
+
+
+def _watch_game(proc, sid, on_exit, debut):
+    """Attend la fin du processus de jeu, puis referme sa session — par le rappel
+    fourni par l'APPLICATION (le fil principal doit faire ça : un autre fil ne
+    touche jamais à sa connexion). Une fin dans la grâce n'était pas le jeu."""
+    proc.wait()
+    if time.monotonic() - debut >= EXIT_GRACE_SEC:
+        on_exit(sid)
+
+
+def launch(con, g, on_exit=None):
+    """Lance le jeu et ouvre sa session. Avec `on_exit`, un fil d'attente referme
+    cette session à la vraie sortie du jeu — sans quoi la fin n'était que le
+    prochain lancement ou la fermeture de l'application, et la frise affichait
+    (« 13h14 → 13h25 ») une partie qui en avait coûté deux."""
     try:
         cmd, cwd = launch_command(g)
-        env, cmd = split_env(cmd)
-        if not cmd:
+        env, argv = split_env(cmd)
+        if not argv:
             raise ValueError(tr("empty command"))
-        subprocess.Popen(cmd, cwd=cwd, env={**os.environ, **env} if env else None, **popen_kwargs())
+        proc = subprocess.Popen(argv, cwd=cwd, env={**os.environ, **env} if env else None, **popen_kwargs())
     except (OSError, ValueError) as e:
         print(tr("! couldn't launch: {e}", e=e))
         return False
     now = int(time.time())
     close_open_sessions(con, now=now)  # lancer un jeu clôt la session précédente
     con.execute("UPDATE games SET last_played=? WHERE id=?", (now, g["id"]))
-    con.execute("INSERT OR IGNORE INTO sessions (game_id, started, ended, minutes) VALUES (?, ?, 0, 0)", (g["id"], now))
+    cur = con.execute("INSERT OR IGNORE INTO sessions (game_id, started, ended, minutes) VALUES (?, ?, 0, 0)",
+                      (g["id"], now))
     con.commit()
+    if on_exit is not None and cur.rowcount:  # INSERT ignoré = rien d'ouvert à suivre
+        threading.Thread(target=_watch_game,
+                         args=(proc, cur.lastrowid, on_exit, time.monotonic()), daemon=True).start()
     print(f"▶ {g['name']}.")
     return True
 

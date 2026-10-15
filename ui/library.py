@@ -1012,7 +1012,7 @@ class LibraryMixin:
 
     def _quick_launch(self, gid):
         g = self.con.execute("SELECT * FROM games WHERE id=?", (gid,)).fetchone()
-        ok = P.launch(self.con, g)
+        ok = P.launch(self.con, g, on_exit=self._on_game_exit)
         self.toasts.add_toast(Adw.Toast.new(GLib.markup_escape_text(
             tr("▶ Launched. Have fun!") if ok else tr("Couldn't launch: is the game still installed?"))))
 
