@@ -187,6 +187,12 @@ class PickViewMixin:
         # pas toutes ensemble d'un seul regard. En groupe à part, à sa place
         # d'origine, entre « Temps disponible » et « Humeur ».
         self.tags_group = Adw.PreferencesGroup(title=tr("Tags"))
+        # « Vider » à droite du titre : le filtre vit dans DEUX ensembles (inclus,
+        # exclus) — un seul geste remet tout au neutre. Insensible sans rien de
+        # retenu (tenu à jour dans _after_tag_change).
+        self.clear_tags_btn = Gtk.Button(label=tr("Clear tags"), valign=Gtk.Align.CENTER, css_classes=["flat"])
+        self.clear_tags_btn.connect("clicked", self._on_clear_tags)
+        self.tags_group.set_header_suffix(self.clear_tags_btn)
         self.mood_flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, homogeneous=False,
                                      min_children_per_line=2, max_children_per_line=5,
                                      row_spacing=6, column_spacing=6,
@@ -352,11 +358,19 @@ class PickViewMixin:
         P.set_excluded_tags(self.con, self.exclude_selected)  # préférence mémorisée
         self._after_tag_change()
 
+    def _on_clear_tags(self, _btn):
+        """Vider : aucun tag ni inclus ni exclu — le tirage ne retient rien."""
+        self.mood_selected.clear()
+        self.exclude_selected.clear()
+        P.set_excluded_tags(self.con, self.exclude_selected)  # la purge suit la mémoire
+        self._after_tag_change()
+
     def _after_tag_change(self):
         for o, b in self._tag_buttons.items():  # états exclusifs : on recolore tout
             self._render_tag(b, o)
         self._update_tags_summary()
         self._update_mood_mode()
+        self.clear_tags_btn.set_sensitive(bool(self.mood_selected or self.exclude_selected))
         self._reset_pick()
 
     def _on_pick_owned(self, chk):
