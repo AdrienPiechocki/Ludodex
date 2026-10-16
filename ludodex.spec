@@ -16,8 +16,8 @@ Notes :
   GTK4 (l'application planterait au démarrage).
 - `lang/` est copié tel quel ; `i18n.py` lit les traductions depuis
   `sys._MEIPASS/lang` une fois l'application gelée.
-- `share/icons/` embarque le logo de l'application (`local.ludodex`) au layout
-  hicolor : `ui/theme.py` le cherche déjà dans `sys._MEIPASS/share/icons`.
+- `share/icons/` embarque le logo de l'application (`io.github.AdrienPiechocki.Ludodex`)
+  au layout hicolor : `ui/theme.py` le cherche déjà dans `sys._MEIPASS/share/icons`.
 """
 
 
