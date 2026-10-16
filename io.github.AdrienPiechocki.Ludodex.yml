@@ -10,6 +10,15 @@ finish-args:
   - --socket=fallback-x11
   - --device=dri
   - --filesystem=host
+  # Un sandbox masque ses propres états Flatpak (/var/lib/flatpak, ~/.local/share/flatpak
+  # vidés) et les données des AUTRES apps (~/.var/app/<id>) : sans ces accès, les imports
+  # Flatpak et RetroArch/Lutris/itch/Heroic (flatpak) voient le vide et n'importent rien.
+  - --filesystem=/var/lib/flatpak:ro
+  - --filesystem=~/.local/share/flatpak:ro
+  - --filesystem=~/.var/app/org.libretro.RetroArch/config/retroarch:ro
+  - --filesystem=~/.var/app/net.lutris.Lutris/data/lutris:ro
+  - --filesystem=~/.var/app/io.itch.itch/config/itch/db:ro
+  - --filesystem=~/.var/app/com.heroicgameslauncher.hgl/config/heroic:ro
   - --talk-name=org.freedesktop.Flatpak
 modules:
   - name: pyyaml
