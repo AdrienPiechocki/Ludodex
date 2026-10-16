@@ -35,3 +35,37 @@ def delete_game(con, gid):
         if name:
             (folder / name).unlink(missing_ok=True)
     return True
+
+
+def set_status_many(con, gids, status):
+    """Statut de plusieurs jeux d'un seul commit ; renvoie le nombre RÉELLEMENT modifié.
+
+    Déjà à ce statut : la clause `status != ?` épargne la ligne — le retour dit
+    la nouveauté, pas la présence, pour que le toast de la bibliothèque ne mente
+    pas (`total_changes` compte les vraies modifications)."""
+    gids = list(gids)
+    if not gids:
+        return 0
+    avant = con.total_changes
+    con.execute(f"UPDATE games SET status=? WHERE status != ? "
+                f"AND id IN ({','.join('?' * len(gids))})", [status, status, *gids])
+    n = con.total_changes - avant
+    con.commit()
+    return n
+
+
+def set_hidden_many(con, gids, hidden):
+    """Masquage de plusieurs jeux d'un seul commit ; renvoie le nombre RÉELLEMENT modifié.
+
+    Même contrat que `set_status_many` : déjà dans l'état voulu ne compte pas,
+    pour que le toast (« masqué » / « démasqué ») ne mente pas."""
+    gids = list(gids)
+    if not gids:
+        return 0
+    avant = con.total_changes
+    val = int(hidden)
+    con.execute(f"UPDATE games SET hidden=? WHERE hidden != ? "
+                f"AND id IN ({','.join('?' * len(gids))})", [val, val, *gids])
+    n = con.total_changes - avant
+    con.commit()
+    return n

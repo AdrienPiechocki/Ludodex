@@ -151,3 +151,21 @@ def remove_game_from_collection(con, cid, gid):
     _reject_auto(con, cid, "automatic collections can't be edited")
     con.execute("DELETE FROM collection_games WHERE collection_id=? AND game_id=?", (cid, gid))
     con.commit()
+
+def remove_games_from_collection(con, cid, gids):
+    """Retire plusieurs jeux d'un seul commit ; renvoie le nombre RÉELLEMENT retiré.
+
+    Déjà dehors : `DELETE` ne les recompte pas — le retour dit la nouveauté, pas
+    la présence, pour que le toast de la bibliothèque ne mente pas
+    (`total_changes` compte les vraies lignes supprimées). Même refus des
+    collections automatiques que l'ajout."""
+    _reject_auto(con, cid, "automatic collections can't be edited")
+    gids = list(gids)
+    if not gids:
+        return 0
+    avant = con.total_changes
+    con.execute(f"DELETE FROM collection_games WHERE collection_id=? AND game_id IN "
+                f"({','.join('?' * len(gids))})", [cid, *gids])
+    n = con.total_changes - avant
+    con.commit()
+    return n

@@ -108,24 +108,34 @@ class LibraryMixin:
         self._maj_session_bar()  # session héritée d'une exécution précédente : visible
 
         # « Sélection » : mode multi-choix des tuiles → barre en bas de la liste,
-        # au-dessus de « Jeu en cours », avec le compte et l'ajout en bloc à une
-        # collection (popover des collections manuelles + « Nouvelle collection… »).
-        # Comme la barre de session, elle ne se montre que dans son état.
+        # au-dessus de « Jeu en cours », avec le compte en toutes lettres
+        # (« {n} jeu(s) sélectionné(s) ») et trois actions en bloc : « Collections »
+        # (popover à COCHES : cocher y ajoute la sélection entière, décocher
+        # l'en retire — la sélection reste en place pour enchaîner — + « Nouvelle
+        # collection… »), masquage / démasquage (pilule à libellé DYNAMIQUE :
+        # « Démasquer » quand toute la sélection est déjà masquée) et statut
+        # (popover des cinq statuts de la fiche). Comme la barre de session, elle
+        # ne se montre que dans son état.
         self.sel_bar = Gtk.Box(spacing=10, halign=Gtk.Align.CENTER, margin_top=2,
                                margin_bottom=10, visible=False)
         self.sel_lbl = Gtk.Label(css_classes=["dim-label"])
-        add_box = Gtk.Box(spacing=6)
-        add_box.append(Gtk.Image(icon_name="list-add-symbolic"))
-        add_box.append(Gtk.Label(label=tr("Add to collection")))
-        self.sel_menu = Gtk.MenuButton(child=add_box, css_classes=["pill"])
+        self.sel_menu = Gtk.MenuButton(label=tr("Collections"), css_classes=["pill"])
         self.sel_pop = Gtk.Popover()
         self.sel_menu.set_popover(self.sel_pop)
         self.sel_pop.connect("map", lambda *_: self._rebuild_sel_pop())  # ouvert : liste fraîche
+        self.sel_hide_btn = Gtk.Button(label=tr("Hide"), css_classes=["pill"])
+        self.sel_hide_btn.connect("clicked", self._on_hide_selection)
+        self.sel_status_menu = Gtk.MenuButton(label=tr("Status"), css_classes=["pill"])
+        self.sel_status_pop = Gtk.Popover()
+        self.sel_status_menu.set_popover(self.sel_status_pop)
+        self.sel_status_pop.connect("map", lambda *_: self._rebuild_status_pop())
         self.sel_cancel = Gtk.Button(icon_name="window-close-symbolic", css_classes=["flat"],
                                      tooltip_text=tr("Cancel selection"))
         self.sel_cancel.connect("clicked", lambda *_: self.select_btn.set_active(False))
         self.sel_bar.append(self.sel_lbl)
         self.sel_bar.append(self.sel_menu)
+        self.sel_bar.append(self.sel_hide_btn)
+        self.sel_bar.append(self.sel_status_menu)
         self.sel_bar.append(self.sel_cancel)
         content.append(self.sel_bar)
         content.append(self.session_bar)
@@ -593,9 +603,14 @@ class LibraryMixin:
         self._update_sel_bar()
 
     def _update_sel_bar(self):
-        n = len(self.lib_flow.get_selected_children()) if self.select_btn.get_active() else 0
-        self.sel_lbl.set_text(str(n))
+        sel = self.lib_flow.get_selected_children() if self.select_btn.get_active() else []
+        n = len(sel)
+        self.sel_lbl.set_text(tr("{n} game(s) selected", n=n))
         self.sel_bar.set_visible(n > 0)
+        if n:
+            # pilule dynamique : toute la sélection déjà masquée → « Démasquer »
+            self.sel_hide_btn.set_label(tr("Unhide") if all(c._game["hidden"] for c in sel)
+                                         else tr("Hide"))
 
     def _on_tile_activated(self, _f, child):
         """Mode sélection : le clic sert à cocher, jamais à ouvrir la fiche."""
@@ -607,19 +622,28 @@ class LibraryMixin:
         return [c._game["id"] for c in self.lib_flow.get_selected_children()]
 
     def _rebuild_sel_pop(self):
-        """Le popover : une ligne par collection MANUELLE (les automatiques sont
-        en lecture seule) + « Nouvelle collection… ». Reconstruit à l'ouverture
-        (`set_child` remplace l'ancien contenu d'un bloc)."""
+        """Le popover « Collections » : une COCHE par collection MANUELLE (les
+        automatiques sont en lecture seule) — cocher y ajoute la sélection
+        entière, décocher la retire, et la sélection reste en place pour cocher
+        plusieurs collections d'affilée, « Nouvelle collection… » compris.
+        Reconstruit à l'ouverture (`set_child` remplace l'ancien contenu d'un bloc)."""
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2,
                       margin_top=4, margin_bottom=4, margin_start=4, margin_end=4)
         cols = [c for c in P.list_collections(self.con) if c["kind"] == "manual"]
         if not cols:
             box.append(Gtk.Label(label=tr("no collections"), css_classes=["dim-label"],
                                  margin_top=4, margin_bottom=4))
+        gids = self._sel_gids()
+        membres = {c["id"]: P.collection_game_ids(self.con, c["id"]) for c in cols}
         for c in cols:
-            b = Gtk.Button(label=c["name"], css_classes=["flat"])
+            # coche = TOUTE la sélection déjà dans la collection (partielle → non
+            # cochée : cliquer alors l'y achève, décocher en sort toute la sélection)
+            b = Gtk.CheckButton(label=c["name"],
+                                active=bool(gids) and all(g in membres[c["id"]] for g in gids),
+                                css_classes=["flat"])
             b._cid = c["id"]
-            b.connect("clicked", lambda _b, cid=c["id"], name=c["name"]: self._on_add_selection(cid, name))
+            b.connect("toggled", lambda b, cid=c["id"], name=c["name"]:
+                      self._on_toggle_collection(cid, name, b))
             box.append(b)
         box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
         nouveau = Gtk.Button(label=tr("New collection…"), css_classes=["flat"])
@@ -632,12 +656,20 @@ class LibraryMixin:
         self.toasts.add_toast(Adw.Toast.new(tr("{n} game(s) added to “{name}”", n=n, name=name) if n
                                             else tr("Already in this collection")))
 
-    def _on_add_selection(self, cid, name):
+    def _on_toggle_collection(self, cid, name, btn):
+        """Coche = la sélection ENTIERE rejoint la collection (le manquant est
+        ajouté) ; décoche = elle ENTIERE en sort. Ni popdown ni fin de
+        sélection : on coche plusieurs collections d'affilée."""
         gids = self._sel_gids()
-        self.sel_pop.popdown()
-        n = P.add_games_to_collection(self.con, cid, gids)
-        self._toast_ajout(n, name)
-        self.select_btn.set_active(False)   # action faite : la sélection se termine
+        if btn.get_active():
+            n = P.add_games_to_collection(self.con, cid, gids)
+            msg = tr("{n} game(s) added to “{name}”", n=n, name=name) if n \
+                else tr("Already in this collection")
+        else:
+            n = P.remove_games_from_collection(self.con, cid, gids)
+            msg = tr("{n} game(s) removed from “{name}”", n=n, name=name) if n \
+                else tr("Already out of this collection")
+        self.toasts.add_toast(Adw.Toast.new(msg))
         self._refresh_collections()
 
     def _on_new_collection_selection(self, *_):
@@ -655,10 +687,47 @@ class LibraryMixin:
                            if r["name"].strip().casefold() == key)
             n = P.add_games_to_collection(self.con, cid, self._sel_gids())
             self._toast_ajout(n, name)
-            self.select_btn.set_active(False)
-            self._refresh_collections()
+            self._refresh_collections()   # la sélection reste en place : on peut enchaîner
 
         self._prompt_collection(tr("New collection"), "", on_ok)
+
+    def _rebuild_status_pop(self):
+        """Le popover des statuts : une ligne par statut de la fiche, dans l'ordre
+        de `STATUTS` (le même modèle que le sélecteur de la fiche). Reconstruit à
+        l'ouverture (`set_child` remplace l'ancien contenu d'un bloc)."""
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2,
+                      margin_top=4, margin_bottom=4, margin_start=4, margin_end=4)
+        for s in STATUTS:
+            b = Gtk.Button(label=P.status_label(s), css_classes=["flat"])
+            b.connect("clicked", lambda _b, st=s: self._on_status_selection(st))
+            box.append(b)
+        self.sel_status_pop.set_child(box)
+
+    def _on_status_selection(self, status):
+        self.sel_status_pop.popdown()
+        label = P.status_label(status)
+        n = P.set_status_many(self.con, self._sel_gids(), status)
+        self.toasts.add_toast(Adw.Toast.new(tr("{n} game(s) set to “{status}”", n=n, status=label) if n
+                                            else tr("Already set to this status")))
+        self.select_btn.set_active(False)   # action faite : la sélection se termine
+        self._build_lib()                   # les sous-titres portent le nouveau statut
+
+    def _on_hide_selection(self, *_):
+        """Masquer / démasquer la sélection d'un geste — la pilule devient
+        « Démasquer » quand toute la sélection est déjà masquée (libellé tenu par
+        `_update_sel_bar`). Masquer retire les tuiles de la grille : les masqués ne
+        reviennent que si le réglage « afficher les masqués » est ouvert."""
+        sel = self.lib_flow.get_selected_children()
+        masquage = not all(c._game["hidden"] for c in sel)
+        n = P.set_hidden_many(self.con, [c._game["id"] for c in sel], 1 if masquage else 0)
+        if n:
+            msg = tr("{n} game(s) hidden", n=n) if masquage else tr("{n} game(s) unhidden", n=n)
+        else:
+            msg = tr("Already hidden") if masquage else tr("Already unhidden")
+        self.toasts.add_toast(Adw.Toast.new(msg))
+        self.select_btn.set_active(False)   # action faite : la sélection se termine
+        self._build_lib()
+        self._refresh_collections()         # les comptes de la barre latérale suivent
 
     def _prompt_collection(self, title, initial, on_ok):
         win = Adw.Dialog(content_width=380, title=title)
