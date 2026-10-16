@@ -160,6 +160,50 @@ def host_argv(argv, env_vars=None, env=None):
     return ["flatpak-spawn", "--host", "sh", "-c", script, "sh", *argv]
 
 
+# Scan des processus de l'HÔTE, exécuté par `sh -c` derrière flatpak-spawn.
+# Les motifs arrivent par l'env LUDEX_MOTIFS et JAMAIS par l'argv (du scan comme
+# de grep) : leur présence dans un cmdline serait vue par le scan lui-même, qui
+# se détecterait alors toujours (le bug qui a failli laisser les sessions URI
+# ouvertes à vie). Deux passes à coût constant : cmdline via grep (motifs sur
+# stdin), puis cwd/exe via un seul ls + un seul grep (motifs en -e, inoffensifs
+# ici : cette passe ne lit aucun cmdline). La casse est pliée des deux côtés,
+# comme le scan natif.
+_SCAN_SCRIPT = r'''
+[ -n "$LUDEX_MOTIFS" ] || exit 0
+mots="$LUDEX_MOTIFS"
+oIFS=$IFS
+IFS='
+'
+set +f
+a=$(printf '%s\n' "$mots" | grep -Fal -i -f - /proc/[0-9]*/cmdline 2>/dev/null)
+[ "$?" -gt 1 ] && exit 2
+set -f
+for f in $a; do
+  p=${f#/proc/}
+  echo "${p%/cmdline}"
+done
+set --
+for m in $mots; do
+  [ -n "$m" ] || continue
+  set -- "$@" -e "$m"
+done
+set +f
+b=$(ls -ld /proc/[0-9]*/cwd /proc/[0-9]*/exe 2>/dev/null | grep -Fi "$@" -)
+[ "$?" -gt 1 ] && exit 2
+set -f
+for line in $b; do
+  case $line in *" -> "*) ;; *) continue;; esac
+  nm=${line% -> *}
+  nm=${nm##* }
+  case $nm in
+    /proc/[0-9]*/*) p=${nm#/proc/}; p=${p%/*}; echo "$p";;
+  esac
+done
+IFS=$oIFS
+exit 0
+'''
+
+
 def host_pids_sous(motifs):
     """PIDs de l'HÔTE dont cmdline, cwd ou exe contiennent l'un des motifs.
 
@@ -167,19 +211,25 @@ def host_pids_sous(motifs):
     isolés) : le scan des processus de jeu est délégué à l'hôte, une passe `sh`
     par sonde (toutes les 2 s pendant l'attente). Un échec — hôte injoignable —
     renvoie la liste vide : le repli « jamais vu, donc rien n'est clôturé de
-    façon inventée » s'applique alors."""
+    façon inventée » s'applique alors.
+
+    Précondition de `flatpak-spawn --host` : le processus appelant doit avoir un
+    cwd existant côté hôte (sinon le portail échoue au chdir)."""
     if not motifs:
         return []
-    script = ('for m in "$@"; do for p in /proc/[0-9]*; do '
-              't=$(tr "\\0" " " < "$p/cmdline" 2>/dev/null); '
-              't="$t $(readlink "$p/cwd" 2>/dev/null) $(readlink "$p/exe" 2>/dev/null)"; '
-              'case "$t" in *"$m"*) echo "${p#/proc/}";; esac; done; done')
+    # env -0 sur l'FD d'entrée (un enregistrement NAME=VALUE terminé par NUL ;
+    # les motifs, eux, sont joints par saut de ligne) : aucun motif dans une
+    # argv visible — le client flatpak-spawn est un processus du sandbox visible
+    # du /proc hôte, son argv y serait un match permanent du scan sur lui-même.
+    blob = ("LUDEX_MOTIFS=" + "\n".join(motifs) + "\0").encode()
     try:
-        out = subprocess.run(["flatpak-spawn", "--host", "sh", "-c", script, "sh", *motifs],
-                             capture_output=True, text=True, timeout=15).stdout
+        brut = subprocess.run(["flatpak-spawn", "--host", "--env-fd=0", "sh", "-c",
+                               _SCAN_SCRIPT, "sh"],
+                              input=blob, capture_output=True, timeout=15).stdout
     except (OSError, subprocess.SubprocessError):
         return []
-    return sorted({int(x) for x in out.split() if x.isdigit()})
+    return sorted({int(x) for x in brut.decode("utf-8", "ignore").split()
+                   if x.isdigit()})
 
 
 def split_command(text):

@@ -120,17 +120,54 @@ def test_host_pids_sous_delègue_le_scan_a_l_hote(monkeypatch):
     cap = {}
     def fake(argv, **kw):
         cap["argv"] = argv
+        cap["input"] = kw.get("input")
         class _R:
-            stdout = "42\n7\n42\n"
+            stdout = b"42\n7\n42\n"
+            returncode = 0
         return _R()
     monkeypatch.setattr(platform.subprocess, "run", fake)
-    motifs = ["/home/u/jeu/dossier"]
+    motifs = ["/home/u/jeu/dossier", "/home/u/second jeu"]
     assert platform.host_pids_sous(motifs) == [7, 42]      # dédoublonné, trié
-    assert cap["argv"][:2] == ["flatpak-spawn", "--host"]
-    assert cap["argv"][6:] == motifs
+    assert cap["argv"][:4] == ["flatpak-spawn", "--host", "--env-fd=0", "sh"]
+    # Les motifs passent par l'FD d'env (env -0), JAMAIS par l'argv : le client
+    # flatpak-spawn est visible dans le /proc hôte, son argv y serait un match
+    # permanent du scan sur lui-même.
+    assert cap["input"] == b"LUDEX_MOTIFS=/home/u/jeu/dossier\n/home/u/second jeu\0"
+    assert not any(m in a for a in cap["argv"] for m in motifs)
     cap.clear()
     assert platform.host_pids_sous([]) == []               # sans appel inutile
     assert "argv" not in cap
+
+
+def test_scan_script_sans_auto_correspondance():
+    """Témoin local : le script réel ne doit ni se détecter lui-même, ni rater un vrai match."""
+    import os
+    import subprocess
+    import time
+    script = platform._SCAN_SCRIPT
+
+    def scan(motif):
+        r = subprocess.run(["sh", "-c", script, "sh"],
+                           capture_output=True, text=True, timeout=60,
+                           env={**os.environ, "LUDEX_MOTIFS": motif})
+        assert r.returncode == 0, r.stderr
+        return [int(x) for x in r.stdout.split()]
+
+    # Motif absent de tout processus : sortie vide (l'ancien script y voyait son propre sh).
+    assert scan("/zzz/unique-9xyz-scan") == []
+    # Motif présent dans la cmdline d'un processus réel : son PID, et lui seul.
+    # (Un `sh -c "sleep 5"` ne convient pas : dash remplace son argv par exec.)
+    import sys
+    marqueur = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(5)", "/zzz-present-9xyz"])
+    try:
+        time.sleep(0.3)
+        trouves = scan("/zzz-present-9xyz")
+        assert marqueur.pid in trouves
+    finally:
+        marqueur.terminate()
+        marqueur.wait()
+    assert scan("/zzz-present-9xyz") == []                 # plus là = plus de match
 
 
 def test_host_pids_sous_hote_injoignable_renvoie_vide(monkeypatch):
