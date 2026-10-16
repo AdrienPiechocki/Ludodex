@@ -157,6 +157,104 @@ def _watch_game(proc, sid, on_exit, debut):
         on_exit(sid)
 
 
+URI_ATTENTE_JEU = 90   # s : fenêtre pour voir apparaître le jeu (wine, bwrap et Heroic démarrent lentement)
+URI_POLL_SEC = 2       # s : rythme des sondes /proc
+URI_SORTIE_CONFIRMES = 3   # sondes vides consécutives = sortie confirmée (un bref trou ne clôture pas)
+
+
+def motifs_jeu(g, env=None, home=None):
+    """Mots reconnaissant le VRAI processus du jeu dans /proc : son chemin
+    d'installation et son exécutable.
+
+    Pour un lancement par URI (`xdg-open heroic://…`), le processus que `launch`
+    tient en main est le passe-plat : c'est le jeu lui-même qu'il faut surveiller,
+    sinon la session reste ouverte jusqu'à la fermeture de Ludodex et la frise
+    affiche des heures jouées là où il y en a eu une. [] = inconnu : pas de
+    devinettes, l'ancien repli s'applique (jamais de clôture inventée)."""
+    if g["source"] != "heroic":
+        return []
+    ext = str(g["ext_id"])
+    motifs = set()
+    fichiers = [d / "gog_store" / "installed.json" for d in platform.heroic_dirs(env, home)] + \
+               [d / "installed.json" for d in platform.legendary_dirs(env, home)]
+    for path in fichiers:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8", errors="ignore"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue  # forme inattendue : rien à y lire, le lancement ne doit pas caser
+        # gogdl enveloppe sous "installed" ; legendary écrit un dict plat {appName: …}
+        entrees = data.get("installed") if isinstance(data.get("installed"), list) else data.values()
+        for e in entrees:
+            if not isinstance(e, dict) or str(e.get("appName") or e.get("app_name") or "") != ext:
+                continue
+            for k in ("install_path", "executable", "launch_exe"):
+                if isinstance(e.get(k), str) and e[k]:
+                    motifs.add(e[k])
+    # Heroic garde aussi le manifeste du lanceur (launch_exe) quand installed.json est vide
+    for d in platform.heroic_dirs(env, home):
+        try:
+            data = json.loads((d / "store_cache" / "legendary_install_info.json")
+                              .read_text(encoding="utf-8", errors="ignore"))
+        except (OSError, ValueError):
+            continue
+        ent = data.get(ext) if isinstance(data, dict) else None
+        manifeste = ent.get("manifest") if isinstance(ent, dict) else None
+        if isinstance(manifeste, dict) and manifeste.get("launch_exe"):
+            motifs.add(str(manifeste["launch_exe"]))
+    return sorted(motifs)
+
+
+def _pids_sous(motifs):
+    """PIDs dont cmdline, cwd ou exe contiennent l'un des motifs (lecture /proc)."""
+    if not motifs:
+        return []
+    bas = [m.lower() for m in motifs]
+    moi, trouves = os.getpid(), []
+    try:
+        entrees = pathlib.Path("/proc").iterdir()
+    except OSError:
+        return []
+    for ent in entrees:
+        if not ent.name.isdigit() or int(ent.name) == moi:
+            continue
+        try:
+            texte = (ent / "cmdline").read_bytes().replace(b"\0", b" ").decode("utf-8", "ignore")
+            texte += " " + os.readlink(ent / "cwd") + " " + os.readlink(ent / "exe")
+        except OSError:
+            continue  # processus disparu entre-temps
+        if any(m in texte.lower() for m in bas):
+            trouves.append(int(ent.name))
+    return trouves
+
+
+def _watch_uri(motifs, sid, on_exit, debut, fenetre=None, lister=None, dormir=None):
+    """Attend que le JEU apparaisse (motifs dans /proc), puis attende sa sortie —
+    par le rappel de l'APPLICATION, sur son fil principal, comme `_watch_game`.
+
+    Jamais vu dans la fenêtre : on ne clôture rien (l'ancien repli — fermeture à la
+    fermeture de l'appli — vaut mieux qu'une durée inventée)."""
+    fenetre = URI_ATTENTE_JEU if fenetre is None else fenetre
+    lister = _pids_sous if lister is None else lister
+    dormir = time.sleep if dormir is None else dormir
+    vu = False
+    limite = debut + fenetre
+    while time.monotonic() < limite:
+        if lister(motifs):
+            vu = True
+            break
+        dormir(URI_POLL_SEC)
+    if not vu:
+        return
+    vides = 0
+    while vides < URI_SORTIE_CONFIRMES:
+        dormir(URI_POLL_SEC)
+        vides = vides + 1 if not lister(motifs) else 0
+    if time.monotonic() - debut >= EXIT_GRACE_SEC:
+        on_exit(sid)
+
+
 def launch(con, g, on_exit=None):
     """Lance le jeu et ouvre sa session. Avec `on_exit`, un fil d'attente referme
     cette session à la vraie sortie du jeu — sans quoi la fin n'était que le
@@ -179,8 +277,22 @@ def launch(con, g, on_exit=None):
                       (g["id"], now))
     con.commit()
     if on_exit is not None and cur.rowcount:  # INSERT ignoré = rien d'ouvert à suivre
-        threading.Thread(target=_watch_game,
-                         args=(proc, cur.lastrowid, on_exit, time.monotonic()), daemon=True).start()
+        # Un argv contenant "://" est remis à xdg-open : le processus tenu n'est que
+        # le passe-plat, qui rend la main en ms. Pour un jeu connu (Heroic), on suit
+        # alors le JEU lui-même (motifs /proc) — c'est cette clôture qui manquait.
+        uri = any("://" in a for a in argv)
+        try:
+            motifs = motifs_jeu(g) if uri else []
+        except (OSError, ValueError):   # fichiers Heroic illisibles : l'ancien repli vaut mieux qu'un plantage
+            motifs = []
+        if motifs:
+            threading.Thread(target=_watch_uri,
+                             args=(motifs, cur.lastrowid, on_exit, time.monotonic()),
+                             daemon=True).start()
+        else:
+            threading.Thread(target=_watch_game,
+                             args=(proc, cur.lastrowid, on_exit, time.monotonic()),
+                             daemon=True).start()
     print(f"▶ {g['name']}.")
     return True
 
