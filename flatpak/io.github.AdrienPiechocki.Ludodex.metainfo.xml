@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.AdrienPiechocki.Ludodex</id>
+  <name>Ludodex</name>
+  <summary>Import your games, pick one at random and track your play sessions</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>A GTK4/libadwaita game library manager: imports your games (Steam, itch.io,
+    Flatpak, Lutris, RetroArch), picks a random game to play based on your mood and
+    the time available, and keeps a retrospective of your play sessions with Markdown
+    notes and your own achievements.</p>
+    <p>Ludodex works entirely locally: a SQLite database, a Markdown note per game,
+    and no account required.</p>
+  </description>
+  <launchable type="desktop-id">io.github.AdrienPiechocki.Ludodex.desktop</launchable>
+  <developer id="adrienpiechocki">
+    <name>Adrien Piechocki</name>
+  </developer>
+  <categories><category>Game</category></categories>
+</component>

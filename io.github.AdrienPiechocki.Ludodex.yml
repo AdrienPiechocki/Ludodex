@@ -1,0 +1,43 @@
+id: io.github.AdrienPiechocki.Ludodex
+runtime: org.gnome.Platform
+runtime-version: '51'
+sdk: org.gnome.Sdk
+command: ludodex
+finish-args:
+  - --share=network
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --filesystem=host
+  - --talk-name=org.freedesktop.Flatpak
+modules:
+  - name: pyyaml
+    buildsystem: simple
+    build-options:
+      build-args: [--share=network]
+    build-commands:
+      - pip3 install --no-cache-dir --prefix=/app --break-system-packages "PyYAML>=5.4"
+  - name: ludodex
+    buildsystem: simple
+    build-commands:
+      - install -d /app/share/ludodex
+      - cp -a . /app/share/ludodex/
+      - install -Dm755 flatpak/ludodex /app/bin/ludodex
+      - install -Dm755 flatpak/ludodex-cli /app/bin/ludodex-cli
+      - install -Dm644 flatpak/io.github.AdrienPiechocki.Ludodex.desktop
+        /app/share/applications/io.github.AdrienPiechocki.Ludodex.desktop
+      - install -Dm644 flatpak/io.github.AdrienPiechocki.Ludodex.metainfo.xml
+        /app/share/metainfo/io.github.AdrienPiechocki.Ludodex.metainfo.xml
+      - install -d /app/share/icons/hicolor
+      - cp -a share/icons/hicolor/. /app/share/icons/hicolor/
+    sources:
+      - type: dir
+        path: .
+        skip:
+          - .git
+          - .flatpak-builder
+          - .build-cache
+          - .pytest_cache
+          - build
+          - __pycache__

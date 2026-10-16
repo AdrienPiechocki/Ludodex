@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Ludodex
+GenericName=Game library
+Comment=Import your games, pick one at random and track your play sessions
+Comment[fr]=Importe vos jeux, en tire un au hasard et suit vos parties
+Exec=ludodex
+Icon=io.github.AdrienPiechocki.Ludodex
+Terminal=false
+Categories=Game;
+StartupWMClass=io.github.AdrienPiechocki.Ludodex
