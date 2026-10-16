@@ -140,7 +140,11 @@ class Win(PickViewMixin, LibraryMixin, RetroMixin, NotesMixin, AchievementsMixin
         fil) ne touche jamais à la connexion, et la session a pu être fermée
         entre-temps (fermeture de l'application, lancement suivant) : le cœur
         s'en charge, `close_session` est sans effet dans ce cas."""
-        GLib.idle_add(lambda: (P.close_session(self.con, sid), False)[1])
+        def cloture():
+            P.close_session(self.con, sid)
+            self._maj_session_bar()  # « Jeu en cours » disparaît avec la session
+            return False
+        GLib.idle_add(cloture)
 
     def _present(self):
         """Présente la fenêtre — maximisée. Démarrage comme reconstruction après

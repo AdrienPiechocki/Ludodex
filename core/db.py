@@ -195,6 +195,23 @@ def save_lang(con, code):
     set_lang(code)
 
 
+MARQUEUR_MARGE_SEC = 300  # « joué vers telle heure » : une session mesurée qui couvre
+                          # lp ± 5 min rend le marqueur inutile
+
+
+def marqueur_couvert(con, game_id, lp):
+    """Vrai si une session déjà connue couvre l'instant `lp`.
+
+    Le marqueur — session (lp, lp) de zéro minute, que l'ajoutent les imports qui
+    ne savent que QUAND on a joué (LastPlayed Steam, cave itch touché) — n'a sa
+    place que là où Ludodex n'a rien mesuré. Une session réelle qui couvre le
+    moment suffit à la frise : le jumeau ne ferait que la brouiller (jeu web
+    itch : la session mesurée, puis le marqueur du cave touché 42 s plus tard)."""
+    return con.execute(
+        "SELECT 1 FROM sessions WHERE game_id=? AND started <= ? AND (ended=0 OR ended >= ?) LIMIT 1",
+        (game_id, lp + MARQUEUR_MARGE_SEC, lp - MARQUEUR_MARGE_SEC)).fetchone() is not None
+
+
 def upsert(con, source, ext_id, name, playtime_min=None, last_played=0):
     """Ajoute/met à jour un jeu ; playtime_min=None conserve la valeur existante."""
     con.execute(
@@ -208,8 +225,9 @@ def upsert(con, source, ext_id, name, playtime_min=None, last_played=0):
         (source, ext_id, name, last_played, playtime_min or 0, playtime_min))
     if last_played:
         gid = con.execute("SELECT id FROM games WHERE source=? AND ext_id=?", (source, ext_id)).fetchone()[0]
-        con.execute("INSERT OR IGNORE INTO sessions (game_id, started, ended, minutes) VALUES (?, ?, ?, 0)",
-                    (gid, last_played, last_played))
+        if not marqueur_couvert(con, gid, last_played):
+            con.execute("INSERT OR IGNORE INTO sessions (game_id, started, ended, minutes) VALUES (?, ?, ?, 0)",
+                        (gid, last_played, last_played))
 
 
 def upsert_owned(con, source, ext_id, name):

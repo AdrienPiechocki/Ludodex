@@ -81,6 +81,25 @@ class LibraryMixin:
         content.append(self.search_bar)
         content.append(self.lib_stack)
 
+        # « Jeu en cours » : la frontière d'une session n'est pas observable
+        # partout — un jeu web chez itch tourne dans la fenêtre du client, sans
+        # aucun processus à suivre. La bibliothèque porte alors la frontière :
+        # le nom du jeu et « Terminer la session », en bas de la liste. La barre
+        # ne se montre que si une session est ouverte.
+        self.session_bar = Gtk.Box(spacing=10, halign=Gtk.Align.CENTER,
+                                   margin_top=2, margin_bottom=10, visible=False)
+        self.session_lbl = Gtk.Label(css_classes=["dim-label"])
+        fin_box = Gtk.Box(spacing=6)
+        fin_box.append(Gtk.Image(icon_name="media-playback-stop-symbolic"))
+        fin_box.append(Gtk.Label(label=tr("End session")))
+        self.session_fin = Gtk.Button(child=fin_box, css_classes=["pill"])
+        self.session_fin.connect("clicked", self._on_end_session)
+        self.session_bar.append(self.session_lbl)
+        self.session_bar.append(self.session_fin)
+        self.session_sid = None
+        self._maj_session_bar()  # session héritée d'une exécution précédente : visible
+        content.append(self.session_bar)
+
         # barre latérale : « Tous les jeux » + une ligne par collection
         self.col_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE, css_classes=["navigation-sidebar"])
         self.col_list.set_activate_on_single_click(False)  # row-activated = double-clic (ou Entrée) = isoler
@@ -1023,9 +1042,29 @@ class LibraryMixin:
             self._show_ach_game(gid)
         self.stack.set_visible_child_name("achievements")
 
+    def _maj_session_bar(self):
+        """La barre « Jeu en cours » reflète la base : visible ssi une session est
+        ouverte (la plus récente s'il en reste plusieurs héritées)."""
+        r = self.con.execute(
+            "SELECT s.id, g.name FROM sessions s JOIN games g ON g.id=s.game_id "
+            "WHERE s.ended=0 ORDER BY s.id DESC LIMIT 1").fetchone()
+        self.session_sid = r["id"] if r else None
+        self.session_bar.set_visible(r is not None)
+        if r is not None:
+            self.session_lbl.set_text(tr("Playing now: {game}", game=r["name"]))
+
+    def _on_end_session(self, _b):
+        """Frontière manuelle : la session se clôt à la main, comme l'aurait fait
+        la sortie du jeu si elle était observable (jeu web chez itch, par ex.)."""
+        if self.session_sid is not None:
+            P.close_session(self.con, self.session_sid)
+        self._maj_session_bar()
+        self.toasts.add_toast(Adw.Toast.new(tr("Session ended")))
+
     def _quick_launch(self, gid):
         g = self.con.execute("SELECT * FROM games WHERE id=?", (gid,)).fetchone()
         ok = P.launch(self.con, g, on_exit=self._on_game_exit)
+        self._maj_session_bar()  # session ouverte par ce lancement, précédente closee par lui
         self.toasts.add_toast(Adw.Toast.new(GLib.markup_escape_text(
             tr("▶ Launched. Have fun!") if ok else tr("Couldn't launch: is the game still installed?"))))
 

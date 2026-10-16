@@ -8,7 +8,7 @@ import urllib.parse
 import urllib.request
 
 from i18n import tr
-from .db import upsert, upsert_owned, get_setting, set_setting
+from .db import upsert, upsert_owned, get_setting, set_setting, marqueur_couvert
 from .platform import steam_roots, clean_path
 
 STEAM_ROOTS = steam_roots()
@@ -279,6 +279,8 @@ def backfill_steam_logs(con):
     for appid, days in launches.items():
         if appid in ids:
             for ts in days.values():
+                if marqueur_couvert(con, ids[appid], ts):
+                    continue  # la session mesurée de cette partie couvre déjà le lancement du log
                 added += con.execute("INSERT OR IGNORE INTO sessions (game_id, started, ended, minutes) VALUES (?, ?, ?, 0)",
                                      (ids[appid], ts, ts)).rowcount
     con.commit()

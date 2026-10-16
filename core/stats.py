@@ -3,7 +3,7 @@
 import datetime, time
 
 from i18n import tr
-from .db import get_setting
+from .db import get_setting, marqueur_couvert
 from .sources import source_enabled, source_cond
 from .steam import steam_stats, steam_log_launches, backfill_steam_logs
 
@@ -38,7 +38,7 @@ def refresh_stats(con, logs=False):
             pt, lp = stats[g["ext_id"]]
             con.execute("UPDATE games SET playtime_min=?, last_played=MAX(last_played, ?) WHERE id=?",
                         (pt, lp, g["id"]))
-            if lp:
+            if lp and not marqueur_couvert(con, g["id"], lp):
                 con.execute("INSERT OR IGNORE INTO sessions (game_id, started, ended, minutes) VALUES (?, ?, ?, 0)", (g["id"], lp, lp))
     con.commit()
 
