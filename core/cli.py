@@ -167,7 +167,8 @@ def main():
                   source=g["source"], name=g["name"], state=state, fetched=fetched, sgdb=g["sgdb_id"] or "-"))
     elif args.cmd == "covers":
         if args.retry:  # sans clé, le CDN de Steam s'en charge quand même
-            con.execute("UPDATE games SET cover_fetched=0 WHERE cover_path=''")
+            con.execute("UPDATE games SET cover_fetched=0 WHERE cover_path=''"
+                        + (" OR cover_src != 'sgdb'" if sgdb_key() else ""))
             con.commit()
         print(tr("{n} cover(s) fetched", n=fetch_missing_covers(con, args.limit, progress=print)))
     elif args.cmd == "cover":

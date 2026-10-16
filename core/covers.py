@@ -305,7 +305,12 @@ def fetch_missing_covers(con, limit=50, delay=0.5, progress=None, include_not_in
             con.execute("UPDATE games SET cover_path='', cover_fetched=0 WHERE id=?", (r["id"],))
     retry_before = int(time.time()) - 30 * 86400
     inst = "" if include_not_installed else "installed=1 AND "
-    where = f"{inst}hidden=0 AND cover_path='' AND custom_cover='' AND (cover_fetched=0 OR cover_fetched < ?)"
+    # Clé en main : SGDB reprend aussi les couvertures d'origine CDN — ou
+    # d'origine inconnue, héritage des bases d'avant la colonne cover_src. La
+    # garde 30 jours limite ces tentatives comme celles des manquantes ; sans
+    # clé, rien ne change : le CDN reste la seule source.
+    porte = "(cover_path='' OR cover_src != 'sgdb')" if sgdb_key() else "cover_path=''"
+    where = f"{inst}hidden=0 AND custom_cover='' AND {porte} AND (cover_fetched=0 OR cover_fetched < ?)"
     cond = source_cond(con)
     if cond:
         where += f" AND {cond}"

@@ -452,7 +452,10 @@ class SettingsMixin:
             n = 0
             try:
                 con = P.db()
-                con.execute("UPDATE games SET cover_fetched=0 WHERE cover_path=''")  # relance manuelle : on retente tout
+                # relance manuelle : on retente tout — avec une clé, y compris les
+                # couvertures d'origine CDN, que SGDB remplace
+                con.execute("UPDATE games SET cover_fetched=0 WHERE cover_path=''"
+                            + (" OR cover_src != 'sgdb'" if P.sgdb_key() else ""))
                 con.commit()
                 # `include_not_installed=True` : c'est un geste EXPLICITE de
                 # l'utilisateur qui demande toutes les couvertures manquantes. Sans
