@@ -170,6 +170,8 @@ def _watch_game(proc, sid, on_exit, debut):
 URI_ATTENTE_JEU = 90   # s : fenêtre pour voir apparaître le jeu (wine, bwrap et Heroic démarrent lentement)
 URI_POLL_SEC = 2       # s : rythme des sondes /proc
 URI_SORTIE_CONFIRMES = 3   # sondes vides consécutives = sortie confirmée (un bref trou ne clôture pas)
+URI_INCONNUS_MAX = 30  # sondes en échec consécutives (None) = abandon de la surveillance,
+                       # sans clôture : ~1 min de scan cassé ne doit pas tenir un fil éveillé
 
 
 def filtre_motifs(motifs):
@@ -280,7 +282,10 @@ def motifs_jeu(g, env=None, home=None):
 
 
 def _pids_sous(motifs):
-    """PIDs dont cmdline, cwd ou exe contiennent l'un des motifs (lecture /proc)."""
+    """PIDs dont cmdline, cwd ou exe contiennent l'un des motifs (lecture /proc).
+
+    None = inconnu (échec de lecture) : à ne pas confondre avec la liste vide,
+    qui signifie « le jeu n'est pas là »."""
     if not motifs:
         return []
     if platform.in_flatpak():
@@ -291,7 +296,7 @@ def _pids_sous(motifs):
     try:
         entrees = pathlib.Path("/proc").iterdir()
     except OSError:
-        return []
+        return None
     for ent in entrees:
         if not ent.name.isdigit() or int(ent.name) == moi:
             continue
@@ -310,7 +315,10 @@ def _watch_uri(motifs, sid, on_exit, debut, fenetre=None, lister=None, dormir=No
     par le rappel de l'APPLICATION, sur son fil principal, comme `_watch_game`.
 
     Jamais vu dans la fenêtre : on ne clôture rien (l'ancien repli — fermeture à la
-    fermeture de l'appli — vaut mieux qu'une durée inventée)."""
+    fermeture de l'appli — vaut mieux qu'une durée inventée). Une sonde en échec
+    (None) est INCONNUE : elle n'avance ni l'apparition ni la sortie ; trop
+    d'échecs consécutifs (URI_INCONNUS_MAX) abandonnent la surveillance sans
+    jamais clôturer — mieux vaut l'ancien repli qu'une session fermée à tort."""
     fenetre = URI_ATTENTE_JEU if fenetre is None else fenetre
     lister = _pids_sous if lister is None else lister
     dormir = time.sleep if dormir is None else dormir
@@ -323,10 +331,17 @@ def _watch_uri(motifs, sid, on_exit, debut, fenetre=None, lister=None, dormir=No
         dormir(URI_POLL_SEC)
     if not vu:
         return
-    vides = 0
+    vides, inconnus = 0, 0
     while vides < URI_SORTIE_CONFIRMES:
         dormir(URI_POLL_SEC)
-        vides = vides + 1 if not lister(motifs) else 0
+        pids = lister(motifs)
+        if pids is None:                     # échec du scan : inconnu
+            inconnus += 1
+            if inconnus >= URI_INCONNUS_MAX:
+                return                       # abandon, sans clôture inventée
+            continue
+        inconnus = 0                          # un scan fiable remet le compteur
+        vides = vides + 1 if not pids else 0
     if time.monotonic() - debut >= EXIT_GRACE_SEC:
         on_exit(sid)
 

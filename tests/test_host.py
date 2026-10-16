@@ -170,8 +170,72 @@ def test_scan_script_sans_auto_correspondance():
     assert scan("/zzz-present-9xyz") == []                 # plus là = plus de match
 
 
-def test_host_pids_sous_hote_injoignable_renvoie_vide(monkeypatch):
+def test_host_pids_sous_hote_injoignable_renvoie_inconnu(monkeypatch):
     def _ko(*a, **kw):
         raise OSError
     monkeypatch.setattr(platform.subprocess, "run", _ko)
-    assert platform.host_pids_sous(["/home/u/jeu/dossier"]) == []
+    # L'échec du scan est INCONNU, jamais « le jeu n'est plus là ».
+    assert platform.host_pids_sous(["/home/u/jeu/dossier"]) is None
+
+
+def test_host_pids_sous_code_de_sortie(monkeypatch):
+    class _R:
+        def __init__(self, code, out=b""):
+            self.returncode, self.stdout = code, out
+    monkeypatch.setattr(platform.subprocess, "run", lambda *a, **kw: _R(0, b""))
+    assert platform.host_pids_sous(["/home/u/jeu/dossier"]) == []   # aucun match
+    monkeypatch.setattr(platform.subprocess, "run", lambda *a, **kw: _R(0, b"7\n"))
+    assert platform.host_pids_sous(["/home/u/jeu/dossier"]) == [7]
+    # Le script sort toujours 0 ou 2 : tout autre code est un échec de transport
+    # (portail, chdir du cwd sandbox) — inconnu, jamais « plus de jeu ».
+    monkeypatch.setattr(platform.subprocess, "run", lambda *a, **kw: _R(1))
+    assert platform.host_pids_sous(["/home/u/jeu/dossier"]) is None
+    monkeypatch.setattr(platform.subprocess, "run", lambda *a, **kw: _R(2, b"7\n"))
+    assert platform.host_pids_sous(["/home/u/jeu/dossier"]) is None
+
+
+def test_pids_sous_natif_proc_illisible_renvoie_inconnu(monkeypatch):
+    import pathlib
+    class _Faux:
+        def iterdir(self):
+            raise OSError("proc illisible")
+    monkeypatch.setattr(pathlib, "Path", lambda *a: _Faux())
+    monkeypatch.setattr(platform, "in_flatpak", lambda env=None: False)
+    assert L._pids_sous(["/jeu/x"]) is None
+
+
+# ---------- _watch_uri : un échec de scan n'est pas une sortie de jeu ----------
+
+def _watch(seq, cap, monkeypatch, fenetre=20, max_inconnus=None, age=10):
+    """Exécute _watch_uri avec une séquence de réponses de `lister` (finie puis
+    None). `cap` reçoit les appels de on_exit ; `age` rend la grâce satisfaisante."""
+    if max_inconnus is not None:
+        monkeypatch.setattr(L, "URI_INCONNUS_MAX", max_inconnus)
+    it = iter(seq)
+    n = {"lister": 0}
+    def lister(m):
+        n["lister"] += 1
+        return next(it, None)
+    L._watch_uri(["/jeu/x"], 7, lambda sid: cap.append(sid),
+                 debut=L.time.monotonic() - age,         # largement dans la grâce
+                 fenetre=fenetre, lister=lister, dormir=lambda s: None)
+    return n["lister"]
+
+
+def test_watch_uri_scan_en_echec_ne_cloture_rien(monkeypatch):
+    cap = []
+    # Vu, puis que des échecs : abandon après URI_INCONNUS_MAX, jamais on_exit.
+    _watch([[1], None, None, None, None], cap, monkeypatch, max_inconnus=3)
+    assert cap == []
+
+
+def test_watch_uri_sortie_confirmee_cloture(monkeypatch):
+    cap = []
+    _watch([[1], [], [], []], cap, monkeypatch)
+    assert cap == [7]                                  # parité inchangée
+
+
+def test_watch_uri_jamais_vu_ne_cloture_rien(monkeypatch):
+    cap = []
+    _watch([None], cap, monkeypatch, fenetre=0.02, age=0)   # échecs dans la fenêtre
+    assert cap == []

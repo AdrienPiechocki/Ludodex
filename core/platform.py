@@ -209,9 +209,9 @@ def host_pids_sous(motifs):
 
     Dans le bac à sable, /proc ne montre que nos propres processus (noms de PID
     isolés) : le scan des processus de jeu est délégué à l'hôte, une passe `sh`
-    par sonde (toutes les 2 s pendant l'attente). Un échec — hôte injoignable —
-    renvoie la liste vide : le repli « jamais vu, donc rien n'est clôturé de
-    façon inventée » s'applique alors.
+    par sonde (toutes les 2 s pendant l'attente). None = INCONNU (hôte
+    injoignable, scan cassé) : jamais « le jeu n'est plus là ». Le repli
+    « jamais vu, donc rien n'est clôturé de façon inventée » revient alors.
 
     Précondition de `flatpak-spawn --host` : le processus appelant doit avoir un
     cwd existant côté hôte (sinon le portail échoue au chdir)."""
@@ -223,12 +223,14 @@ def host_pids_sous(motifs):
     # du /proc hôte, son argv y serait un match permanent du scan sur lui-même.
     blob = ("LUDEX_MOTIFS=" + "\n".join(motifs) + "\0").encode()
     try:
-        brut = subprocess.run(["flatpak-spawn", "--host", "--env-fd=0", "sh", "-c",
-                               _SCAN_SCRIPT, "sh"],
-                              input=blob, capture_output=True, timeout=15).stdout
+        r = subprocess.run(["flatpak-spawn", "--host", "--env-fd=0", "sh", "-c",
+                            _SCAN_SCRIPT, "sh"],
+                           input=blob, capture_output=True, timeout=15)
     except (OSError, subprocess.SubprocessError):
-        return []
-    return sorted({int(x) for x in brut.decode("utf-8", "ignore").split()
+        return None
+    if r.returncode != 0:
+        return None          # échec de transport (portail, chdir) ou scan cassé
+    return sorted({int(x) for x in r.stdout.decode("utf-8", "ignore").split()
                    if x.isdigit()})
 
 
