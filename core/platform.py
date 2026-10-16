@@ -119,7 +119,7 @@ def open_url_command(url):
 def open_url(url):
     """Ouvre une URL dans le navigateur du bureau ; False si l'ouverture échoue."""
     try:
-        subprocess.Popen(open_url_command(url), start_new_session=True,
+        subprocess.Popen(host_argv(open_url_command(url)), start_new_session=True,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return True
     except OSError:

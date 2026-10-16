@@ -94,6 +94,16 @@ def check_command(text):
     _, prog = split_env(argv)
     if not prog:
         raise ValueError(tr("empty command"))
+    if platform.in_flatpak():
+        # Dans le bac à sable, les binaires hôtes ne sont ni dans le PATH ni (sous /usr)
+        # visibles : on interroge l'hôte plutôt que de fausser l'alerte.
+        try:
+            r = subprocess.run(["flatpak-spawn", "--host", "sh", "-c",
+                                'command -v "$1" >/dev/null 2>&1', "sh", prog[0]],
+                               capture_output=True, timeout=10)
+            return None if r.returncode == 0 else prog[0]
+        except (OSError, subprocess.SubprocessError):
+            return None
     return None if (os.path.isfile(prog[0]) or shutil.which(prog[0])) else prog[0]
 
 
@@ -328,7 +338,8 @@ def launch(con, g, on_exit=None):
         env, argv = split_env(cmd)
         if not argv:
             raise ValueError(tr("empty command"))
-        proc = subprocess.Popen(argv, cwd=cwd, env={**os.environ, **env} if env else None,
+        proc = subprocess.Popen(platform.host_argv(argv, env), cwd=cwd,
+                                env={**os.environ, **env} if env else None,
                                 start_new_session=True)
     except (OSError, ValueError) as e:
         print(tr("! couldn't launch: {e}", e=e))
@@ -442,7 +453,7 @@ def _detached(cmd):
     passe pas par un shell, sans quoi le binaire recevrait ces paires en ARGUMENTS."""
     env, argv = split_env(cmd)
     try:
-        subprocess.Popen(argv, env={**os.environ, **env} if env else None,
+        subprocess.Popen(platform.host_argv(argv, env), env={**os.environ, **env} if env else None,
                          start_new_session=True,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return None
