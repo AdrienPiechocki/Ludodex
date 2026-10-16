@@ -196,9 +196,13 @@ def test_host_pids_sous_code_de_sortie(monkeypatch):
 
 def test_pids_sous_natif_proc_illisible_renvoie_inconnu(monkeypatch):
     import pathlib
+    def iterdir_leveur():        # sur Python 3.12, iterdir est un générateur :
+        def gen():               # l'OSError ne sort qu'à l'itération, pas à l'appel
+            raise OSError("proc illisible")
+        return gen()
     class _Faux:
         def iterdir(self):
-            raise OSError("proc illisible")
+            return iterdir_leveur()
     monkeypatch.setattr(pathlib, "Path", lambda *a: _Faux())
     monkeypatch.setattr(platform, "in_flatpak", lambda env=None: False)
     assert L._pids_sous(["/jeu/x"]) is None

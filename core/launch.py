@@ -190,7 +190,8 @@ URI_ATTENTE_JEU = 90   # s : fenêtre pour voir apparaître le jeu (wine, bwrap 
 URI_POLL_SEC = 2       # s : rythme des sondes /proc
 URI_SORTIE_CONFIRMES = 3   # sondes vides consécutives = sortie confirmée (un bref trou ne clôture pas)
 URI_INCONNUS_MAX = 30  # sondes en échec consécutives (None) = abandon de la surveillance,
-                       # sans clôture : ~1 min de scan cassé ne doit pas tenir un fil éveillé
+                       # sans clôture : ~1 min de scan cassé (~8,5 min si chaque sonde
+                       # bloque le plein timeout de 15 s) ne doit pas tenir un fil éveillé
 
 
 def filtre_motifs(motifs):
@@ -313,7 +314,9 @@ def _pids_sous(motifs):
     bas = [m.lower() for m in motifs]
     moi, trouves = os.getpid(), []
     try:
-        entrees = pathlib.Path("/proc").iterdir()
+        # list() : sur les Python où iterdir est paresseux (générateur, 3.12),
+        # l'OSError ne sortirait qu'à l'itération, CEE try — ici, toujours.
+        entrees = list(pathlib.Path("/proc").iterdir())
     except OSError:
         return None
     for ent in entrees:
@@ -337,7 +340,9 @@ def _watch_uri(motifs, sid, on_exit, debut, fenetre=None, lister=None, dormir=No
     fermeture de l'appli — vaut mieux qu'une durée inventée). Une sonde en échec
     (None) est INCONNUE : elle n'avance ni l'apparition ni la sortie ; trop
     d'échecs consécutifs (URI_INCONNUS_MAX) abandonnent la surveillance sans
-    jamais clôturer — mieux vaut l'ancien repli qu'une session fermée à tort."""
+    jamais clôturer — mieux vaut l'ancien repli qu'une session fermée à tort.
+    Résidu connu : si Ludodex est démarré avec un cwd sur un motif de jeu, les
+    sondes ne seront jamais vides — repli documenté, jamais une clôture fausse."""
     fenetre = URI_ATTENTE_JEU if fenetre is None else fenetre
     lister = _pids_sous if lister is None else lister
     dormir = time.sleep if dormir is None else dormir
