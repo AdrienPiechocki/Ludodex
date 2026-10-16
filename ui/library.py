@@ -990,7 +990,8 @@ class LibraryMixin:
         # Rangée d'actions : petites icônes, pas de texte. Chaque bouton ne
         # s'affiche QUE si sa commande est avérée — un lien mort ne servirait à
         # rien : le magasin exige une fiche magasin, les trois pages exigent
-        # leur module activé.
+        # leur module activé, et la page Succès exige EN PLUS des succès pour
+        # CE jeu (sinon elle s'ouvrirait sur rien).
         actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4, halign=Gtk.Align.CENTER)
 
         def icon(icon_name, tooltip, cb, destructive=False):
@@ -1005,7 +1006,7 @@ class LibraryMixin:
             icon("document-open-recent-symbolic", tr("Retrospective"), lambda *_: self._goto_retro_game(g, win))
         if P.module_enabled(self.con, "notes"):
             icon("document-edit-symbolic", tr("Notes"), lambda *_: self._goto_note_game(gid, win))
-        if P.module_enabled(self.con, "achievements"):
+        if P.module_enabled(self.con, "achievements") and P.has_achievements(self.con, g):
             icon("starred-symbolic", tr("Achievements"), lambda *_: self._goto_ach_game(gid, win))
         # Un seul bouton destructeur à l'emplacement, jamais les deux. La source
         # qui sait RETIRER LES FICHIERS l'emporte : « Désinstaller », c'est

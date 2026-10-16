@@ -183,6 +183,21 @@ def module_enabled(con, name):
     return get_setting(con, f"module_{name}") != "0"
 
 
+def has_achievements(con, g):
+    """Vrai si CE jeu a au moins un succès enregistré dans la base.
+
+    Trois tables peuvent en porter : `achievements` (suivi local par YAML),
+    `ra_achievements` (lien RetroAchievements) et `steam_achievements` (cache
+    Steam téléchargé). Les réglages qui coupent une source ne sont pas
+    consultés : la question est « la base en contient-elle ? », pas « la page
+    Succès les montre-t-elle ? »."""
+    for table in ("achievements", "ra_achievements", "steam_achievements"):
+        if con.execute(f"SELECT 1 FROM {table} WHERE game_id=? LIMIT 1",
+                       (g["id"],)).fetchone():
+            return True
+    return False
+
+
 def load_lang(con):
     """Applique la langue enregistrée ; sans réglage, on garde celle du système (détectée par i18n)."""
     code = get_setting(con, "lang")
