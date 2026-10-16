@@ -21,8 +21,7 @@ class SettingsMixin:
         self._module_sw = self._import_sw = self._auto_rows = None
         self._hide_short_scale = self._hide_short_row = None
         self._retro_enable_sw = None
-        self._lib_group = self._auto_group = self._retro_group = self._pick_group = None
-        self._pick_owned_chk = None
+        self._lib_group = self._auto_group = self._retro_group = None
         self._show_hidden_chk = self._group_games_chk = None
         self._ach_show_hidden_chk = self._ach_show_hidden_row = None
         self._ra_user_row = self._ra_key_row = None
@@ -115,18 +114,6 @@ class SettingsMixin:
             if src != "custom" and not P.source_enabled(self.con, src):
                 sw.set_visible(False)  # plateforme désactivée → sa collection auto disparaît aussi
         page.add(auto_group)
-
-        # Choisir : le tirage tient compte des jeux non installés
-        self._pick_group = pick_group = Adw.PreferencesGroup(title=tr("Pick"))
-        pchk = Gtk.CheckButton(active=self.pick_owned, valign=Gtk.Align.CENTER)
-        pchk.connect("toggled", self._on_pick_owned)
-        prow = Adw.ActionRow(title=tr("Take not installed games into account"),
-                             subtitle=tr("In the draw and its tags"),
-                             activatable_widget=pchk)
-        prow.add_prefix(pchk)
-        pick_group.add(prow)
-        page.add(pick_group)
-        self._pick_owned_chk = pchk  # référence pour les tests
 
         # Rétrospective : le seuil des sessions courtes, puis les frises visibles
         self._retro_group = retro_group = Adw.PreferencesGroup(title=tr("Retrospective"))

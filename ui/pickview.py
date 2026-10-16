@@ -219,6 +219,16 @@ class PickViewMixin:
         self.collections_row.add_suffix(self.collections_btn)
         self.collections_row.set_activatable_widget(self.collections_btn)
         group2.add(self.collections_row)
+        # Le tirage des jeux possédés non installés se pilote ICI, à côté des
+        # autres critères : c'est un filtre de tirage, pas un réglage d'application.
+        # Même réglage `pick_owned` au cœur, seul le lieu change.
+        self.pick_owned_row = Adw.SwitchRow(title=tr("Take not installed games into account"),
+                                            subtitle=tr("In the draw and its tags"),
+                                            active=self.pick_owned)
+        # `notify::active` et NON `toggled` : c'est une propriété, pas un
+        # CheckButton — le handler du cœur lit `get_active()`, commun aux deux.
+        self.pick_owned_row.connect("notify::active", lambda r, _p: self._on_pick_owned(r))
+        group2.add(self.pick_owned_row)
         filters.append(group2)
 
         self.btn_go = Gtk.Button(label=tr("Pick for me"), halign=Gtk.Align.CENTER)
