@@ -78,6 +78,16 @@ class LibraryMixin:
         self.lib_flow.set_sort_func(self._sort_func)
         self.lib_flow.connect("child-activated", self._on_tile_activated)
         self.lib_flow.connect("selected-children-changed", lambda *_: self._update_sel_bar())
+        # Mémoire de clic : le FlowBox, en MULTIPLE, coche au clic mais ne décoche
+        # JAMAIS. L'état « la tuile était déjà cochée » n'existe qu'entre l'appui et
+        # le relâchement — une capture le voit avant le traitement interne du
+        # FlowBox ; l'activation clavier (Entrée), elle, la voit toujours à None et
+        # ne désélectionne rien.
+        self._pressed_sel = None
+        cap = Gtk.GestureClick(button=1)
+        cap.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        cap.connect("pressed", self._on_lib_capture)
+        self.lib_flow.add_controller(cap)
         self.lib_scroll = Gtk.ScrolledWindow(child=self.lib_flow, vexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER)
         self.lib_empty = Adw.StatusPage(icon_name="view-grid-symbolic", vexpand=True)
         self.lib_stack = Gtk.Stack()
@@ -612,9 +622,28 @@ class LibraryMixin:
             self.sel_hide_btn.set_label(tr("Unhide") if all(c._game["hidden"] for c in sel)
                                          else tr("Hide"))
 
+    def _on_lib_capture(self, _gesture, _n_press, x, y):
+        """Clic souris : retenir la tuile visée si elle était déjà cochée au moment
+        de l'appui — seul moment où cette vérité est observable."""
+        self._pressed_sel = None
+        if not self.select_btn.get_active():
+            return
+        child = self.lib_flow.get_first_child()
+        while child is not None:
+            a = child.get_allocation()
+            if a.x <= x < a.x + a.width and a.y <= y < a.y + a.height:
+                if child in self.lib_flow.get_selected_children():
+                    self._pressed_sel = child
+                return
+            child = child.get_next_sibling()
+
     def _on_tile_activated(self, _f, child):
-        """Mode sélection : le clic sert à cocher, jamais à ouvrir la fiche."""
+        """Mode sélection : le clic coche (le FlowBox) et décoche (nous) — jamais
+        il n'ouvre la fiche."""
         if self.select_btn.get_active():
+            if child is self._pressed_sel:      # déjà cochée à l'appui : on bascule
+                self.lib_flow.unselect_child(child)
+            self._pressed_sel = None
             return
         self._open_game(child._game["id"])
 
