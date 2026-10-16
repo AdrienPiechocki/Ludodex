@@ -126,6 +126,40 @@ def open_url(url):
         return False
 
 
+# Variables d'affichage et de locale qu'un processus HÔTE doit recevoir
+# explicitement quand l'environnement transmis n'est pas celui de la session.
+PASSE = ("DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XDG_SESSION_TYPE",
+         "LANG", "LC_ALL", "LC_MESSAGES")
+
+
+def in_flatpak(env=None):
+    """True si le code tourne dans un bac à sable Flatpak (`FLATPAK_ID` posé par `flatpak run`)."""
+    return bool(_env(env).get("FLATPAK_ID"))
+
+
+def host_argv(argv, env_vars=None, env=None):
+    """Commande exécutant `argv` sur l'HÔTE — un bac à sable ne peut pas lancer les
+    binaires hôtes (`steam`, `xdg-open`, `lutris`…) lui-même.
+
+    Hors Flatpak : `argv` inchangé. Dedans : `flatpak-spawn --host` reçoit un `sh -c`
+    qui dépouille d'abord l'environnement du sandbox — les `FLATPAK_*` de `flatpak run`,
+    et surtout `XDG_DATA_HOME` / `XDG_CONFIG_HOME` / … redirigés vers `~/.var/app/…` :
+    sans ce retrait, `xdg-open` lirait le mauvais `mimeapps.list` et les jeux
+    rangeraient leurs sauvegardes chez Ludodex — puis ré-exporte l'affichage (`PASSE`)
+    et les variables d'en-tête de la commande, et `exec` l'argv d'origine.
+    `XDG_RUNTIME_DIR`, lui, reste : son chemin est le même des deux côtés."""
+    if not in_flatpak(env):
+        return list(argv)
+    e = _env(env)
+    avant = {k: e[k] for k in PASSE if k in e}
+    exports = " ".join(f"export {k}={shlex.quote(str(v))};" for k, v in
+                       {**avant, **(env_vars or {})}.items())
+    script = ('for v in $(env | cut -d= -f1 | grep "^FLATPAK_"); do unset "$v"; done; '
+              'unset XDG_DATA_HOME XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_DIRS XDG_CONFIG_DIRS; '
+              + (exports + " " if exports else "") + 'exec "$@"')
+    return ["flatpak-spawn", "--host", "sh", "-c", script, "sh", *argv]
+
+
 def split_command(text):
     """Découpe une ligne de commande (mode POSIX : les guillemets protègent les
     espaces, les antislashs échappent)."""
