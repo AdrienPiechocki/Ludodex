@@ -283,6 +283,9 @@ def _pids_sous(motifs):
     """PIDs dont cmdline, cwd ou exe contiennent l'un des motifs (lecture /proc)."""
     if not motifs:
         return []
+    if platform.in_flatpak():
+        # /proc du bac à sable ne voit que nos processus : le scan est délégué à l'hôte.
+        return platform.host_pids_sous(motifs)
     bas = [m.lower() for m in motifs]
     moi, trouves = os.getpid(), []
     try:

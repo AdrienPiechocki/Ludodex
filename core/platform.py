@@ -160,6 +160,28 @@ def host_argv(argv, env_vars=None, env=None):
     return ["flatpak-spawn", "--host", "sh", "-c", script, "sh", *argv]
 
 
+def host_pids_sous(motifs):
+    """PIDs de l'HÔTE dont cmdline, cwd ou exe contiennent l'un des motifs.
+
+    Dans le bac à sable, /proc ne montre que nos propres processus (noms de PID
+    isolés) : le scan des processus de jeu est délégué à l'hôte, une passe `sh`
+    par sonde (toutes les 2 s pendant l'attente). Un échec — hôte injoignable —
+    renvoie la liste vide : le repli « jamais vu, donc rien n'est clôturé de
+    façon inventée » s'applique alors."""
+    if not motifs:
+        return []
+    script = ('for m in "$@"; do for p in /proc/[0-9]*; do '
+              't=$(tr "\\0" " " < "$p/cmdline" 2>/dev/null); '
+              't="$t $(readlink "$p/cwd" 2>/dev/null) $(readlink "$p/exe" 2>/dev/null)"; '
+              'case "$t" in *"$m"*) echo "${p#/proc/}";; esac; done; done')
+    try:
+        out = subprocess.run(["flatpak-spawn", "--host", "sh", "-c", script, "sh", *motifs],
+                             capture_output=True, text=True, timeout=15).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    return sorted({int(x) for x in out.split() if x.isdigit()})
+
+
 def split_command(text):
     """Découpe une ligne de commande (mode POSIX : les guillemets protègent les
     espaces, les antislashs échappent)."""

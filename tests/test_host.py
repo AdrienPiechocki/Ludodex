@@ -112,3 +112,29 @@ def test_check_command_interroge_l_hote(monkeypatch):
         raise OSError("hôte injoignable")
     monkeypatch.setattr(L.subprocess, "run", _ko)
     assert L.check_command("steam") is None          # pas de fausse alerte
+
+
+# ---------- suivi des processus de jeu depuis le bac à sable ----------
+
+def test_host_pids_sous_delègue_le_scan_a_l_hote(monkeypatch):
+    cap = {}
+    def fake(argv, **kw):
+        cap["argv"] = argv
+        class _R:
+            stdout = "42\n7\n42\n"
+        return _R()
+    monkeypatch.setattr(platform.subprocess, "run", fake)
+    motifs = ["/home/u/jeu/dossier"]
+    assert platform.host_pids_sous(motifs) == [7, 42]      # dédoublonné, trié
+    assert cap["argv"][:2] == ["flatpak-spawn", "--host"]
+    assert cap["argv"][6:] == motifs
+    cap.clear()
+    assert platform.host_pids_sous([]) == []               # sans appel inutile
+    assert "argv" not in cap
+
+
+def test_host_pids_sous_hote_injoignable_renvoie_vide(monkeypatch):
+    def _ko(*a, **kw):
+        raise OSError
+    monkeypatch.setattr(platform.subprocess, "run", _ko)
+    assert platform.host_pids_sous(["/home/u/jeu/dossier"]) == []
