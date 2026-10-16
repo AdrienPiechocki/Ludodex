@@ -239,3 +239,90 @@ def test_watch_uri_jamais_vu_ne_cloture_rien(monkeypatch):
     cap = []
     _watch([None], cap, monkeypatch, fenetre=0.02, age=0)   # échecs dans la fenêtre
     assert cap == []
+
+
+# ---------- résolution des binaires hôtes (sites hors plan) ----------
+
+class _Rep2:
+    def __init__(self, code):
+        self.returncode = code
+
+
+def _sable(monkeypatch):
+    """Sandbox : aucun binaire local, l'hôte répond par flatpak-spawn."""
+    monkeypatch.setattr(platform, "in_flatpak", lambda env=None: True)
+    monkeypatch.setattr(L.shutil, "which", lambda n: None)
+    cap = {"rc": 0}
+    def fake(argv, **kw):
+        cap["argv"] = argv
+        return _Rep2(cap["rc"])
+    monkeypatch.setattr(L.subprocess, "run", fake)
+    return cap
+
+
+def test_which_bin_interroge_l_hote(monkeypatch):
+    monkeypatch.setattr(platform, "in_flatpak", lambda env=None: True)
+    cap = {}
+    def fake(argv, **kw):
+        cap["argv"] = argv
+        return _Rep2(0)
+    monkeypatch.setattr(L.subprocess, "run", fake)
+    assert L.which_bin("lutris") is True
+    assert cap["argv"][:2] == ["flatpak-spawn", "--host"]
+    assert cap["argv"][6] == "lutris"
+    monkeypatch.setattr(L.subprocess, "run", lambda *a, **kw: _Rep2(1))
+    assert L.which_bin("lutris") is False
+    def _ko(*a, **kw):
+        raise OSError
+    monkeypatch.setattr(L.subprocess, "run", _ko)
+    assert L.which_bin("lutris") is False              # pas de faux positif
+    monkeypatch.setattr(platform, "in_flatpak", lambda env=None: False)
+    monkeypatch.setattr(L.shutil, "which", lambda n: f"/usr/bin/{n}")
+    assert L.which_bin("lutris") is True               # natif : inchangé
+
+
+def test_launcher_command_sous_flatpak(monkeypatch):
+    cap = _sable(monkeypatch)
+    assert L.launcher_command("lutris") == ["lutris"]          # présent sur l'hôte
+    assert L.launcher_command("retroarch") == ["retroarch"]
+    cap["rc"] = 1
+    assert L.launcher_command("lutris") == ["flatpak", "run", "net.lutris.Lutris"]
+    assert L.launcher_command("retroarch") == ["flatpak", "run", "org.libretro.RetroArch"]
+
+
+def test_uninstall_command_sous_flatpak(monkeypatch):
+    cap = _sable(monkeypatch)
+    g = {"source": "flatpak", "ext_id": "org.jeu.Jeu"}
+    assert L.uninstall_command(g) == ["flatpak", "uninstall", "-y", "org.jeu.Jeu"]
+    g = {"source": "lutris", "ext_id": "native:10"}
+    assert L.uninstall_command(g) == \
+        ["python3", "-c", L.LUTRIS_UNINSTALL.format(gid=10)]   # pythons et lutris hôtes
+    cap["rc"] = 1                                              # lutris absent de l'hôte
+    assert L.uninstall_command(g) is None
+    g = {"source": "lutris", "ext_id": "wine:7"}
+    assert L.uninstall_command(g) == \
+        ["flatpak", "run", "--command=python3", "net.lutris.Lutris", "-c",
+         L.LUTRIS_UNINSTALL.format(gid=7)]                     # plus de gate which("flatpak")
+    monkeypatch.setattr(L, "legendary_install_dir", lambda ext: "/home/u/Heroic")
+    g = {"source": "heroic", "ext_id": "12345"}
+    cap["rc"] = 0
+    assert L.uninstall_command(g) == \
+        ["LEGENDARY_CONFIG_PATH=/home/u/Heroic", "legendary", "uninstall", "12345"]
+    cap["rc"] = 1                                              # legendary absent de l'hôte
+    assert L.uninstall_command(g) is None
+
+
+def test_uninstall_launcher_natifs_inchangés(monkeypatch):
+    monkeypatch.setattr(platform, "in_flatpak", lambda env=None: False)
+    monkeypatch.setattr(L.shutil, "which", lambda n: None)      # rien d'installé
+    cap = {}
+    def fake(argv, **kw):
+        cap.setdefault("appels", []).append(argv)
+        return _Rep2(0)
+    monkeypatch.setattr(L.subprocess, "run", fake)
+    assert L.uninstall_command({"source": "flatpak", "ext_id": "org.jeu.Jeu"}) == \
+        ["flatpak", "uninstall", "-y", "org.jeu.Jeu"]
+    assert L.uninstall_command({"source": "lutris", "ext_id": "native:10"}) is None
+    assert "appels" not in cap                               # aucun probe hôte en natif
+    monkeypatch.setattr(L.shutil, "which", lambda n: f"/usr/bin/{n}")
+    assert L.launcher_command("lutris") == ["/usr/bin/lutris"]

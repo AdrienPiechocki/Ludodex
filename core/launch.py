@@ -107,6 +107,25 @@ def check_command(text):
     return None if (os.path.isfile(prog[0]) or shutil.which(prog[0])) else prog[0]
 
 
+def which_bin(nom):
+    """True si le binaire `nom` existe — chez l'utilisateur, y depuis le bac à sable.
+
+    `shutil.which` dans le sandbox ne voit que le runtime (`/app/bin:/usr/bin`) :
+    ni lutris, ni retroarch, ni legendary, ni flatpak (même absent du runtime) —
+    les boutons « ouvrir le lanceur » et « désinstaller » seraient silencieusement
+    faux ou muets. Hôte injoignable : False, le repli d'aujourd'hui (bouton absent)
+    plutôt qu'un faux positif."""
+    if platform.in_flatpak():
+        try:
+            r = subprocess.run(["flatpak-spawn", "--host", "sh", "-c",
+                                'command -v "$1" >/dev/null 2>&1', "sh", nom],
+                               capture_output=True, timeout=10)
+            return r.returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            return False
+    return shutil.which(nom) is not None
+
+
 def set_launch_override(con, gid, text):
     """text vide = retour à la commande par défaut."""
     con.execute("UPDATE games SET launch_override=? WHERE id=?", (text.strip(), gid))
@@ -523,11 +542,17 @@ def launcher_command(source):
     if uri:
         return uri_command(uri)
     if source == "lutris":  # son protocole est rejeté (`lutris lutris://` sort en 1) : son binaire
-        exe = shutil.which("lutris")
-        return [exe] if exe else ["flatpak", "run", "net.lutris.Lutris"]
+        if which_bin("lutris"):
+            exe = shutil.which("lutris")
+            # Sous le sandbox, le chemin natif est inconnu : le nom brut suffit,
+            # host_argv le résout sur l'hôte.
+            return [exe] if exe else ["lutris"]
+        return ["flatpak", "run", "net.lutris.Lutris"]
     if source == "retroarch":  # aucun protocole : son exécutable, PATH puis flatpak
-        exe = shutil.which("retroarch")
-        return [exe] if exe else ["flatpak", "run", "org.libretro.RetroArch"]
+        if which_bin("retroarch"):
+            exe = shutil.which("retroarch")
+            return [exe] if exe else ["retroarch"]
+        return ["flatpak", "run", "org.libretro.RetroArch"]
     return None
 
 
@@ -654,12 +679,17 @@ def uninstall_command(g):
         script = LUTRIS_UNINSTALL.format(gid=gid)
         if kind == "native":  # le python qui importe Lutris, pas celui de Ludodex
             py = shutil.which("python3")
-            return [py, "-c", script] if py and shutil.which("lutris") else None
-        return (["flatpak", "run", "--command=python3", "net.lutris.Lutris", "-c", script]
-                if shutil.which("flatpak") else None)
+            if py and shutil.which("lutris"):
+                return [py, "-c", script]
+            # Sous le sandbox : binaires hôtes, nom brut résolu par host_argv.
+            if platform.in_flatpak() and which_bin("python3") and which_bin("lutris"):
+                return ["python3", "-c", script]
+            return None
+        return ["flatpak", "run", "--command=python3", "net.lutris.Lutris", "-c", script] \
+            if (platform.in_flatpak() or shutil.which("flatpak")) else None
     if src == "heroic":
         d = legendary_install_dir(ext)
-        if d is None or shutil.which("legendary") is None:
+        if d is None or not which_bin("legendary"):
             return None
         return [f"LEGENDARY_CONFIG_PATH={d}", "legendary", "uninstall", str(ext)]
     return None
