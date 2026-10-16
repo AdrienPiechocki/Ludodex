@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """launch.py — construction et exécution des commandes de lancement, d'installation et
 de désinstallation."""
-import json, os, pathlib, re, shutil, subprocess, threading, time
+import json, os, pathlib, re, shutil, sqlite3, subprocess, threading, time
 import urllib.error, urllib.request
 from urllib.parse import quote
 
 from i18n import tr
 from . import platform
-from .db import LUTRIS_DBS, _ro
+from .db import LUTRIS_DBS, ITCH_DBS, _ro
 from .platform import uri_command, split_command, join_command
-from .steam import steam_appid_of
+from .steam import steam_appid_of, champ_acf
 
 
 def default_command(g):
@@ -162,19 +162,82 @@ URI_POLL_SEC = 2       # s : rythme des sondes /proc
 URI_SORTIE_CONFIRMES = 3   # sondes vides consécutives = sortie confirmée (un bref trou ne clôture pas)
 
 
-def motifs_jeu(g, env=None, home=None):
-    """Mots reconnaissant le VRAI processus du jeu dans /proc : son chemin
-    d'installation et son exécutable.
+def filtre_motifs(motifs):
+    """Les répères retenus : assez longs pour ne jamais deviner (un dossier, un
+    exécutable — pas un mot quelconque)."""
+    return sorted(m for m in motifs if len(m) >= 5)
 
-    Pour un lancement par URI (`xdg-open heroic://…`), le processus que `launch`
+
+def motifs_jeu(g, env=None, home=None):
+    """Mots reconnaissant le VRAI processus du jeu dans /proc, lus aux sources
+    mêmes du jeu :
+
+    - Heroic : enveloppe gogdl / dict legendary (`install_path`) et manifeste
+      (`launch_exe`) ;
+    - Steam : `installdir` de l'appmanifest -> dossier `common/…` ;
+    - itch : cave -> `install_locations.path` + `install_folder_name`, ou le
+      dossier personnalisé ;
+    - Lutris : `directory` et `executable` de pga.db (id préfixé du runner).
+
+    Pour un lancement par URI (`xdg-open steam://…`), le processus que `launch`
     tient en main est le passe-plat : c'est le jeu lui-même qu'il faut surveiller,
     sinon la session reste ouverte jusqu'à la fermeture de Ludodex et la frise
     affiche des heures jouées là où il y en a eu une. [] = inconnu : pas de
     devinettes, l'ancien repli s'applique (jamais de clôture inventée)."""
-    if g["source"] != "heroic":
-        return []
-    ext = str(g["ext_id"])
+    src, ext = g["source"], str(g["ext_id"])
     motifs = set()
+    if src == "steam":
+        for racine in platform.steam_roots(home):
+            try:
+                t = (racine / f"appmanifest_{ext}.acf").read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue  # pas installé dans cette bibliothèque
+            dossier = champ_acf(t, "installdir")
+            if dossier:
+                motifs.add(str(racine / "common" / dossier))
+        return filtre_motifs(motifs)
+    if src == "itch":
+        for path in ITCH_DBS:
+            if not path.exists():
+                continue
+            try:
+                base = _ro(path)
+                try:
+                    row = base.execute(
+                        "SELECT COALESCE(NULLIF(c.custom_install_folder, ''), "
+                        "l.path || '/' || c.install_folder_name) "
+                        "FROM caves c LEFT JOIN install_locations l ON l.id = c.install_location_id "
+                        "WHERE c.id = ?", (ext,)).fetchone()
+                finally:
+                    base.close()
+            except sqlite3.Error:
+                continue  # schéma différent : repli plutôt que plantage
+            if row and row[0]:
+                motifs.add(str(row[0]))
+        return filtre_motifs(motifs)
+    if src == "lutris":
+        try:
+            kind, gid = ext.split(":", 1)
+            gid = int(gid)
+        except ValueError:
+            return []
+        for k, path in LUTRIS_DBS:
+            if k != kind or not path.exists():
+                continue
+            try:
+                base = _ro(path)
+                try:
+                    row = base.execute("SELECT directory, executable FROM games WHERE id=?",
+                                       (gid,)).fetchone()
+                finally:
+                    base.close()
+            except sqlite3.Error:
+                continue
+            if row:
+                motifs.update(v for v in row if isinstance(v, str) and v)
+        return filtre_motifs(motifs)
+    if src != "heroic":
+        return []
     fichiers = [d / "gog_store" / "installed.json" for d in platform.heroic_dirs(env, home)] + \
                [d / "installed.json" for d in platform.legendary_dirs(env, home)]
     for path in fichiers:
@@ -203,7 +266,7 @@ def motifs_jeu(g, env=None, home=None):
         manifeste = ent.get("manifest") if isinstance(ent, dict) else None
         if isinstance(manifeste, dict) and manifeste.get("launch_exe"):
             motifs.add(str(manifeste["launch_exe"]))
-    return sorted(motifs)
+    return filtre_motifs(motifs)
 
 
 def _pids_sous(motifs):

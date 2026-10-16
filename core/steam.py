@@ -29,6 +29,12 @@ def steam_libraries():
     return libs
 
 
+def champ_acf(texte, cle):
+    """Champ d'un fichier ACF (VDF `"cle"\t\t"valeur"`), ou '' si absent."""
+    m = re.search(rf'"{cle}"\s+"([^"]*)"', texte)
+    return m.group(1) if m else ""
+
+
 def import_steam(con):
     libs = steam_libraries()
     if not libs:
@@ -38,7 +44,7 @@ def import_steam(con):
     for lib in libs:
         for acf in lib.glob("appmanifest_*.acf"):
             t = acf.read_text(encoding="utf-8", errors="ignore")
-            g = lambda k: (re.search(rf'"{k}"\s+"([^"]*)"', t) or [None, ""])[1]
+            g = lambda k: champ_acf(t, k)
             name, appid = g("name"), g("appid")
             if not appid or any(s in name for s in IGNORE):
                 continue
