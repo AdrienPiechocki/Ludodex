@@ -131,7 +131,9 @@ class NotesMixin:
         # en ferait un enfant de viewport : il perdrait les ajustements et
         # scroll_to_iter ciblerait des valeurs que personne n'écoute — mort
         # silencieux, constaté en réel. Les cases sont donc superposées au
-        # SCROLLEDWINDOW (zone fixe) et suivent le défilement par l'ajustement.
+        # SCROLLEDWINDOW (zone fixe), dont l'origine coïncide avec celle du
+        # TextView : `buffer_to_window_coords` rend des coordonnées fenêtre déjà
+        # sans défilement, la case suit donc le texte SANS compensation d'ajustement.
         editor_scroll = Gtk.ScrolledWindow(child=self.note_view, vexpand=True,
                                            hscrollbar_policy=Gtk.PolicyType.NEVER, css_classes=["card"])
         self._editor_adj = editor_scroll.get_vadjustment()
@@ -337,11 +339,19 @@ class NotesMixin:
 
     # ---------- sommaire ----------
     def _set_toc(self, entries):
-        """Remplit la colonne du sommaire ; ne la refait que si les titres ont bougé.
+        """Remplit la colonne du sommaire — et la RÉFABRIQUE dès que les titres bougent.
 
         `entries` : liste de (numéro de ligne, niveau, texte), dans l'ordre.
-        L'indentation suit le niveau : `Titre 1` / `  Titre 2` / `    Titre 3`."""
-        key = [(lvl, txt) for _ln, lvl, txt in entries]
+        L'indentation suit le niveau : `Titre 1` / `  Titre 2` / `    Titre 3`.
+
+        La clé de comparaison CONTIENT le numéro de ligne : sans lui, une édition
+        qui décale les titres (ligne insérée au-dessus) laissait les anciennes
+        lignes en place avec leur `_lineno` périmé — le clic sur le sommaire
+        amenait alors à la mauvaise ligne, souvent déjà visible : « rien ne se
+        passe ». Un numéro de ligne ne bouge jamais sans que la liste des titres
+        elle-même n'ait changé, donc pas de reconstruction inutile pendant la
+        frappe ni d'un simple déplacement de curseur."""
+        key = [(ln, lvl, txt) for ln, lvl, txt in entries]
         if key == getattr(self, "_toc_key", []):
             return
         self._toc_key = key
@@ -464,7 +474,6 @@ class NotesMixin:
         if not self._note_tasks or self.notes_game_id is None:
             return
         view, buf = self.note_view, self.note_buffer
-        dy = self._editor_adj.get_value()  # zone fixe : les cases suivent le défilement
         rows = []
         for start, end, checked in self._note_tasks:
             r0 = view.get_iter_location(buf.get_iter_at_offset(start))
@@ -477,8 +486,12 @@ class NotesMixin:
             if height < 4.0:
                 continue
             x, _ = view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, r0.x, r0.y)
+            # `buffer_to_window_coords` rend des coords fenêtre DÉJÀ sans défilement
+            # (mesuré : sa pente vaut -1 face à l'adjustment). La zone de dessin est
+            # fixe mais a exactement la même origine que le TextView, donc rien à
+            # retrancher : retrancher l'ajustement décalait la case vers le HAUT
+            # d'autant plus qu'on défilait (décorrélation du texte).
             _, y = view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, mark.x, mark.y)
-            y -= dy
             # Limite à droite : la 1re lettre du texte de la tâche (elle seule peut
             # être heurtée ; le marqueur est peint dans le fond, la case le remplace).
             t = buf.get_iter_at_offset(end)
