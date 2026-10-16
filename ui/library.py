@@ -48,7 +48,7 @@ class LibraryMixin:
                                       GObject.BindingFlags.BIDIRECTIONAL)
         self.sort_btn = Gtk.MenuButton(icon_name="view-sort-descending-symbolic", tooltip_text=tr("Sort"),
                                        menu_model=self._build_sort_menu())
-        self.filter_btn = Gtk.MenuButton(icon_name="object-select-symbolic", tooltip_text=tr("Filter"),
+        self.filter_btn = Gtk.MenuButton(icon_name="view-filter-symbolic", tooltip_text=tr("Filter"),
                                          menu_model=self._build_filter_menu())
         # Sans libellé, une CheckButton ne montrerait que la coche, muette sur son
         # objet : un ToggleButton à icône porte l'état dans son symbole actif/inactif.

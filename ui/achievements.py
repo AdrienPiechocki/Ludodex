@@ -82,7 +82,7 @@ class AchievementsMixin:
         # du volet de 260 px. Les libellés complets (dont « Personnalisés »)
         # vivent dans le menu, avec une coche sur le choix courant, et
         # l'infobulle répète le choix en cours.
-        self.ach_source_btn = self._ach_menu_button("object-select-symbolic",
+        self.ach_source_btn = self._ach_menu_button("view-filter-symbolic",
                                                     tr("Filter by source"), "source")
         self.ach_sort_btn = self._ach_menu_button("view-sort-ascending-symbolic",
                                                   tr("Sort"), "sort")
