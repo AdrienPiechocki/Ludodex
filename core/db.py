@@ -108,7 +108,8 @@ def db():
                      ("store_url", "TEXT NOT NULL DEFAULT ''"), ("cover_path", "TEXT NOT NULL DEFAULT ''"),
                      ("cover_fetched", "INTEGER NOT NULL DEFAULT 0"), ("sgdb_id", "INTEGER NOT NULL DEFAULT 0"),
                      ("name_locked", "INTEGER NOT NULL DEFAULT 0"), ("launch_override", "TEXT NOT NULL DEFAULT ''"),
-                     ("custom_cover", "TEXT NOT NULL DEFAULT ''"), ("notes", "TEXT NOT NULL DEFAULT ''")):
+                     ("custom_cover", "TEXT NOT NULL DEFAULT ''"), ("notes", "TEXT NOT NULL DEFAULT ''"),
+                     ("cover_src", "TEXT NOT NULL DEFAULT ''")):
         if col not in cols:
             con.execute(f"ALTER TABLE games ADD COLUMN {col} {ddl}")
     ccols = {r["name"] for r in con.execute("PRAGMA table_info(collections)")}

@@ -250,6 +250,7 @@ def fetch_cover(con, g, fetch=None):
     """
     sid = g["sgdb_id"] or None
     name = ""
+    src = ""                                # origine de la couverture : 'sgdb' ou 'steam'
     if sgdb_key():
         try:
             name, sid = _cover_sgdb(g, sid, fetch)
@@ -261,12 +262,28 @@ def fetch_cover(con, g, fetch=None):
             # tout est en rade, c'est le CDN qui lèvera — et la boucle cassera, comme
             # il se doit hors ligne.
             name = ""
+        else:
+            if name:
+                src = "sgdb"
     if not name:  # SGDB n'a rien : le CDN comble, ou sert seul faute de clé
         appid = steam_appid_of(g)
         if appid is not None:
             name = _ecrire(g, steam_cover_url(appid), STEAM_COVER_UA, fetch)
-    con.execute("UPDATE games SET cover_path=?, cover_fetched=?, sgdb_id=? WHERE id=?",
-                (name, int(time.time()), sid or 0, g["id"]))
+            if name:
+                src = "steam"
+    ancien = _field(g, "cover_path")
+    if not name and ancien and (covers_dir() / ancien).exists():
+        # Tentative infructueuse sur une couverture déjà en place (relance après
+        # une clé configurée, id SteamGridDB corrigé…) : la vider laisserait une
+        # case blanche pour rien. L'ancienne vaut CDN, jamais SGDB — l'origine
+        # reste ainsi définitivement connue.
+        name, src = ancien, "steam"
+    if name:  # remplacement : le fichier d'une autre extension ne doit pas survivre
+        for f in covers_dir().glob(f"{g['id']}.*"):
+            if f.name != name:
+                f.unlink(missing_ok=True)
+    con.execute("UPDATE games SET cover_path=?, cover_fetched=?, sgdb_id=?, cover_src=? WHERE id=?",
+                (name, int(time.time()), sid or 0, src, g["id"]))
     con.commit()
     return bool(name)
 
