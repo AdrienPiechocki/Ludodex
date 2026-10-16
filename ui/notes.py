@@ -125,16 +125,24 @@ class NotesMixin:
         self.note_check_area = Gtk.DrawingArea(hexpand=True, vexpand=True)
         self.note_check_area.set_can_target(False)          # les clics vont à la vue texte
         self.note_check_area.set_draw_func(self._draw_note_checks)
-        self.note_overlay = Gtk.Overlay()
-        self.note_overlay.set_child(self.note_view)
-        self.note_overlay.add_overlay(self.note_check_area)
-        editor_scroll = Gtk.ScrolledWindow(child=self.note_overlay, vexpand=True,
+        # L'éditeur est ScrolledWindow -> TextView DIRECT : c'est la condition du
+        # défilement programmé (`scroll_to_iter` des titres du sommaire et des
+        # ancres de liens). Un Overlay entre les deux (zones de cases à cocher)
+        # en ferait un enfant de viewport : il perdrait les ajustements et
+        # scroll_to_iter ciblerait des valeurs que personne n'écoute — mort
+        # silencieux, constaté en réel. Les cases sont donc superposées au
+        # SCROLLEDWINDOW (zone fixe) et suivent le défilement par l'ajustement.
+        editor_scroll = Gtk.ScrolledWindow(child=self.note_view, vexpand=True,
                                            hscrollbar_policy=Gtk.PolicyType.NEVER, css_classes=["card"])
-        for adj in (editor_scroll.get_vadjustment(), editor_scroll.get_hadjustment()):
+        self._editor_adj = editor_scroll.get_vadjustment()
+        for adj in (self._editor_adj, editor_scroll.get_hadjustment()):
             adj.connect("value-changed", lambda *_: self.note_check_area.queue_draw())
+        self.note_overlay = Gtk.Overlay()
+        self.note_overlay.set_child(editor_scroll)
+        self.note_overlay.add_overlay(self.note_check_area)
         editor = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6,
                          margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
-        for w in (title_row, self.note_subtitle, editor_scroll):
+        for w in (title_row, self.note_subtitle, self.note_overlay):
             editor.append(w)
         notes_paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
         notes_paned.set_start_child(editor)
@@ -456,6 +464,7 @@ class NotesMixin:
         if not self._note_tasks or self.notes_game_id is None:
             return
         view, buf = self.note_view, self.note_buffer
+        dy = self._editor_adj.get_value()  # zone fixe : les cases suivent le défilement
         rows = []
         for start, end, checked in self._note_tasks:
             r0 = view.get_iter_location(buf.get_iter_at_offset(start))
@@ -469,13 +478,21 @@ class NotesMixin:
                 continue
             x, _ = view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, r0.x, r0.y)
             _, y = view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, mark.x, mark.y)
+            y -= dy
             # Limite à droite : la 1re lettre du texte de la tâche (elle seule peut
             # être heurtée ; le marqueur est peint dans le fond, la case le remplace).
             t = buf.get_iter_at_offset(end)
             while not t.ends_line() and t.get_char() in (" ", "\t"):
                 t.forward_char()
-            if t.ends_line():                       # rien derrière : la ligne ne borne pas
-                rows.append((x, y, height, None, checked))
+            if t.ends_line():
+                # Rien derrière la case : sans repère, elle prendrait toute la
+                # hauteur de la ligne, et une note à cases vides seules en
+                # ressortirait plus grande qu'une note à texte. On place une
+                # lettre VIRTUELLE où elle serait — après la première espace,
+                # que la syntaxe exige toujours après `[ ]` — : le côté devient
+                # le même partout, à la lettre près.
+                pos = buf.get_iter_at_offset(end + 1)
+                rows.append((x, y, height, view.get_iter_location(pos).x, checked))
                 continue
             rt = view.get_iter_location(t)
             x_text, _ = view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, rt.x, rt.y)
@@ -526,11 +543,12 @@ class NotesMixin:
     def _check_side(x, height, x_text):
         """Plus grand côté admis sur une ligne : pleine hauteur, sans lécher le texte.
 
+        `x_text` est la première lettre de la tâche — réelle, ou virtuelle (la
+        position qu'elle AURAIT) sur une case vide : une seule règle partout.
         Le trait déborde d'un demi-trait sur le chemin : on décompte son épaisseur
         pour que le cadre ne vienne jamais toucher la première lettre de la tâche.
         """
-        room = (float("inf") if x_text is None else
-                (x_text - x - _CHECK_GAP) / (1.0 + _CHECK_STROKE / 2.0))
+        room = (x_text - x - _CHECK_GAP) / (1.0 + _CHECK_STROKE / 2.0)
         return max(12.0, min(height - 3.0, room))
 
     @staticmethod
