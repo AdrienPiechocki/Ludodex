@@ -67,6 +67,34 @@ python3 picker.py --help  # command line
 
 `./build.sh` produces `build/ludodex/` with `ludodex` (interface), `ludodex-cli` (CLI) and `_internal/` (embedded Python, GTK4, libadwaita and translations). See `ludodex.spec`.
 
+### Flatpak
+
+`io.github.AdrienPiechocki.Ludodex.yml` builds the app from source with the GNOME
+runtime (GTK4, libadwaita and PyGObject come from the runtime; only PyYAML is
+installed at build time). Games are launched on the host through
+`flatpak-spawn --host`, so the sandbox needs `--filesystem=host` and
+`--talk-name=org.freedesktop.Flatpak`.
+
+```sh
+sudo pacman -S flatpak-builder        # (or your distribution's equivalent)
+flatpak install --user flathub org.gnome.Platform//51 org.gnome.Sdk//51
+flatpak-builder --force-clean --user --install --repo=build/repo build/flatpak io.github.AdrienPiechocki.Ludodex.yml
+flatpak build-bundle build/repo build/ludodex.flatpak io.github.AdrienPiechocki.Ludodex
+```
+
+`build/ludodex.flatpak` is the file attached to a GitHub release; install it with:
+
+```sh
+flatpak install --user ./ludodex.flatpak
+```
+
+Run it with `flatpak run io.github.AdrienPiechocki.Ludodex`; the CLI is exported as
+`ludodex-cli` (or `flatpak run --command=ludodex-cli io.github.AdrienPiechocki.Ludodex …`).
+The database stays at `~/.local/share/ludodex/games.db`, shared with any source checkout.
+Sessions: the game process is watched through the host (`/proc` is namespaced inside
+the sandbox), so sessions close as usual when a game exits; when no process motif is
+known, the session falls back to closing on the next launch or when the app closes.
+
 ## Usage
 
 ```
