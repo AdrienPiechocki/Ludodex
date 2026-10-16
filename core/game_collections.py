@@ -130,6 +130,23 @@ def add_game_to_collection(con, cid, gid):
     con.execute("INSERT OR IGNORE INTO collection_games (collection_id, game_id) VALUES (?, ?)", (cid, gid))
     con.commit()
 
+def add_games_to_collection(con, cid, gids):
+    """Ajoute plusieurs jeux d'un seul commit ; renvoie le nombre RÉELLEMENT ajouté.
+
+    Déjà membres : `INSERT OR IGNORE` ne les recompte pas — le retour dit la
+    nouveauté, pas la présence, pour que le toast de la bibliothèque ne mente
+    pas. `total_changes` compte les vraies insertions, ignorées exclues."""
+    _reject_auto(con, cid, "automatic collections can't be edited")
+    gids = list(gids)
+    if not gids:
+        return 0
+    avant = con.total_changes
+    con.executemany("INSERT OR IGNORE INTO collection_games (collection_id, game_id) VALUES (?, ?)",
+                    [(cid, gid) for gid in gids])
+    n = con.total_changes - avant
+    con.commit()
+    return n
+
 def remove_game_from_collection(con, cid, gid):
     _reject_auto(con, cid, "automatic collections can't be edited")
     con.execute("DELETE FROM collection_games WHERE collection_id=? AND game_id=?", (cid, gid))

@@ -62,6 +62,12 @@ CSS = """
 .retro-hm-2 { background-color: alpha(@accent_bg_color, 0.55); border-radius: 2px; }
 .retro-hm-3 { background-color: alpha(@accent_bg_color, 0.80); border-radius: 2px; }
 .retro-hm-4 { background-color: @accent_bg_color; border-radius: 2px; }
+/* Mode sélection de la bibliothèque : la tuile cochée doit se lire d'un coup
+   d'œil. Le fond de sélection par défaut serait DERRIÈRE la pochette opaque —
+   invisible — et une bordure décalerait la mise en page : un anneau d'accent
+   par-dessus, qui tient dans les 14 px d'espacement de la grille. */
+flowboxchild:selected { box-shadow: 0 0 0 3px @accent_bg_color; border-radius: 12px; }
+
 /* Jour futur : case NEUTRE visible (contour) — transparent sans bord, elle
    disparaissait : la « grille de carrés » montrait seulement les jours écoulés. */
 .retro-future { background-color: transparent; border: 1px solid alpha(currentColor, 0.15); border-radius: 2px; }

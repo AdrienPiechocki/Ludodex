@@ -56,11 +56,18 @@ class LibraryMixin:
                                                   tooltip_text=tr("Show not installed games"),
                                                   active=self.show_not_installed)
         self.not_installed_chk.connect("toggled", self._on_show_not_installed)
+        # Mode sélection : cocher plusieurs tuiles pour les pousser dans une
+        # collection d'un geste — la bascule est dans la barre, la barre du bas
+        # porte le compte et l'ajout.
+        self.select_btn = Gtk.ToggleButton(icon_name="edit-select-all-symbolic",
+                                           tooltip_text=tr("Select games"))
+        self.select_btn.connect("toggled", self._on_select_mode)
         self.add_btn = Gtk.Button(icon_name="list-add-symbolic", tooltip_text=tr("Add a game"))
         self.add_btn.connect("clicked", self._open_add_game)
         lib_bar = Gtk.Box(spacing=6, margin_top=8, margin_bottom=4, margin_start=12, margin_end=12,
                           halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER, css_classes=["toolbar"])
-        for w in (self.search_btn, self.sort_btn, self.filter_btn, self.not_installed_chk, self.add_btn):
+        for w in (self.search_btn, self.sort_btn, self.filter_btn, self.not_installed_chk,
+                  self.select_btn, self.add_btn):
             lib_bar.append(w)
 
         self.lib_flow = Gtk.FlowBox(valign=Gtk.Align.START, homogeneous=True, selection_mode=Gtk.SelectionMode.NONE,
@@ -69,7 +76,8 @@ class LibraryMixin:
                                     margin_top=14, margin_bottom=18, margin_start=18, margin_end=18)
         self.lib_flow.set_filter_func(self._match)
         self.lib_flow.set_sort_func(self._sort_func)
-        self.lib_flow.connect("child-activated", lambda _f, child: self._open_game(child._game["id"]))
+        self.lib_flow.connect("child-activated", self._on_tile_activated)
+        self.lib_flow.connect("selected-children-changed", lambda *_: self._update_sel_bar())
         self.lib_scroll = Gtk.ScrolledWindow(child=self.lib_flow, vexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER)
         self.lib_empty = Adw.StatusPage(icon_name="view-grid-symbolic", vexpand=True)
         self.lib_stack = Gtk.Stack()
@@ -98,6 +106,28 @@ class LibraryMixin:
         self.session_bar.append(self.session_fin)
         self.session_sid = None
         self._maj_session_bar()  # session héritée d'une exécution précédente : visible
+
+        # « Sélection » : mode multi-choix des tuiles → barre en bas de la liste,
+        # au-dessus de « Jeu en cours », avec le compte et l'ajout en bloc à une
+        # collection (popover des collections manuelles + « Nouvelle collection… »).
+        # Comme la barre de session, elle ne se montre que dans son état.
+        self.sel_bar = Gtk.Box(spacing=10, halign=Gtk.Align.CENTER, margin_top=2,
+                               margin_bottom=10, visible=False)
+        self.sel_lbl = Gtk.Label(css_classes=["dim-label"])
+        add_box = Gtk.Box(spacing=6)
+        add_box.append(Gtk.Image(icon_name="list-add-symbolic"))
+        add_box.append(Gtk.Label(label=tr("Add to collection")))
+        self.sel_menu = Gtk.MenuButton(child=add_box, css_classes=["pill"])
+        self.sel_pop = Gtk.Popover()
+        self.sel_menu.set_popover(self.sel_pop)
+        self.sel_pop.connect("map", lambda *_: self._rebuild_sel_pop())  # ouvert : liste fraîche
+        self.sel_cancel = Gtk.Button(icon_name="window-close-symbolic", css_classes=["flat"],
+                                     tooltip_text=tr("Cancel selection"))
+        self.sel_cancel.connect("clicked", lambda *_: self.select_btn.set_active(False))
+        self.sel_bar.append(self.sel_lbl)
+        self.sel_bar.append(self.sel_menu)
+        self.sel_bar.append(self.sel_cancel)
+        content.append(self.sel_bar)
         content.append(self.session_bar)
 
         # barre latérale : « Tous les jeux » + une ligne par collection
@@ -548,6 +578,87 @@ class LibraryMixin:
                 on = (not self.col_selected) if cid is None else (cid in self.col_selected)
                 child.remove_css_class("col-on") if not on else child.add_css_class("col-on")
             child = child.get_next_sibling()
+
+    # ---------- sélection : plusieurs jeux poussés dans une collection ----------
+    def _on_select_mode(self, btn):
+        """La bascule pilote le mode de la grille : en sélection, le clic coche
+        (l'activation des tuiles est neutralisée) ; à la sortie, tout se
+        désélectionne et la barre du bas disparaît."""
+        on = btn.get_active()
+        self.lib_flow.set_selection_mode(Gtk.SelectionMode.MULTIPLE if on else Gtk.SelectionMode.NONE)
+        if on:
+            self._rebuild_sel_pop()
+        else:
+            self.lib_flow.unselect_all()
+        self._update_sel_bar()
+
+    def _update_sel_bar(self):
+        n = len(self.lib_flow.get_selected_children()) if self.select_btn.get_active() else 0
+        self.sel_lbl.set_text(str(n))
+        self.sel_bar.set_visible(n > 0)
+
+    def _on_tile_activated(self, _f, child):
+        """Mode sélection : le clic sert à cocher, jamais à ouvrir la fiche."""
+        if self.select_btn.get_active():
+            return
+        self._open_game(child._game["id"])
+
+    def _sel_gids(self):
+        return [c._game["id"] for c in self.lib_flow.get_selected_children()]
+
+    def _rebuild_sel_pop(self):
+        """Le popover : une ligne par collection MANUELLE (les automatiques sont
+        en lecture seule) + « Nouvelle collection… ». Reconstruit à l'ouverture
+        (`set_child` remplace l'ancien contenu d'un bloc)."""
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2,
+                      margin_top=4, margin_bottom=4, margin_start=4, margin_end=4)
+        cols = [c for c in P.list_collections(self.con) if c["kind"] == "manual"]
+        if not cols:
+            box.append(Gtk.Label(label=tr("no collections"), css_classes=["dim-label"],
+                                 margin_top=4, margin_bottom=4))
+        for c in cols:
+            b = Gtk.Button(label=c["name"], css_classes=["flat"])
+            b._cid = c["id"]
+            b.connect("clicked", lambda _b, cid=c["id"], name=c["name"]: self._on_add_selection(cid, name))
+            box.append(b)
+        box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+        nouveau = Gtk.Button(label=tr("New collection…"), css_classes=["flat"])
+        nouveau._new_col = True
+        nouveau.connect("clicked", self._on_new_collection_selection)
+        box.append(nouveau)
+        self.sel_pop.set_child(box)
+
+    def _toast_ajout(self, n, name):
+        self.toasts.add_toast(Adw.Toast.new(tr("{n} game(s) added to “{name}”", n=n, name=name) if n
+                                            else tr("Already in this collection")))
+
+    def _on_add_selection(self, cid, name):
+        gids = self._sel_gids()
+        self.sel_pop.popdown()
+        n = P.add_games_to_collection(self.con, cid, gids)
+        self._toast_ajout(n, name)
+        self.select_btn.set_active(False)   # action faite : la sélection se termine
+        self._refresh_collections()
+
+    def _on_new_collection_selection(self, *_):
+        self.sel_pop.popdown()
+
+        def on_ok(name):
+            try:
+                cid = P.add_collection(self.con, name)
+            except ValueError:
+                if not name.strip():
+                    raise                   # nom vide : le message revient au dialogue
+                # nom déjà pris : comme dans la fiche, on ajoute à l'existant
+                key = name.strip().casefold()
+                cid = next(r["id"] for r in self.con.execute("SELECT id, name FROM collections")
+                           if r["name"].strip().casefold() == key)
+            n = P.add_games_to_collection(self.con, cid, self._sel_gids())
+            self._toast_ajout(n, name)
+            self.select_btn.set_active(False)
+            self._refresh_collections()
+
+        self._prompt_collection(tr("New collection"), "", on_ok)
 
     def _prompt_collection(self, title, initial, on_ok):
         win = Adw.Dialog(content_width=380, title=title)
