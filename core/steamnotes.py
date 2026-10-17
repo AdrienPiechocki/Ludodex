@@ -278,11 +278,15 @@ def synchroniser(con, gid):
 
     importe = False
 
-    # Dédup de migration : locale dont le texte = fusion du carnet → doublon.
+    # Dédup de migration (décision 1) : seule la ligne MIGRÉE, non retitrée et
+    # non éditée, dont le texte est EXACTEMENT la fusion du carnet en est le
+    # doublon — une note locale postérieure au même texte reste (revue I1).
     if fichier:
         fusion = notes_steam_en_markdown(fichier).strip()
-        for ligne in notes_of_game(con, gid):
-            if ligne["steam_id"] == "" and ligne["content"].strip() == fusion:
+        for ligne in con.execute(
+                "SELECT id, title, content FROM game_notes "
+                "WHERE game_id=? AND deleted=0 AND steam_id='' AND migrated=1", (gid,)):
+            if not (ligne["title"] or "").strip() and ligne["content"].strip() == fusion:
                 drop_note(con, ligne["id"])
                 importe = True
 
@@ -332,6 +336,18 @@ def synchroniser(con, gid):
         if maj != n:
             pousse = True
         sortie.append(maj)
+    if not existe:
+        # Carnet absent : les lignes sync sont RECONSTRUITES (spec §Poussée :
+        # locale + sync). Les sauter écrivait un carnet amputé, et le miroir de
+        # la poussée suivante supprimait ces notes des DEUX côtés (revue C1).
+        # L'histoire (ordinal/time_created) vivait dans le fichier parti : elle
+        # repart à zéro, il n'y avait rien d'autre à conserver.
+        for ligne in (l for l in lignes if l["steam_id"]):
+            quand = ligne["modified"] or int(time.time())
+            sortie.append({"id": ligne["steam_id"], "appid": appid,
+                           "ordinal": len(sortie), "time_created": quand,
+                           "time_modified": ligne["modified"],
+                           "title": ligne["title"], "content": markdown_en_bbcode(ligne["content"])})
     for ligne in lignes:
         if ligne["steam_id"]:
             continue
@@ -346,6 +362,9 @@ def synchroniser(con, gid):
         ecrire_notes_multi(appid, sortie)
         for rowid, nid, quand in a_lier:
             lier_steam_id(con, rowid, nid, quand)  # l'id n'est liquide qu'après écriture
-        purge_tombstones(con, gid)
+        purge_tombstones(con, gid, [n["id"] for n in sortie])  # aucune tombe dans l'écrit
         return "pousser"
+    # Sans poussée : oublier ce qui est tombé des DEUX côtés (carnet lu — un
+    # carnet absent ne prouve rien et garde ses tombes en attente).
+    purge_tombstones(con, gid, [n["id"] for n in fichier] if existe else None)
     return "importer" if importe else "rien"

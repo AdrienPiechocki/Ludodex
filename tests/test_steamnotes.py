@@ -336,6 +336,22 @@ def test_fichier_absent_ne_supprime_rien(steam_fake, con):
     assert len(db.notes_of_game(con, 1)) == 2
 
 
+def test_poussee_sur_fichier_absent_reconstruit_le_carnet(steam_fake, con):
+    # Revue C1 : pousser une note locale sans écrire les lignes sync produisait
+    # un carnet amputé — la poussée suivante (miroir) supprimait les deux notes
+    # sync des DEUX côtés. La poussée = locale + sync (spec §Poussée).
+    db.create_note(con, 1, "Une", "note une", steam_id="n1", modified=500)
+    db.create_note(con, 1, "Deux", "note deux", steam_id="n2", modified=600)
+    db.create_note(con, 1, "Locale", "note locale")
+    assert sn.synchroniser(con, 1) == "pousser"
+    notes = _lire(steam_fake, 7)
+    assert [n["id"] for n in notes] == ["n1", "n2", notes[-1]["id"]]  # sync reconstruites
+    assert notes[0]["title"] == "Une" and notes[0]["content"] == "[p]note une[/p]"
+    assert notes[1]["time_modified"] == 600                    # invariant par ligne
+    assert sn.synchroniser(con, 1) == "rien"                   # stable : plus rien à faire
+    assert len(db.notes_of_game(con, 1)) == 3                  # toujours là des deux côtés
+
+
 def test_disparition_cote_steam_supprime_localement(steam_fake, con):
     _fichier(steam_fake, 7, [
         {"id": "n2", "title": "", "content": "[p]b[/p]", "time_modified": 500}])
@@ -347,8 +363,10 @@ def test_disparition_cote_steam_supprime_localement(steam_fake, con):
 
 def test_dedup_migration_stricte(steam_fake, con):
     _fichier(steam_fake, 7, [{"id": "n1", "title": "T", "content": "[p]s[/p]", "time_modified": 500}])
-    # ligne migrée dont le texte est EXACTEMENT la fusion du fichier : retirée
-    db.create_note(con, 1, "", "# T\n\ns", modified=999)
+    # ligne MIGRÉE dont le texte est EXACTEMENT la fusion du fichier : retirée
+    con.execute("INSERT INTO game_notes (game_id, title, content, modified, migrated) "
+                "VALUES (1, '', '# T\n\ns', 999, 1)")
+    con.commit()
     assert sn.synchroniser(con, 1) == "importer"
     lignes = db.notes_of_game(con, 1)
     assert len(lignes) == 1 and lignes[0]["steam_id"] == "n1"
@@ -357,6 +375,35 @@ def test_dedup_migration_stricte(steam_fake, con):
                 "VALUES (2, 'K', 'steam', '8', '', 0)")
     con.commit()
     _fichier(steam_fake, 8, [{"id": "m1", "title": "T", "content": "[p]s[/p]", "time_modified": 500}])
-    db.create_note(con, 2, "", "texte modifié depuis", modified=999)
+    con.execute("INSERT INTO game_notes (game_id, title, content, modified, migrated) "
+                "VALUES (2, '', 'texte modifié depuis', 999, 1)")
+    con.commit()
     assert sn.synchroniser(con, 2) == "pousser"
     assert len(db.notes_of_game(con, 2)) == 2            # la ligne modifiée n'est PAS retirée
+
+
+def test_dedup_ignore_les_notes_posterieures_a_la_migration(steam_fake, con):
+    # Revue I1 : seule la ligne MIGRÉE est un doublon ; une note locale créée
+    # depuis (ou une ligne migrée retitrée par l'utilisateur) reste à sa place.
+    _fichier(steam_fake, 7, [{"id": "n1", "title": "T", "content": "[p]s[/p]", "time_modified": 500}])
+    db.create_note(con, 1, "", "# T\n\ns")                      # locale neuve, texte = fusion
+    con.execute("INSERT INTO game_notes (game_id, title, content, modified, migrated) "
+                "VALUES (1, 'Mon titre', '# T\n\ns', 999, 1)")  # migrée mais retitrée
+    con.commit()
+    assert sn.synchroniser(con, 1) == "pousser"
+    assert len(db.notes_of_game(con, 1)) == 3            # locale + migrée retitrée + importée
+
+
+def test_tombe_deja_disparue_des_deux_cotes_est_purgee(steam_fake, con):
+    # Revue m2 : une note supprimée des DEUX côtés pendant une période
+    # hors-ligne ne déclenche aucune poussée — sans purge, la tombe séjournait.
+    _fichier(steam_fake, 7, [
+        {"id": "n1", "title": "", "content": "[p]a[/p]", "time_modified": 500},
+        {"id": "n2", "title": "", "content": "[p]b[/p]", "time_modified": 500}])
+    assert sn.synchroniser(con, 1) == "importer"
+    db.tombstone_note(con, db.note_row(con, 1, "n1")["id"])
+    _fichier(steam_fake, 7, [                              # n1 a aussi disparu de l'overlay
+        {"id": "n2", "title": "", "content": "[p]b[/p]", "time_modified": 500}])
+    assert sn.synchroniser(con, 1) == "rien"              # rien à pousser : n1 nulle part
+    assert db.note_row(con, 1, "n1") is None              # pourtant purgée
+    assert db.note_row(con, 1, "n2") is not None

@@ -891,6 +891,9 @@ class NotesMixin:
             if not label:  # sans titre : la première ligne du corps sert d'étiquette
                 label = next((ln.strip() for ln in (l["content"] or "").splitlines()
                               if ln.strip()), "")
+                # marqueurs Markdown non affichables : structure de tête + emphase
+                label = re.sub(r"[*_~`#>]", "",
+                               re.sub(r"^\s*(?:[-*+]|\d+[.)])\s+", "", label)).strip()
             btn = Gtk.ToggleButton()
             btn.set_child(Gtk.Label(label=label or tr("Untitled note"), max_width_chars=24,
                                     ellipsize=Pango.EllipsizeMode.END,
@@ -1079,7 +1082,7 @@ class NotesMixin:
         if not self._note_dirty or self.notes_game_id is None or self._note_rowid is None:
             return False
         gid, rowid = self.notes_game_id, self._note_rowid
-        P.set_note_row(self.con, rowid, self._note_title.get_text(), self._note_text())
+        P.set_note_row(self.con, rowid, self._note_title.get_text().strip(), self._note_text())
         try:
             P.synchroniser(self.con, gid)  # la poussée reprend l'horodatage que set_note_row vient de poser
         except OSError:
@@ -1097,17 +1100,21 @@ class NotesMixin:
 
     # ---------- création et suppression d'une note ----------
     def _on_new_note(self, *_):
-        """« + » : une note vide naît pour le jeu et prend le focus."""
+        """« + » : l'éditeur s'apprête pour une note neuve — la ligne n'est
+        créée qu'à la première frappe (pas de note vide abandonnée, ni de
+        placeholder poussé vers le carnet)."""
         if self.notes_game_id is None:
             return
         self._flush_note()  # l'éventuelle note en cours est enregistrée avant
-        rowid = P.create_note(self.con, self.notes_game_id)
-        self._note_rowid = None  # la ligne neuve DOIT être ouverte, pas confondue avec l'ancienne
-        self._refresh_notes_tabs(select=rowid)
+        for btn in self._tab_buttons.values():
+            if btn.get_active():
+                btn.set_active(False)  # plus aucun onglet actif : rien n'est ouvert
+        self._reset_editor_body()
         self._note_title.grab_focus()
 
     def _on_delete_note(self, *_):
-        """Suppression logique (tombe) : la poussée suivante la retire du carnet."""
+        """Suppression : locale = oubliée tout de suite, sync = tombe que la
+        prochaine poussée retire du carnet."""
         rowid, gid = self._note_rowid, self.notes_game_id
         if rowid is None or gid is None:
             return
@@ -1126,9 +1133,9 @@ class NotesMixin:
                 GLib.source_remove(self._note_timeout)
                 self._note_timeout = None
             self._note_dirty = False
-            P.tombstone_note(self.con, rowid)
+            P.supprimer_note(self.con, rowid)  # locale : efface ; sync : tombe
             try:
-                P.synchroniser(self.con, gid)  # elle quitte le carnet overlay ici
+                P.synchroniser(self.con, gid)  # si tombe : elle quitte le carnet overlay ici
             except OSError:
                 pass  # dossier Steam inaccessible : la tombe reste, servie à la prochaine poussée
             self._reset_editor_body()  # son texte ne doit PAS rester sous les doigts
