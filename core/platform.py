@@ -58,9 +58,11 @@ def migrate_data_dir(env=None, home=None):
 
 
 def steam_roots(home=None):
-    """Racines « steamapps » de Steam (jeux installés)."""
+    """Racines « steamapps » de Steam (jeux installés) — natif, et flatpak pour
+    que le carnet de notes overlay y soit aussi atteignable."""
     home = _home(home)
-    return [home / ".local/share/Steam/steamapps", home / ".steam/steam/steamapps"]
+    return [home / ".local/share/Steam/steamapps", home / ".steam/steam/steamapps",
+            home / ".var/app/com.valvesoftware.Steam/data/Steam/steamapps"]
 
 
 def itch_dbs(env=None, home=None):

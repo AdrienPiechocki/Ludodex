@@ -19,6 +19,8 @@ finish-args:
   - --filesystem=~/.var/app/net.lutris.Lutris/data/lutris:ro
   - --filesystem=~/.var/app/io.itch.itch/config/itch/db:ro
   - --filesystem=~/.var/app/com.heroicgameslauncher.hgl/config/heroic:ro
+  # Carnet de notes de l'overlay Steam (Steam en flatpak) : la synchro y écrit.
+  - --filesystem=~/.var/app/com.valvesoftware.Steam/data/Steam:rw
   - --talk-name=org.freedesktop.Flatpak
 modules:
   - name: pyyaml

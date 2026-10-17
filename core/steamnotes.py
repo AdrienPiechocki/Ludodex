@@ -14,7 +14,17 @@ tient trois matières, dans l'ordre où elles s'empilent :
 Les balises inconnues ou non fermées perdent leurs crochets, jamais leur
 texte : une note reste lisible quelle que soit la saison de Steam.
 """
+import json
+import os
+import pathlib
+import random
 import re
+
+from .steam import STEAM_ROOTS
+
+# Le carnet overlay de tous les jeux vit dans ce dossier distant du compte :
+# chaque note est un fichier `notes_<appid>`, en JSON.
+NOTES_REMOTE = "2371090/remote"
 
 # Lien : `[url=U]T[/url]` <-> `[T](U)` ; `[url]U[/url]` -> `[U](U)`, le Markdown
 # n'ayant pas d'autre ancre sans texte.
@@ -127,3 +137,66 @@ def notes_steam_en_markdown(notes):
         elif corps:
             morceaux.append(corps)
     return "\n\n".join(morceaux)
+
+
+# ---------- fichiers overlay ----------
+
+def comptes_notes():
+    """Dossiers `userdata/<id>` portant un carnet overlay (les plus récents d'abord)."""
+    dossiers = []
+    for root in STEAM_ROOTS:
+        base = root.parent / "userdata"
+        if not base.is_dir():
+            continue
+        for d in base.iterdir():
+            if d.is_dir() and d.name.isdigit() and (d / NOTES_REMOTE).is_dir():
+                dossiers.append(d)
+    return sorted(dossiers, key=lambda d: (d / NOTES_REMOTE).stat().st_mtime, reverse=True)
+
+
+def compte_notes():
+    """Compte Steam dont le carnet est le plus récemment à jour, ou None."""
+    l = comptes_notes()
+    return l[0] if l else None
+
+
+def _fichier_notes(appid):
+    c = compte_notes()
+    return (c / NOTES_REMOTE / f"notes_{appid}") if c else None
+
+
+def lire_notes(appid):
+    """Notes overlay d'un jeu : [] si le fichier n'existe pas, **None** si
+    illisible — un JSON qu'on ne comprend pas n'est jamais écrasé."""
+    f = _fichier_notes(appid)
+    if f is None or not f.exists():
+        return []
+    try:
+        d = json.loads(f.read_text(encoding="utf-8"))
+        notes = d["notes"]
+        return notes if isinstance(notes, list) else None
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def nouvel_id():
+    """Identifiant court aléatoire, format des ids Steam (base36, 8 lettres)."""
+    return "".join(random.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(8))
+
+
+def ecrire_notes(appid, note_id, titre, contenu, quand):
+    """Le carnet du jeu devient une SEULE note : les autres entrées sont
+    remplacées — leur texte est déjà dans la fusion. L'histoire (`time_created`)
+    de la note réutilisée survive ; `time_modified` porte l'invariant de synchro.
+    Écriture atomique : jamais de JSON tronqué sous la main de Steam."""
+    f = _fichier_notes(appid)
+    if f is None:
+        return
+    ancien = next((n for n in (lire_notes(appid) or []) if n.get("id") == note_id), None)
+    note = {"id": note_id, "appid": appid, "ordinal": 0,
+            "time_created": (ancien or {}).get("time_created", quand),
+            "time_modified": quand, "title": titre, "content": contenu}
+    f.parent.mkdir(parents=True, exist_ok=True)
+    tmp = f.with_name(f.name + ".tmp")
+    tmp.write_text(json.dumps({"notes": [note]}, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, f)
