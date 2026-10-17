@@ -55,3 +55,16 @@ def test_charger_rejette_les_types_errones(tmp_path):
     assert h["options"] == {"format_24h": True, "secondes": False}
     assert h["transparence"] == 0.0
     assert h["epingle"] is False
+
+
+def test_epingle_actif_ignore_les_widgets_desactives():
+    """Mode « pinned » : seul un widget ACTIF et épinglé compte.
+
+    Un widget épinglé puis désactivé ne doit pas détourner la
+    fermeture (bug du 2026-10-18 : ✕ Fermer envoyait en « pinned » à
+    vide — l'overlay ne se fermait plus jamais)."""
+    conf = {"widgets": {"horloge": {"actif": False, "epingle": True}}}
+    assert config.epingle_actif(conf) is False
+    conf["widgets"]["horloge"]["actif"] = True
+    assert config.epingle_actif(conf) is True
+    assert config.epingle_actif({"widgets": {"horloge": {"actif": True}}}) is False

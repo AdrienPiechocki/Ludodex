@@ -85,3 +85,13 @@ def chemin_defaut(env: typing.Optional[dict] = None) -> pathlib.Path:
     environ = os.environ if env is None else env
     racine = environ.get("XDG_CONFIG_HOME") or str(pathlib.Path.home() / ".config")
     return pathlib.Path(racine) / "ludodex-overlay" / "config.json"
+
+
+def epingle_actif(conf: dict) -> bool:
+    """True si au moins un widget **actif** est épinglé (mode « pinned »).
+
+    Un widget épinglé puis désactivé ne compte plus : sans quoi ✕ Fermer
+    l'y aurait envoyé à vide et l'overlay ne se serait plus jamais fermé
+    (bug du 2026-10-18, cause racine en test)."""
+    return any(e.get("actif") and e.get("epingle")
+               for e in conf.get("widgets", {}).values())
