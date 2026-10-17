@@ -25,6 +25,27 @@ def test_command_overlay_dans_le_sandbox():
     assert cmd[-3:] == ["--game", "SULFUR", "--souris-libre"]
 
 
+def test_command_overlay_transmet_la_langue():
+    """Réglage de langue de Ludodex transmis à l'overlay (--lang en queue) :
+    sans lui, l'overlay retomberait sur la langue du système hôte."""
+    assert overlay.command_overlay("SULFUR", langue="fr") == [
+        "flatpak", "run", "io.github.AdrienPiechocki.LudodexOverlay",
+        "--game", "SULFUR", "--souris-libre", "--lang", "fr"]
+
+
+def test_lancer_transmet_la_langue(monkeypatch):
+    """`lancer_overlay` porte `--lang` jusqu'à la commande réellelement spawnée."""
+    commandes = []
+
+    class FauxProc:
+        pid = None
+
+    monkeypatch.setattr(overlay.subprocess, "Popen",
+                        lambda cmd, **kw: commandes.append(cmd) or FauxProc())
+    assert overlay.lancer_overlay("X", langue="fr") is True
+    assert commandes[0][-2:] == ["--lang", "fr"]
+
+
 def test_chemin_hook_user_et_systeme():
     utilisateur = overlay.chemin_hook({"HOME": "/h"})
     assert utilisateur == "/h/.local/share/flatpak/app/%s/current/active/files/lib/libludodex-hook.so" \

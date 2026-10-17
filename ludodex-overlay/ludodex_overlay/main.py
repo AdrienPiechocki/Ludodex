@@ -24,7 +24,7 @@ gi.require_version("Gtk4LayerShell", "1.0")
 from gi.repository import Gdk, Gio, GLib, Gtk, Gtk4LayerShell
 
 from . import config, hook, placement
-from .i18n import tr
+from .i18n import get_lang, set_lang, tr
 from .panel import Panneau, conteneur_reglages
 from .shortcuts import RaccourciPortal
 from .widgets import REGISTRE, options_defauts
@@ -270,6 +270,23 @@ class Fenetre(Gtk.ApplicationWindow):
         self._placer_panneau()
         self.placer_tout()
 
+    @staticmethod
+    def _taille_widget(conteneur: Gtk.Box) -> tuple[int, int]:
+        """Dimensions VISIBLES du widget (premier enfant du conteneur).
+
+        Le conteneur inclut en PERMANENCE les Revealer (barre d'outils et
+        réglages inline) : GTK4 alloue leur enfant même quand ils sont
+        fermés — mesuré le 2026-10-18, conteneur 359px pour un widget de
+        56px (56 + 38 barre + 265 réglages). Prises telles quelles, ces
+        dimensions remontaient le clamp de drag et de placement bien avant
+        le bas de l'écran : l'horloge bloquait à 721px au lieu de 1024.
+        Seul le widget compte — Revealer et panneau peuvent déborder sans
+        gêner le placement."""
+        widget = conteneur.get_first_child()
+        if widget is None:
+            return conteneur.get_width(), conteneur.get_height()
+        return widget.get_width(), widget.get_height()
+
     def placer_tout(self) -> None:
         """Repositionne les widgets d'après les fractions sauvegardées —
         clampé à l'écran courant (écran/résolution ayant pu changer)."""
@@ -279,9 +296,8 @@ class Fenetre(Gtk.ApplicationWindow):
         for specimen, conteneur in self.instances:
             pos = self.conf["widgets"][type(specimen).id]["pos"]
             x, y = placement.frac_vers_px(pos["x"], pos["y"], largeur, hauteur)
-            x, y = placement.ajuster(
-                x, y, conteneur.get_width(), conteneur.get_height(),
-                largeur, hauteur)
+            largeur_w, hauteur_w = self._taille_widget(conteneur)
+            x, y = placement.ajuster(x, y, largeur_w, hauteur_w, largeur, hauteur)
             conteneur.set_margin_start(int(x))
             conteneur.set_margin_top(int(y))
 
@@ -297,10 +313,13 @@ class Fenetre(Gtk.ApplicationWindow):
             largeur, hauteur = self.get_width(), self.get_height()
             if largeur <= 0:
                 return
+            # Dimensions du WIDGET, pas du conteneur : les Revealer (barre
+            # d'outils, réglages inline) sont alloués même fermés et
+            # gonfleraient le clamp (bug du 2026-10-18, voir _taille_widget).
+            largeur_w, hauteur_w = self._taille_widget(conteneur)
             x, y = placement.pas_de_drag(
                 conteneur.get_margin_start(), conteneur.get_margin_top(),
-                dx, dy, conteneur.get_width(), conteneur.get_height(),
-                largeur, hauteur)
+                dx, dy, largeur_w, hauteur_w, largeur, hauteur)
             conteneur.set_margin_start(x)
             conteneur.set_margin_top(y)
 
@@ -459,12 +478,14 @@ class Fenetre(Gtk.ApplicationWindow):
 
 
 class OverlayApp(Gtk.Application):
-    """Application unique : lit `--game NOM`, `--demo` et `--souris-libre`,
-    puis active la fenêtre.
+    """Application unique : lit `--game NOM`, `--demo`, `--souris-libre`
+    et `--lang CODE`, puis active la fenêtre.
 
     `--souris-libre` (défaut) : Ludodex décide si l'overlay doit relâcher la
     capture souris du jeu (réglage de Ludodex, plus de l'overlay) ; sans lui,
-    la souris reste capturée même à l'ouverture de l'overlay."""
+    la souris reste capturée même à l'ouverture de l'overlay.
+    `--lang` : langue définie dans Ludodex — sans lui, détection sur les
+    variables POSIX du processus (langue système)."""
 
     def __init__(self):
         super().__init__(application_id=ID,
@@ -479,6 +500,7 @@ class OverlayApp(Gtk.Application):
         # `commande` est une GApplicationCommandLine (lancement primaire ou
         # second) : get_arguments() rend argv sous forme de chaînes.
         args = [_texte(m) for m in commande.get_arguments()]
+        langue_avant = get_lang()
         for i, arg in enumerate(args):
             if arg == "--demo":
                 self.demo = True
@@ -490,7 +512,16 @@ class OverlayApp(Gtk.Application):
                 self.nom_jeu = args[i + 1]
             elif arg.startswith("--game="):
                 self.nom_jeu = arg.split("=", 1)[1]
+            elif arg == "--lang" and i + 1 < len(args):
+                set_lang(args[i + 1])
+            elif arg.startswith("--lang="):
+                set_lang(arg.split("=", 1)[1])
         self.activate()
+        if self.fenetre is not None and get_lang() != langue_avant:
+            # Instance déjà vivante (2ᵉ session, langue changée dans
+            # Ludodex) : les textes sont cuits à la construction — on
+            # rebâtit widgets + panneau dans la nouvelle langue.
+            self.fenetre.reconstruire()
         return 0
 
     def do_activate(self) -> None:

@@ -5,7 +5,7 @@ import json, os, pathlib, re, shutil, sqlite3, subprocess, threading, time
 import urllib.error, urllib.request
 from urllib.parse import quote
 
-from i18n import tr
+from i18n import get_lang, tr
 from . import overlay, platform
 from .db import LUTRIS_DBS, ITCH_DBS, _ro, get_setting
 from .platform import uri_command, split_command, join_command
@@ -406,9 +406,12 @@ def launch(con, g, on_exit=None):
     # Sans suivi de session (CLI : `on_exit=None`), l'overlay serait tué par
     # atexit à la sortie du processus — il ne démarre pas du tout.
     # `souris_libre` : réglage de Ludodex, transmis à l'overlay par flag.
+    # `langue` : celle de Ludodex (réglage utilisateur, sinon système) —
+    # sans --lang, l'overlay ne verrait que les variables POSIX du processus.
     if on_exit is not None and get_setting(con, "overlay", "1") == "1":
         overlay.lancer_overlay(str(g["name"]),
-                               souris_libre=get_setting(con, "souris_libre", "1") == "1")
+                               souris_libre=get_setting(con, "souris_libre", "1") == "1",
+                               langue=get_lang())
     if on_exit is not None and cur.rowcount:  # INSERT ignoré = rien d'ouvert à suivre
         # Un argv contenant "://" est remis à xdg-open : le processus tenu n'est que
         # le passe-plat, qui rend la main en ms. Pour un jeu connu (Heroic), on suit

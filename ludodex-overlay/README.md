@@ -27,11 +27,14 @@ tué par Ludodex à chaque lancement de jeu.
   ⚠ Jeux en ligne avec anti-cheat : une injection `LD_PRELOAD` peut être
   mal vue — désactivez ce réglage (le jeu tourne alors
   normalement, sans libération automatique de la souris).
-- Dans l'overlay : un panneau central (interrupteurs de widgets, réglages,
-  écran) et les widgets flottants, **déplaçables à la souris/doigt** avec
-  aimantation douce aux bords. Les réglages d'un widget (⚙) s'ouvrent
-  **en ligne**, sous le widget : transparence (30 %
-  d'opacité minimum), épinglage, options (24 h/12 h, secondes).
+- Dans l'overlay : un panneau central (interrupteurs de widgets) et les
+  widgets flottants, **déplaçables à la souris/doigt** avec aimantation
+  douce aux bords — chaque bord et coin atteignable. Les réglages d'un
+  widget (⚙) s'ouvrent **en ligne**, sous le widget : transparence
+  (30 % d'opacité minimum), épinglage, options (24 h/12 h, secondes).
+- **Langue** : l'overlay suit la langue définie dans Ludodex (Réglages →
+  Général → Langue), transmise à chaque session par `--lang CODE` ;
+  sans réglage explicite, la langue du système fait foi — comme Ludodex.
 - Les réglages sont **globaux** (tous jeux) et persistés dans
   `~/.config/ludodex-overlay/config.json` (`$XDG_CONFIG_HOME` respecté ;
   dans le sandbox, `~/.var/app/io.github.AdrienPiechocki.LudodexOverlay/`).
@@ -66,6 +69,7 @@ défaut).
 flatpak run io.github.AdrienPiechocki.LudodexOverlay --demo   # voile + panneau immédiatement
 flatpak run io.github.AdrienPiechocki.LudodexOverlay --game "Nom du jeu"
 flatpak run io.github.AdrienPiechocki.LudodexOverlay --game "Nom" --sans-souris-libre  # sans libération de la souris
+flatpak run io.github.AdrienPiechocki.LudodexOverlay --game "Nom" --lang fr          # langue forcée (sinon langue du système)
 ```
 
 Au **premier** lancement (nouvelle app), KDE affiche une demande de

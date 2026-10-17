@@ -64,7 +64,8 @@ def command_avec_hook(argv: list, chemin: str) -> list:
     return ["env", f"LD_PRELOAD={charge}", *argv]
 
 
-def command_overlay(nom_jeu: str, souris_libre: bool = True, env: dict = None) -> list:
+def command_overlay(nom_jeu: str, souris_libre: bool = True, langue: str = None,
+                    env: dict = None) -> list:
     """Commande hôte qui démarre l'overlay pour la session d'un jeu.
 
     `souris_libre` (réglage de Ludodex) : l'overlay relâche la capture souris
@@ -73,22 +74,29 @@ def command_overlay(nom_jeu: str, souris_libre: bool = True, env: dict = None) -
     reçoit la commande par `do_command_line` : c'est la dernière valeur qui
     gagne, et il faut pouvoir repasser à False.
 
+    `langue` : langue choisie dans Ludodex — sans `--lang`, l'overlay ne
+    verrait que les variables POSIX du processus, donc la langue SYSTÈME
+    (pas forcément celle de Ludodex, spec du 2026-10-18).
+
     Sur l'hôte : `flatpak run … --game NOM`. Dans le sandbox Ludodex :
     enveloppée par le `sh -c` de dépouillement d'`host_argv` — les
-    arguments `--game`/nom et le flag souris restent en queue."""
+    arguments `--game`/nom, le flag souris et `--lang` restent en queue."""
     argv = ["flatpak", "run", OVERLAY_APP_ID, "--game", nom_jeu,
             "--souris-libre" if souris_libre else "--sans-souris-libre"]
+    if langue:
+        argv += ["--lang", langue]
     return platform.host_argv(argv, env=env)
 
 
-def lancer_overlay(nom_jeu: str, souris_libre: bool = True) -> bool:
+def lancer_overlay(nom_jeu: str, souris_libre: bool = True, langue: str = None) -> bool:
     """Démarre l'overlay — False si l'addon est absent (silencieux)."""
     global _proc, _atexit_fait
     try:
-        _proc = subprocess.Popen(command_overlay(nom_jeu, souris_libre=souris_libre),
-                                 stdout=subprocess.DEVNULL,
-                                 stderr=subprocess.DEVNULL,
-                                 start_new_session=True)
+        _proc = subprocess.Popen(
+            command_overlay(nom_jeu, souris_libre=souris_libre, langue=langue),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True)
     except OSError:  # addon non installé, flatpak absent : rien à signaler
         return False
     if not _atexit_fait:
