@@ -10,5 +10,8 @@
   "Pin": "Épingler",
   "Settings": "Réglages",
   "Remove": "Retirer",
-  "Transparency": "Transparence"
+  "Transparency": "Transparence",
+  "Open/close overlay": "Ouvrir/fermer l'overlay",
+  "Shortcut unavailable — the overlay has stopped.": "Raccourci global indisponible — l'overlay s'arrête.",
+  "The shortcut dialog was not confirmed.": "La demande de raccourci n'a pas été confirmée."
 }

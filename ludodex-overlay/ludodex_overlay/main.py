@@ -24,6 +24,7 @@ from gi.repository import Gdk, Gio, GLib, Gtk, Gtk4LayerShell
 from . import config, placement
 from .i18n import tr
 from .panel import Panneau, popover_reglages
+from .shortcuts import RaccourciPortal
 from .widgets import REGISTRE, options_defauts
 
 ID = "io.github.AdrienPiechocki.LudodexOverlay"
@@ -366,6 +367,7 @@ class OverlayApp(Gtk.Application):
         self.nom_jeu = ""
         self.demo = False
         self.fenetre: "Fenetre | None" = None
+        self.raccourci: "RaccourciPortal | None" = None
 
     def do_command_line(self, commande) -> int:
         # `commande` est une GApplicationCommandLine (lancement primaire ou
@@ -384,10 +386,20 @@ class OverlayApp(Gtk.Application):
     def do_activate(self) -> None:
         if self.fenetre is None:
             self.fenetre = Fenetre(self)
+            # Raccourci global : démarré une fois pour la vie de l'app —
+            # en cas d'échec, notification puis sortie (jamais muette).
+            self.raccourci = RaccourciPortal(
+                on_toggle=self.fenetre.basculer,
+                on_echec=self._raccourci_echec)
+            self.raccourci.demarrer()
         if self.demo:
             self.fenetre.definer_mode("overlay")
         # sans --demo : ne rien changer — hidden au 1ᵉʳ lancement, et on
         # n'abîme pas un overlay déjà ouvert si un 2ᵉ jeu relance la session.
+
+    def _raccourci_echec(self, message: str) -> None:
+        notifier(tr("Ludodex Overlay"), message)
+        self.quit()
 
 
 def main() -> None:

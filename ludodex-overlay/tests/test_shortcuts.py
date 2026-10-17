@@ -40,3 +40,8 @@ def test_session_depuis_reponse_derive_sans_resultat():
     req = "/org/freedesktop/portal/desktop/request/1_42/ludodexoverlay"
     assert shortcuts.session_depuis_reponse(req, {}) == \
         "/org/freedesktop/portal/desktop/session/1_42/ludodexsession"
+
+
+def test_veille_secondes_bornees():
+    # Dialogue KDE jamais validé → l'overlay doit sortir : bornage du watchdog.
+    assert shortcuts.VEILLE_SECONDES == 45
