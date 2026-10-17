@@ -380,9 +380,17 @@ def launch(con, g, on_exit=None):
         env, argv = split_env(cmd)
         if not argv:
             raise ValueError(tr("empty command"))
+        # Un argv contenant "://" est un PASSE-PLAT (xdg-open) : le jeu sera
+        # lancé par son client (itch, Steam, Heroic) — le shim de libération
+        # de souris n'a rien à y faire, et injecté dans le client il empêche
+        # même son démarrage (le client itch Electron ne démarre plus avec un
+        # LD_PRELOAD étranger ; test A/B du 2026-10-18 : sans hook le client
+        # s'ouvre en 2 s, avec hook rien ne se passe).
+        uri = any("://" in a for a in argv)
         # Overlay actif : le jeu reçoit le hook de libération de souris
         # (LD_PRELOAD, façon Steam) — préparé avant le spawn du jeu.
-        if on_exit is not None and get_setting(con, "overlay", "1") == "1":
+        if (on_exit is not None and not uri
+                and get_setting(con, "overlay", "1") == "1"):
             shim = overlay.preparer_hook(env=env)
             if shim is not None:
                 argv = overlay.command_avec_hook(argv, shim)
@@ -416,7 +424,7 @@ def launch(con, g, on_exit=None):
         # Un argv contenant "://" est remis à xdg-open : le processus tenu n'est que
         # le passe-plat, qui rend la main en ms. Pour un jeu connu (Heroic), on suit
         # alors le JEU lui-même (motifs /proc) — c'est cette clôture qui manquait.
-        uri = any("://" in a for a in argv)
+        # (`uri` est déjà calculé plus haut, avant l'injection du hook.)
         try:
             motifs = motifs_jeu(g) if uri else []
         except (OSError, ValueError):   # fichiers Heroic illisibles : l'ancien repli vaut mieux qu'un plantage
