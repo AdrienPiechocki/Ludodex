@@ -1,0 +1,78 @@
+#!/usr/bin/env python3
+"""tests/test_overlay.py — addon flatpak Ludodex Overlay : commande, lancement silencieux, mort."""
+import signal
+
+from core import overlay
+
+
+def test_command_overlay_sur_hote():
+    assert overlay.command_overlay("SULFUR") == [
+        "flatpak", "run", "io.github.AdrienPiechocki.LudodexOverlay", "--game", "SULFUR"]
+
+
+def test_command_overlay_dans_le_sandbox():
+    cmd = overlay.command_overlay("SULFUR", env={"FLATPAK_ID": "io.github.AdrienPiechocki.Ludodex"})
+    assert cmd[0] == "flatpak-spawn" and "--host" in cmd
+    assert cmd[-2:] == ["--game", "SULFUR"]
+
+
+def test_lancer_sans_addon_est_silencieux(monkeypatch):
+    """Addon non installé : False, aucune alerte (spec : échec silencieux)."""
+    def faux_popen(*args, **kwargs):
+        raise FileNotFoundError
+    monkeypatch.setattr(overlay.subprocess, "Popen", faux_popen)
+    assert overlay.lancer_overlay("X") is False
+
+
+def test_arreter_utilise_terminate(monkeypatch):
+    class FauxProc:
+        termine = False
+
+        def terminate(self):
+            self.termine = True
+
+        def poll(self):
+            return 0 if self.termine else None
+
+    faux = FauxProc()
+    monkeypatch.setattr(overlay, "_proc", faux)
+    overlay.arreter_overlay()
+    assert faux.termine
+
+
+def test_arreter_vise_le_groupe_de_processus(monkeypatch):
+    """L'app Python de la sandbox SURVIT à la mort du seul `flatpak run`
+    (constat du 2026-10-17 : processus repris par l'init, scope systemd et
+    instance flatpak restés actifs) — le signal part donc sur le GROUPE."""
+    signaux = []
+    monkeypatch.setattr(overlay.os, "killpg",
+                        lambda pid, num: signaux.append((pid, num)))
+
+    class FauxProc:
+        pid = 4242
+
+        def poll(self):
+            return 0  # déjà terminé : le kill différé (3 s) ne part pas
+
+    monkeypatch.setattr(overlay, "_proc", FauxProc())
+    overlay.arreter_overlay()
+    assert signaux == [(4242, signal.SIGTERM)]
+
+
+def test_arreter_tue_l_instance_flatpak(monkeypatch):
+    """Chaîne sandboxée : killpg ne tue que flatpak-spawn côté sandbox, la
+    chaîne HÔTE survit (constat du 2026-10-17) — `flatpak kill` complète."""
+    appels = []
+    monkeypatch.setattr(overlay.os, "killpg", lambda pid, num: None)
+    monkeypatch.setattr(overlay.subprocess, "run",
+                        lambda argv, **kw: appels.append(argv))
+
+    class FauxProc:
+        pid = 4243
+
+        def poll(self):
+            return 0
+
+    monkeypatch.setattr(overlay, "_proc", FauxProc())
+    overlay.arreter_overlay()
+    assert appels == [["flatpak", "kill", overlay.OVERLAY_APP_ID]]

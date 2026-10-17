@@ -56,7 +56,7 @@ def _con_jeu():
 
 def _popen_capture(monkeypatch, cap):
     def fake(argv, **kw):
-        cap["argv"] = argv
+        cap.setdefault("argv", argv)  # 1er Popen = le jeu (le 2e = l'overlay de session)
         return object()
     monkeypatch.setattr(L.subprocess, "Popen", fake)
 
