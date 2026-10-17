@@ -109,7 +109,8 @@ def db():
                      ("cover_fetched", "INTEGER NOT NULL DEFAULT 0"), ("sgdb_id", "INTEGER NOT NULL DEFAULT 0"),
                      ("name_locked", "INTEGER NOT NULL DEFAULT 0"), ("launch_override", "TEXT NOT NULL DEFAULT ''"),
                      ("custom_cover", "TEXT NOT NULL DEFAULT ''"), ("notes", "TEXT NOT NULL DEFAULT ''"),
-                     ("cover_src", "TEXT NOT NULL DEFAULT ''")):
+                     ("cover_src", "TEXT NOT NULL DEFAULT ''"),
+                     ("notes_modified", "INTEGER NOT NULL DEFAULT 0")):
         if col not in cols:
             con.execute(f"ALTER TABLE games ADD COLUMN {col} {ddl}")
     ccols = {r["name"] for r in con.execute("PRAGMA table_info(collections)")}
@@ -164,8 +165,11 @@ def get_note(con, gid):
 
 
 def set_note(con, gid, text):
-    """Enregistre la note d'un jeu (chaîne vide = note effacée)."""
-    con.execute("UPDATE games SET notes=? WHERE id=?", (text or "", gid))
+    """Enregistre la note d'un jeu (chaîne vide = note effacée) et pose
+    l'horodatage `notes_modified` : c'est l'instant que la synchro Steam opposera
+    aux `time_modified` des notes overlay (point d'étroit unique, UI et CLI)."""
+    con.execute("UPDATE games SET notes=?, notes_modified=? WHERE id=?",
+                (text or "", int(time.time()), gid))
     con.commit()
 
 

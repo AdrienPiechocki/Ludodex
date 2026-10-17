@@ -19,8 +19,10 @@ import os
 import pathlib
 import random
 import re
+import time
 
-from .steam import STEAM_ROOTS
+from .db import get_setting, set_note
+from .steam import STEAM_ROOTS, steam_appid_of
 
 # Le carnet overlay de tous les jeux vit dans ce dossier distant du compte :
 # chaque note est un fichier `notes_<appid>`, en JSON.
@@ -200,3 +202,62 @@ def ecrire_notes(appid, note_id, titre, contenu, quand):
     tmp = f.with_name(f.name + ".tmp")
     tmp.write_text(json.dumps({"notes": [note]}, ensure_ascii=False), encoding="utf-8")
     os.replace(tmp, f)
+
+
+# ---------- décision ----------
+
+def resoudre(note_ludodex, t_ludodex, notes_steam):
+    """Le arbitre d'aller-retour : ('importer', texte_steam, t_steam) /
+    ('pousser', note_ludodex, 0) / ('rien', '', 0).
+
+    Règles, dans l'ordre : un carnet illisible (None) n'est jamais écrasé ;
+    un `[p][/p]` de placeholder compte comme un côté vide ; un côté vide cède à
+    l'autre ; deux textes identiques ne bougent rien ; sinon le plus récent
+    gagne — **égalité ou premier contact (t_ludodex nul) : Steam gagne**.
+    """
+    if notes_steam is None:
+        return "rien", "", 0
+    st = notes_steam_en_markdown(notes_steam).strip()
+    ld = (note_ludodex or "").strip()
+    if not st and not ld:
+        return "rien", "", 0
+    if not st:
+        return "pousser", note_ludodex, 0
+    if not ld:
+        return "importer", st, max(n.get("time_modified") or 0 for n in notes_steam)
+    if st == ld:
+        return "rien", "", 0
+    t_steam = max(n.get("time_modified") or 0 for n in notes_steam)
+    if t_ludodex == 0 or t_steam >= t_ludodex:
+        return "importer", st, t_steam
+    return "pousser", note_ludodex, 0
+
+
+def synchroniser(con, gid):
+    """Le va-et-vient d'une note : importe la note overlay, pousse la note
+    Ludodex, ou ne fait rien. Retourne l'action prise ('ignore' hors champ :
+    réglage éteint, jeu non Steam ou carnet illisible). L'invariant qui rend
+    l'opération stable : `time_modified` poussé = `notes_modified` de Ludodex —
+    pousser puis rouvrir ne bouge donc rien."""
+    if get_setting(con, "steam_notes_sync") == "0":
+        return "ignore"
+    g = con.execute("SELECT source, ext_id, notes, notes_modified FROM games WHERE id=?",
+                    (gid,)).fetchone()
+    appid = steam_appid_of(g)
+    if g is None or appid is None:
+        return "ignore"
+    notes = lire_notes(appid)
+    if notes is None:
+        return "ignore"
+    action, texte, quand = resoudre(g["notes"], g["notes_modified"] or 0, notes)
+    if action == "importer":
+        set_note(con, gid, texte)
+        # l'horodatage Steam est hérité tel quel : pousser plus tard ne réécrit pas
+        con.execute("UPDATE games SET notes_modified=? WHERE id=?", (quand, gid))
+        con.commit()
+    elif action == "pousser":
+        note_id = (notes[0]["id"] if notes else nouvel_id())
+        titre, corps = titre_depuis_markdown(texte)
+        quand = g["notes_modified"] or int(time.time())
+        ecrire_notes(appid, note_id, titre, markdown_en_bbcode(corps), quand)
+    return action

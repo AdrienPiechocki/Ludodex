@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """tests/test_steamnotes.py — carnet de l'overlay Steam : conversion, fichiers, décision."""
 import json
+import sqlite3
 
 import pytest
 
+from core import db
 from core import steamnotes as sn
 
 
@@ -93,3 +95,91 @@ def test_poussee_deux_fois_ne_change_rien(steam_fake):
     premier = (steam_fake / "notes_7").read_bytes()
     sn.ecrire_notes(7, "memeid", "", "[p]x[/p]", 1700000000)
     assert (steam_fake / "notes_7").read_bytes() == premier
+
+
+# ---------- décision ----------
+
+def _steam(tid, contenu="[p]s[/p]", titre=""):
+    return [{"id": "n1", "title": titre, "content": contenu, "time_modified": tid}]
+
+
+def test_resoudre_steam_illisible_ne_fait_rien():
+    assert sn.resoudre("note", 100, None) == ("rien", "", 0)
+
+
+def test_resoudre_placeholder_compte_comme_vide():
+    # le `[p][/p]` que l'overlay crée à la simple ouverture ne doit PAS écraser
+    # la vraie note au premier contact : il pousse la note Ludodex à la place
+    assert sn.resoudre("ma note", 0, _steam(999, "[p][/p]")) == ("pousser", "ma note", 0)
+    assert sn.resoudre("", 0, _steam(999, "[p][/p]")) == ("rien", "", 0)
+
+
+def test_resoudre_un_cote_vide_remplit_l_autre():
+    assert sn.resoudre("", 0, _steam(500)) == ("importer", "s", 500)
+    assert sn.resoudre("ma note", 50, []) == ("pousser", "ma note", 0)
+
+
+def test_resoudre_le_plus_recent_gagne():
+    assert sn.resoudre("ma note", 100, _steam(500)) == ("importer", "s", 500)
+    assert sn.resoudre("ma note", 700, _steam(500)) == ("pousser", "ma note", 0)
+
+
+def test_resoudre_premier_contact_et_egalite_steam_gagnent():
+    assert sn.resoudre("ma note", 0, _steam(500)) == ("importer", "s", 500)
+    assert sn.resoudre("s", 500, _steam(500)) == ("rien", "", 0)   # même texte : rien à faire
+
+
+def test_set_note_horodate(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "j.db")
+    con = db.db()
+    con.execute("INSERT INTO games (id, name, source, ext_id, notes) VALUES (1, 'J', 'steam', '7', '')")
+    db.set_note(con, 1, "coucou")
+    g = con.execute("SELECT notes, notes_modified FROM games WHERE id=1").fetchone()
+    assert g["notes"] == "coucou" and g["notes_modified"] > 0
+    con.close()
+
+
+def test_synchro_desactivee_ne_lit_rien(steam_fake, monkeypatch):
+    con = _con_notes()
+    con.execute("INSERT INTO games VALUES (1, 'J', 'steam', '7', '', 0)")
+    con.execute("INSERT INTO settings (key, value) VALUES ('steam_notes_sync', '0')")
+    (steam_fake / "notes_7").write_text(
+        json.dumps({"notes": _steam(500)}), encoding="utf-8")
+    monkeypatch.setattr(sn, "lire_notes",
+                        lambda appid: (_ for _ in ()).throw(AssertionError("lu alors que désactivé")))
+    assert sn.synchroniser(con, 1) == "ignore"
+    assert con.execute("SELECT notes FROM games WHERE id=1").fetchone()["notes"] == ""
+
+
+def test_synchroniser_importe_puis_pousse(steam_fake):
+    con = _con_notes()
+    con.execute("INSERT INTO games VALUES (1, 'J', 'steam', '7', '', 0)")
+    (steam_fake / "notes_7").write_text(json.dumps({"notes": _steam(500)}), encoding="utf-8")
+    assert sn.synchroniser(con, 1) == "importer"
+    g = con.execute("SELECT notes, notes_modified FROM games WHERE id=1").fetchone()
+    assert g["notes"] == "s" and g["notes_modified"] == 500   # horodatage Steam hérité
+    assert sn.synchroniser(con, 1) == "rien"                  # réouverture : no-op stable
+
+    db.set_note(con, 1, "# Titre\n\nnote modifiée")           # l'utilisateur tape dans Ludodex
+    assert sn.synchroniser(con, 1) == "pousser"
+    notes = json.loads((steam_fake / "notes_7").read_text(encoding="utf-8"))["notes"]
+    assert len(notes) == 1 and notes[0]["title"] == "Titre"
+    assert notes[0]["content"] == "[p]note modifiée[/p]"
+    g2 = con.execute("SELECT notes_modified FROM games WHERE id=1").fetchone()
+    assert notes[0]["time_modified"] == g2["notes_modified"]  # invariant de synchro
+    assert sn.synchroniser(con, 1) == "rien"                  # poussé : réouverture = no-op
+
+
+def test_synchroniser_ignore_les_jeux_non_steam(steam_fake):
+    con = _con_notes()
+    con.execute("INSERT INTO games VALUES (1, 'J', 'lutris', 'run/jeu', '', 0)")
+    assert sn.synchroniser(con, 1) == "ignore"
+
+
+def _con_notes():
+    con = sqlite3.connect(":memory:")
+    con.row_factory = sqlite3.Row
+    con.execute("""CREATE TABLE games(id INTEGER PRIMARY KEY, name TEXT, source TEXT,
+                   ext_id TEXT, notes TEXT, notes_modified INTEGER)""")
+    con.execute("CREATE TABLE settings(key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '')")
+    return con
