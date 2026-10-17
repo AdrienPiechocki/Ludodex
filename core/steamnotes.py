@@ -51,26 +51,38 @@ _OLIST_LINE = re.compile(r"^[ \t]*\d+[.)] +(.*)$", re.M)
 _TAG_RE = re.compile(r"\[/?[a-z][a-z0-9]*(?:=[^\]]*)?\]")
 
 
+def _liste_en_lignes(numerotee):
+    """`[list]…[/list]` -> lignes Markdown, terminées par une ligne vide : un bloc
+    qui suit la liste ne doit jamais s'y coller."""
+    def conv(m):
+        items = [i.strip() for i in m.group(1).split("[*]") if i.strip()]
+        if numerotee:
+            corps = "\n".join(f"{n}. {i}" for n, i in enumerate(items, 1))
+        else:
+            corps = "\n".join("- " + i for i in items)
+        return corps + "\n\n"
+    return conv
+
+
 def bbcode_en_markdown(content):
     """Contenu BBCode d'une note Steam, rendu en Markdown de base.
 
-    Les listes passent en premier (ce sont des blocs) ; les liens ensuite, avant
-    les paires en ligne, dont le texte peut déjà contenir des liens convertis.
+    Les liens sont protégés par sentinelles pendant toutes les conversions :
+    le marqueur `[texte](url)` généré ne doit pas repasser pour une balise
+    inconnue par le nettoyage final — sinon un texte minuscule serait avalé.
     """
     s = content or ""
-    s = _URLEQ_RE.sub(lambda m: f"[{m.group(2)}]({m.group(1)})", s)
-    s = _URL_RE.sub(lambda m: f"[{m.group(1)}]({m.group(1)})", s)
-    s = re.sub(r"\[list\](.*?)\[/list\]",
-               lambda m: "\n".join("- " + i for i in m.group(1).split("[*]") if i.strip()), s, flags=re.S)
-    s = re.sub(r"\[olist\](.*?)\[/olist\]",
-               lambda m: "\n".join(f"{n}. {i}" for n, i in
-                                   enumerate((i for i in m.group(1).split("[*]") if i.strip()), 1)),
-               s, flags=re.S)
+    # les liens d'abord, avant les paires en ligne dont le texte peut en contenir
+    s = _URLEQ_RE.sub(lambda m: f"\x00{m.group(2)}\x01({m.group(1)})", s)
+    s = _URL_RE.sub(lambda m: f"\x00{m.group(1)}\x01({m.group(1)})", s)
+    s = re.sub(r"\[list\](.*?)\[/list\]", _liste_en_lignes(False), s, flags=re.S)
+    s = re.sub(r"\[olist\](.*?)\[/olist\]", _liste_en_lignes(True), s, flags=re.S)
     for motif, remp in _PAIRES_BB:
         s = re.sub(motif, remp, s, flags=re.S)
     # `[p]a[/p][p]b[/p]` -> paragraphes ; un `[p][/p]` vide ne laisse rien
     s = s.replace("[p]", "").replace("[/p]", "\n\n")
-    s = _TAG_RE.sub("", s)          # inconnues, mal fermées : texte gardé
+    s = _TAG_RE.sub("", s)      # inconnues, mal fermées : texte gardé
+    s = s.replace("\x00", "[").replace("\x01", "]")
     s = re.sub(r"\n{3,}", "\n\n", s)
     return s.strip()
 
@@ -169,16 +181,25 @@ def _fichier_notes(appid):
 
 def lire_notes(appid):
     """Notes overlay d'un jeu : [] si le fichier n'existe pas, **None** si
-    illisible — un JSON qu'on ne comprend pas n'est jamais écrasé."""
+    illisible — un JSON qu'on ne comprend pas n'est jamais écrasé. Une entrée
+    inutilisable (pas un dict, sans `id`/`content` textuels) rend tout le
+    fichier illisible : mieux vaut ne rien faire qu'écraser à moitié."""
     f = _fichier_notes(appid)
     if f is None or not f.exists():
         return []
     try:
         d = json.loads(f.read_text(encoding="utf-8"))
         notes = d["notes"]
-        return notes if isinstance(notes, list) else None
     except (OSError, ValueError, KeyError, TypeError):
         return None
+    if not isinstance(notes, list):
+        return None
+    for n in notes:
+        if (not isinstance(n, dict) or not isinstance(n.get("id"), str)
+                or not isinstance(n.get("content"), str)
+                or not isinstance(n.get("title", ""), str)):
+            return None
+    return notes
 
 
 def nouvel_id():
@@ -244,7 +265,7 @@ def synchroniser(con, gid):
     g = con.execute("SELECT source, ext_id, notes, notes_modified FROM games WHERE id=?",
                     (gid,)).fetchone()
     appid = steam_appid_of(g)
-    if g is None or appid is None:
+    if g is None or appid is None or compte_notes() is None:
         return "ignore"
     notes = lire_notes(appid)
     if notes is None:
@@ -260,4 +281,7 @@ def synchroniser(con, gid):
         titre, corps = titre_depuis_markdown(texte)
         quand = g["notes_modified"] or int(time.time())
         ecrire_notes(appid, note_id, titre, markdown_en_bbcode(corps), quand)
+        if not g["notes_modified"]:  # ligne héritée à 0 : le poussage referme l'invariant
+            con.execute("UPDATE games SET notes_modified=? WHERE id=?", (quand, gid))
+            con.commit()
     return action

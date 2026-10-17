@@ -28,6 +28,22 @@ def test_listes_et_liens():
     assert sn.bbcode_en_markdown("[url]https://x.fr[/url]") == "[https://x.fr](https://x.fr)"
 
 
+def test_blocs_ne_collent_jamais():
+    # un bloc qui suit une liste ne doit pas s'y coller, et une liste Steam
+    # multi-lignes (retours à la ligne dans le BBCode) reste une seule liste
+    assert sn.bbcode_en_markdown("[list][*]a[/list][p]b[/p]") == "- a\n\nb"
+    assert sn.bbcode_en_markdown("[list]\n[*]un\n[*]deux\n[/list]") == "- un\n- deux"
+    # aller-retour d'une liste à lignes blanches (Markdown valide) : stable
+    assert sn.bbcode_en_markdown(sn.markdown_en_bbcode("- un\n\n- deux")) == "- un\n\n- deux"
+
+
+def test_lien_texte_minuscule_survit():
+    # le marqueur [lien] généré ne doit PAS être avalé par le nettoyage des balises
+    assert sn.bbcode_en_markdown("[url=https://x.fr]lien[/url]") == "[lien](https://x.fr)"
+    assert sn.bbcode_en_markdown("[url=https://x.fr]X[/url]") == "[X](https://x.fr)"
+    assert sn.bbcode_en_markdown("[url]https://x.fr[/url]") == "[https://x.fr](https://x.fr)"
+
+
 def test_tags_inconnus_gardent_le_texte():
     assert sn.bbcode_en_markdown("[zz]gardi[/zz]") == "gardi"
     assert sn.bbcode_en_markdown("[b]gardi") == "gardi"   # balise non fermée : texte gardé
@@ -72,6 +88,18 @@ def test_fichier_casse_ignore(steam_fake):
     cible.write_bytes(b"{pas du json")
     assert sn.lire_notes(1) is None
     assert cible.read_bytes() == b"{pas du json"      # jamais écrasé
+
+
+def test_fichier_malforme_classe_illisible(steam_fake):
+    # parseable mais inutilisable : ces fichiers doivent aussi être « illisibles »
+    (steam_fake / "notes_1").write_text(json.dumps({"notes": ["boom"]}), encoding="utf-8")
+    assert sn.lire_notes(1) is None
+    (steam_fake / "notes_2").write_text(
+        json.dumps({"notes": [{"title": "", "content": "[p]x[/p]"}]}), encoding="utf-8")
+    assert sn.lire_notes(2) is None                  # pas d'`id` : entrée inutilisable
+    (steam_fake / "notes_3").write_text(
+        json.dumps({"notes": [{"id": "a", "content": 42}]}), encoding="utf-8")
+    assert sn.lire_notes(3) is None                  # content non-texte
 
 
 def test_ecriture_atomique(steam_fake):
@@ -174,6 +202,29 @@ def test_synchroniser_ignore_les_jeux_non_steam(steam_fake):
     con = _con_notes()
     con.execute("INSERT INTO games VALUES (1, 'J', 'lutris', 'run/jeu', '', 0)")
     assert sn.synchroniser(con, 1) == "ignore"
+
+
+def test_synchro_fichier_malforme_ne_crash_et_ne_ecrit_rien(steam_fake):
+    con = _con_notes()
+    con.execute("INSERT INTO games VALUES (1, 'J', 'steam', '1', 'note locale', 100)")
+    cible = steam_fake / "notes_1"
+    cible.write_text(json.dumps({"notes": ["boom"]}), encoding="utf-8")
+    brut = cible.read_bytes()
+    assert sn.synchroniser(con, 1) == "ignore"       # jamais de crash de la page Notes
+    assert cible.read_bytes() == brut
+
+
+def test_poussage_depuis_notes_modified_nul_referme_l_invariant(steam_fake):
+    # ligne héritée de la migration (colonne à 0) : le poussage doit quand même
+    # laisser time_modified == notes_modified, sinon la stabilité saute
+    con = _con_notes()
+    con.execute("INSERT INTO games VALUES (1, 'J', 'steam', '7', 'note locale', 0)")
+    assert sn.synchroniser(con, 1) == "pousser"
+    g = con.execute("SELECT notes_modified FROM games WHERE id=1").fetchone()
+    assert g["notes_modified"] > 0
+    notes = json.loads((steam_fake / "notes_7").read_text(encoding="utf-8"))["notes"]
+    assert notes[0]["time_modified"] == g["notes_modified"]
+    assert sn.synchroniser(con, 1) == "rien"
 
 
 def _con_notes():
