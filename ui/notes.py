@@ -50,10 +50,12 @@ class NotesMixin:
         self.notes_game_id = None
         self._note_loading = False   # on charge une note : le « changed » ne doit pas enregistrer
         self._note_dirty = False
+        self._note_rowid = None      # ligne `game_notes` en cours d'édition (None = pas de note)
         self._note_timeout = None
         self._note_poll = None      # veille du fichier overlay (temps réel Steam)
         self._note_poll_cible = None
         self._note_rows = {}
+        self._tab_buttons = {}        # onglets du jeu : rowid -> Gtk.ToggleButton
         self._md_applying = False    # pose des balises en cours : on ignore les signaux
         self._md_idle = None
         self._note_tasks = []        # cases à cocher : (début du tiret, fin du `]`, coché)
@@ -101,6 +103,32 @@ class NotesMixin:
         self.toc_toggle.connect("toggled", self._on_toc_toggled)
         title_row.append(self.toc_toggle)
         title_row.append(self.note_help_btn)
+        # --- onglets des notes DU JEU + création / suppression ---
+        # Les notes vides de l'overlay ne sont pas en base : elles n'ont donc
+        # pas d'onglet (la poussée les préserve côté fichier, jamais l'inverse).
+        # GtkListBox n'est pas orientable en GTK4 : un box de boutons groupés
+        # (radios) fait office d'onglets horizontaux.
+        self.notes_tabs = Gtk.Box(spacing=4, hexpand=True, valign=Gtk.Align.CENTER,
+                                  css_classes=["toolbar"])
+        self.new_note_btn = Gtk.Button(icon_name="list-add-symbolic", valign=Gtk.Align.CENTER,
+                                       css_classes=["flat"], tooltip_text=tr("New note"))
+        self.new_note_btn.connect("clicked", self._on_new_note)
+        self.del_note_btn = Gtk.Button(icon_name="user-trash-symbolic", valign=Gtk.Align.CENTER,
+                                       css_classes=["flat"], tooltip_text=tr("Delete note"),
+                                       sensitive=False)  # aucune note ouverte : inactif
+        self.del_note_btn.connect("clicked", self._on_delete_note)
+        tabs_row = Gtk.Box(spacing=6)
+        tabs_row.append(self.notes_tabs)
+        tabs_row.append(self.new_note_btn)
+        tabs_row.append(self.del_note_btn)
+        # Titre de LA NOTE (champ éditable, modèle titre/corps) — pas le libellé
+        # `note_title` du jeu, plus haut dans la colonne. AdwEntryRow n'existe
+        # que dans une GtkListBox (avertissement Adwaita sinon).
+        self._note_title = Adw.EntryRow(title=tr("Title"))
+        self._note_title.connect("changed", self._on_note_title_changed)
+        note_title_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE,
+                                      css_classes=["boxed-list"])
+        note_title_list.append(self._note_title)
         self.toc_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE,
                                     css_classes=["navigation-sidebar"])
         self.toc_list.connect("row-selected", self._on_toc_row)
@@ -147,7 +175,7 @@ class NotesMixin:
         self.note_overlay.add_overlay(self.note_check_area)
         editor = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6,
                          margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
-        for w in (title_row, self.note_subtitle, self.note_overlay):
+        for w in (title_row, self.note_subtitle, tabs_row, note_title_list, self.note_overlay):
             editor.append(w)
         notes_paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
         notes_paned.set_start_child(editor)
@@ -783,19 +811,22 @@ class NotesMixin:
     def _has_notes(self):
         """Un jeu noté est-il visible dans la liste (masqués filtrés, non-installés gardés) ?"""
         rows = self.con.execute(
-            f"SELECT notes FROM games {self._lib_where(trailing=True, sans_installe=True)}").fetchall()
-        return any((r["notes"] or "").strip() for r in rows)
+            "SELECT EXISTS (SELECT 1 FROM game_notes WHERE game_id = games.id AND deleted = 0)"
+            f" AS notee FROM games {self._lib_where(trailing=True, sans_installe=True)}").fetchall()
+        return any(r["notee"] for r in rows)
 
     def _note_games(self):
         """Jeux proposés : filtres bibliothèque SAUF non-installés (gardés), triés par nom."""
         rows = self.con.execute(
-            f"SELECT id, name, notes FROM games {self._lib_where(trailing=True, sans_installe=True)}"
+            "SELECT id, name, EXISTS (SELECT 1 FROM game_notes"
+            f" WHERE game_id = games.id AND deleted = 0) AS notee"
+            f" FROM games {self._lib_where(trailing=True, sans_installe=True)}"
             "ORDER BY name COLLATE NOCASE").fetchall()
         needle = self.notes_search.get_text().strip().casefold()
         if needle:
             rows = [r for r in rows if needle in r["name"].casefold()]
         if self.notes_only.get_active():
-            rows = [r for r in rows if r["notes"].strip()]
+            rows = [r for r in rows if r["notee"]]
         return rows
 
     def _fill_notes_list(self):
@@ -818,8 +849,7 @@ class NotesMixin:
         row._gid = g["id"]
         icon = Gtk.Image(icon_name="document-edit-symbolic", valign=Gtk.Align.CENTER,
                          css_classes=["accent"], tooltip_text=tr("Has a note"),
-                         visible=bool(g["notes"].strip()))
-        row._note_icon = icon
+                         visible=bool(g["notee"]))
         row.add_suffix(icon)
         return row
 
@@ -836,24 +866,98 @@ class NotesMixin:
         self._flush_note()  # on enregistre la note du jeu que l'on quitte
         self._show_note(gid)
 
+    def _on_note_tab_toggled(self, btn):
+        """Un onglet est activé : la note quittée est enregistrée, la nouvelle ouverte."""
+        if not btn.get_active():
+            return  # le groupe éteint l'ancien onglet : seule l'activation ouvre
+        rowid = getattr(btn, "_rowid", None)
+        if rowid is None or rowid == self._note_rowid:
+            return  # c'est la note déjà affichée (reconstruction d'onglets : pas de rechargement)
+        self._flush_note()  # la note quittée est enregistrée (même jeu, autre ligne)
+        self._open_note(rowid)
+
+    def _refresh_notes_tabs(self, select=None):
+        """Reconstruit les onglets (les notes visibles du jeu) et active
+        `select`, sinon la note courante, sinon la première. Une note disparue
+        bascule sur la suivante ; s'il n'en reste, l'éditeur se vide."""
+        if self.notes_game_id is None:
+            return
+        while (child := self.notes_tabs.get_first_child()) is not None:
+            self.notes_tabs.remove(child)
+        self._tab_buttons = {}
+        premier = None
+        for l in P.notes_of_game(self.con, self.notes_game_id):
+            label = (l["title"] or "").strip()
+            if not label:  # sans titre : la première ligne du corps sert d'étiquette
+                label = next((ln.strip() for ln in (l["content"] or "").splitlines()
+                              if ln.strip()), "")
+            btn = Gtk.ToggleButton()
+            btn.set_child(Gtk.Label(label=label or tr("Untitled note"), max_width_chars=24,
+                                    ellipsize=Pango.EllipsizeMode.END,
+                                    margin_start=6, margin_end=6))
+            btn._rowid = l["id"]
+            btn.connect("toggled", self._on_note_tab_toggled)
+            if premier is not None:
+                btn.set_group(premier)  # radio : un seul onglet actif à la fois
+            self.notes_tabs.append(btn)
+            self._tab_buttons[l["id"]] = btn
+            if premier is None:
+                premier = btn
+        cible = self._tab_buttons.get(select) or self._tab_buttons.get(self._note_rowid) or premier
+        if cible is not None:
+            cible.set_active(True)  # « toggled » ouvre la note si la ligne change
+            self.del_note_btn.set_sensitive(True)
+        else:
+            self.del_note_btn.set_sensitive(False)
+            if self._note_rowid is not None:
+                self._reset_editor_body()      # la note affichée n'existe plus (miroir Steam)
+
+    def _open_note(self, rowid):
+        """Charge titre et corps d'une note dans l'éditeur. Rend False si la
+        ligne a disparu entre-temps (appelant : bascule ou nettoyage)."""
+        r = self.con.execute("SELECT title, content FROM game_notes "
+                             "WHERE id=? AND deleted=0", (rowid,)).fetchone()
+        if not r:
+            self._reset_editor_body()
+            return False
+        self._note_rowid = rowid
+        self._note_loading = True
+        self._note_title.set_text(r["title"] or "")
+        self.note_buffer.set_text(r["content"] or "")
+        self._note_loading = False
+        self._note_dirty = False
+        self.note_buffer.place_cursor(self.note_buffer.get_start_iter())
+        self._apply_md()
+        return True
+
+    def _reset_editor_body(self):
+        """L'éditeur se vide proprement : plus de note ouverte, mais le jeu, lui,
+        reste sélectionné — le premier jet en créera une au clavier."""
+        self._note_rowid = None
+        self._note_dirty = False
+        self._note_loading = True
+        self._note_title.set_text("")
+        self.note_buffer.set_text("")
+        self._note_loading = False
+        self._set_toc([])
+        self.del_note_btn.set_sensitive(False)
+        self._apply_md()
+
     def _show_note(self, gid):
         self.notes_game_id = gid
         try:
             P.synchroniser(self.con, gid)  # le carnet overlay se vide (ou se remplit) ici
         except OSError:
             pass  # dossier Steam inaccessible : la note reste éditable
-        g = self.con.execute("SELECT name, notes FROM games WHERE id=?", (gid,)).fetchone()
+        g = self.con.execute("SELECT name FROM games WHERE id=?", (gid,)).fetchone()
         if not g:
             self._clear_note_editor()
             return
         self.note_title.set_text(g["name"])
         self.note_subtitle.set_text(self._note_subtitle(gid))
-        self._note_loading = True
-        self.note_buffer.set_text(g["notes"] or "")
-        self._note_loading = False
-        self._note_dirty = False
-        self.note_buffer.place_cursor(self.note_buffer.get_start_iter())
-        self._apply_md()
+        self._note_rowid = None
+        self._reset_editor_body()
+        self._refresh_notes_tabs()  # la première note s'ouvre via « toggled » (ou l'éditeur reste vide)
         self.notes_right.set_visible_child_name("editor")
         self._start_note_poll()
 
@@ -900,14 +1004,20 @@ class NotesMixin:
                     P.synchroniser(self.con, gid)
                 except OSError:
                     return True                 # dossier Steam grisé un instant : on réessaiera
-                texte = P.get_note(self.con, gid)
-                if texte != self._note_text():
-                    self._note_loading = True
-                    self.note_buffer.set_text(texte or "")
-                    self._note_loading = False
-                    self._note_dirty = False
-                    self._apply_md()
+                # Les onglets suivent les notes créées/supprimées côté Steam, puis
+                # le corps affiché est relu — Ludodex ne montrera jamais une note
+                # que le carnet a retirée.
+                self._refresh_notes_tabs()
+                self._reload_current_note()
         return True
+
+    def _reload_current_note(self):
+        """Après import : le corps de la note affichée est rechargé (il peut avoir
+        bougé côté Steam) ; sans note ouverte, l'éditeur reste vide."""
+        if self._note_rowid is not None:
+            self._open_note(self._note_rowid)
+        else:
+            self._reset_editor_body()
 
     def _note_subtitle(self, gid):
         inst, hid, pt, status = self.con.execute(
@@ -919,6 +1029,7 @@ class NotesMixin:
     def _clear_note_editor(self):
         self.notes_game_id = None
         self._note_dirty = False
+        self._note_rowid = None
         if self._note_poll is not None:        # plus de note affichée : la veille s'arrête
             GLib.source_remove(self._note_poll)
             self._note_poll = None
@@ -926,14 +1037,37 @@ class NotesMixin:
         self.notes_right.set_visible_child_name("empty")
 
     # ---------- édition et enregistrement ----------
-    def _on_note_changed(self, *_):
+    def _note_touch(self, render):
+        """Une frappe (corps OU titre) : la note naît si besoin, l'enregistrement
+        est repoussé tant que l'utilisateur tape. `render` = relancer l'aperçu."""
         if self._note_loading or self.notes_game_id is None:
             return
+        if self._note_rowid is None:
+            # Première frappe : la ligne est créée à l'instant où le texte existe
+            # — survoler un jeu sans écrire ne laisse aucune note vide derrière.
+            if not self._note_title.get_text().strip() and not self._note_text().strip():
+                return
+            self._ensure_note_row()
         self._note_dirty = True
-        self._schedule_md()  # le rendu suit la frappe
+        if render:
+            self._schedule_md()  # le rendu suit la frappe
         if self._note_timeout is not None:  # on repousse l'enregistrement tant qu'on tape
             GLib.source_remove(self._note_timeout)
         self._note_timeout = GLib.timeout_add(NOTE_SAVE_DELAY, self._save_note)
+
+    def _ensure_note_row(self):
+        """Crée la note courante (jamais d'onglet vide à l'avance) et l'ouvre."""
+        self._note_rowid = P.create_note(self.con, self.notes_game_id,
+                                         self._note_title.get_text().strip(),
+                                         self._note_text())
+        self._refresh_notes_tabs(select=self._note_rowid)
+        self._fill_notes_list()  # la pastille du jeu s'allume
+
+    def _on_note_changed(self, *_):
+        self._note_touch(render=True)
+
+    def _on_note_title_changed(self, *_):
+        self._note_touch(render=False)  # le titre n'est pas du Markdown : pas d'aperçu
 
     def _note_text(self):
         buf = self.note_buffer
@@ -942,18 +1076,16 @@ class NotesMixin:
 
     def _save_note(self):
         self._note_timeout = None
-        if not self._note_dirty or self.notes_game_id is None:
+        if not self._note_dirty or self.notes_game_id is None or self._note_rowid is None:
             return False
-        gid, text = self.notes_game_id, self._note_text()
-        P.set_note(self.con, gid, text)
+        gid, rowid = self.notes_game_id, self._note_rowid
+        P.set_note_row(self.con, rowid, self._note_title.get_text(), self._note_text())
         try:
-            P.synchroniser(self.con, gid)  # la poussée reprend l'horodatage que set_note vient de poser
+            P.synchroniser(self.con, gid)  # la poussée reprend l'horodatage que set_note_row vient de poser
         except OSError:
             pass  # dossier Steam inaccessible : la note locale tient quand même
         self._note_dirty = False
-        row = self._note_rows.get(gid)  # la pastille de la liste suit l'état de la note
-        if row is not None:
-            row._note_icon.set_visible(bool(text.strip()))
+        self._refresh_notes_tabs()  # l'étiquette de l'onglet suit le titre saisi
         return False
 
     def _flush_note(self):
@@ -962,3 +1094,46 @@ class NotesMixin:
             GLib.source_remove(self._note_timeout)
             self._note_timeout = None
         self._save_note()
+
+    # ---------- création et suppression d'une note ----------
+    def _on_new_note(self, *_):
+        """« + » : une note vide naît pour le jeu et prend le focus."""
+        if self.notes_game_id is None:
+            return
+        self._flush_note()  # l'éventuelle note en cours est enregistrée avant
+        rowid = P.create_note(self.con, self.notes_game_id)
+        self._note_rowid = None  # la ligne neuve DOIT être ouverte, pas confondue avec l'ancienne
+        self._refresh_notes_tabs(select=rowid)
+        self._note_title.grab_focus()
+
+    def _on_delete_note(self, *_):
+        """Suppression logique (tombe) : la poussée suivante la retire du carnet."""
+        rowid, gid = self._note_rowid, self.notes_game_id
+        if rowid is None or gid is None:
+            return
+        dlg = Adw.AlertDialog(heading=tr("Delete this note?"),
+                              body=tr("It will also be removed from the Steam overlay notebook."))
+        dlg.add_response("cancel", tr("Cancel"))
+        dlg.add_response("delete", tr("Delete"))
+        dlg.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
+        dlg.set_default_response("cancel")
+        dlg.set_close_response("cancel")
+
+        def on_resp(_d, resp):
+            if resp != "delete":
+                return
+            if self._note_timeout is not None:  # plus aucun enregistrement pour elle
+                GLib.source_remove(self._note_timeout)
+                self._note_timeout = None
+            self._note_dirty = False
+            P.tombstone_note(self.con, rowid)
+            try:
+                P.synchroniser(self.con, gid)  # elle quitte le carnet overlay ici
+            except OSError:
+                pass  # dossier Steam inaccessible : la tombe reste, servie à la prochaine poussée
+            self._reset_editor_body()  # son texte ne doit PAS rester sous les doigts
+            self._refresh_notes_tabs()  # bascule sur la note suivante, ou éditeur vide
+            self._fill_notes_list()  # pastille et filtre « notés » suivent
+
+        dlg.connect("response", on_resp)
+        dlg.present(self)
