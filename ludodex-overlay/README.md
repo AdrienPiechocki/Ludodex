@@ -9,9 +9,13 @@ tué par Ludodex à chaque lancement de jeu.
 - **Shift+Tab** (raccourci global via le portail `GlobalShortcuts`) ouvre et
   ferme l'overlay ; une fois fermé, seuls les widgets **épinglés** restent
   visibles, translucides et non interactifs (les clics traversent vers le jeu).
-- **Échap** (en mode overlay) referme l'overlay ; le bouton **⏻ Quitter**
-  termine l'application — elle n'est jamais muette : si le raccourci refuse,
-  une notification explique pourquoi puis l'overlay s'arrête.
+- L'overlay **ne prend jamais le focus clavier** : les jeux plein écran se
+  minimiseraient d'eux-mêmes dès la perte de focus (constat du 2026-10-17,
+  KWin active toute fenêtre layer-shell qui se carte — même en ON_DEMAND).
+  Tout se pilote à la souris : **Shift+Tab** ou le bouton **✕ Fermer** du
+  panneau referment l'overlay ; le bouton **⏻ Quitter** termine
+  l'application — elle n'est jamais muette : si le raccourci refuse, une
+  notification explique pourquoi puis l'overlay s'arrête.
 - Dans l'overlay : un panneau central (interrupteurs de widgets, réglages,
   écran) et les widgets flottants, **déplaçables à la souris/doigt** avec
   aimantation douxe aux bords. Réglages par widget : transparence (30 %

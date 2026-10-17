@@ -2,8 +2,10 @@
 
 Une ligne par widget activable (interrupteur + réglages), un bouton
 « Ajouter une widget » insensible (un seul widget en v1) et, en bas, le
-raccourci de fermeture et le bouton Quitter (l'overlay est orphelin : il
-doit toujours pouvoir être fermé à la main).
+bouton Fermer (Shift+Tab aussi) et Quitter — l'overlay ne prend jamais le
+focus clavier (le jeu le garderait sinon, et plein écran se minimiserait) :
+tout se pilote à la souris, l'overlay est orphelin et doit toujours
+pouvoir être fermé à la main.
 """
 from gi.repository import Gtk
 
@@ -16,7 +18,8 @@ class Panneau(Gtk.Box):
     def __init__(self, entrees: "list[tuple[str, str, bool]]",
                  on_toggle: callable, on_quitter: callable,
                  on_reglages: "callable | None" = None,
-                 ecran: "Gtk.Widget | None" = None):
+                 ecran: "Gtk.Widget | None" = None,
+                 on_fermer: "callable | None" = None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=8,
                          css_classes=["panneau"])
         if ecran is not None:
@@ -27,7 +30,11 @@ class Panneau(Gtk.Box):
         self.append(Gtk.Button(label=tr("Add widget"), sensitive=False))
         bas = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12,
                       margin_top=8)
-        bas.append(Gtk.Label(label=tr("Close: Shift+Tab / Esc")))
+        bas.append(Gtk.Label(label=tr("Close: Shift+Tab")))
+        fermer = Gtk.Button(label="✕ " + tr("Close"))
+        if on_fermer is not None:
+            fermer.connect("clicked", lambda *_: on_fermer())
+        bas.append(fermer)
         quitter = Gtk.Button(label="⏻ " + tr("Quit"))
         quitter.connect("clicked", lambda *_: on_quitter())
         bas.append(quitter)

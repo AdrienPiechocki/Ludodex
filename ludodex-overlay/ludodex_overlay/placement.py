@@ -47,3 +47,17 @@ def frac_vers_px(fx: float, fy: float, elargeur: float, ehauteur: float) -> typi
 def px_vers_frac(x: float, y: float, elargeur: float, ehauteur: float) -> typing.Tuple[float, float]:
     """Position pixel (rendu) -> fraction (persistance)."""
     return (x / elargeur, y / ehauteur)
+
+
+def pas_de_drag(marge_x: float, marge_y: float, dx: float, dy: float,
+                largeur: float, hauteur: float,
+                elargeur: float, ehauteur: float) -> typing.Tuple[int, int]:
+    """Prochaines marges à appliquer pendant un drag GTK4.
+
+    Les offsets `drag-update` sont livrés dans le repère du WIDGET, qui
+    bouge dès qu'on applique une marge : partir de la marge COURANTE (et
+    non du point de départ) replace le point de préhension exactement sous
+    le pointeur à chaque event — l'ancienne base faisait traîner le widget
+    derrière la souris (constat du 2026-10-17)."""
+    x, y = ajuster(marge_x + dx, marge_y + dy, largeur, hauteur, elargeur, ehauteur)
+    return (int(x), int(y))

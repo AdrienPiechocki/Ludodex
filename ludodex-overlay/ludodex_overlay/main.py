@@ -5,7 +5,9 @@ Un seul `Gtk.Application` par machine (application_id fixe) : le second
 lancement met à jour `--game` sans ouvrir de deuxième fenêtre.
 
 Modes de la fenêtre (validés au spike sur KWin) :
-- « overlay » : voile plein écran + panneau + clavier exclusif (saisie au panneau) ;
+- « overlay » : voile plein écran + panneau — JAMAIS de focus clavier (KWin
+                active toute layer-shell carte, même ON_DEMAND : les jeux
+                plein écran se minimiseraient) ; interaction souris/Shift+Tab ;
 - « pinned »  : seuls les widgets épinglés restent visibles, translucides et
                 non interactifs — la région d'entrée est vidée, les clics
                 traversent vers le jeu ;
@@ -114,9 +116,11 @@ class Fenetre(Gtk.ApplicationWindow):
         panneau et vie du tick (rafraîchi seulement quand visible)."""
         self._mode = mode
         self.set_visible(mode != "hidden")
-        Gtk4LayerShell.set_keyboard_mode(
-            self, Gtk4LayerShell.KeyboardMode.EXCLUSIVE if mode == "overlay"
-            else Gtk4LayerShell.KeyboardMode.NONE)
+        # Aucun focus clavier (expériences du 2026-10-17 : KWin ACTIVE toute
+        # surface layer-shell qui se carte, même en ON_DEMAND — les jeux
+        # plein écran se minimisent alors d'eux-mêmes) : le jeu garde son
+        # clavier, l'overlay s'utilise à la souris + Shift+Tab.
+        Gtk4LayerShell.set_keyboard_mode(self, Gtk4LayerShell.KeyboardMode.NONE)
         surface = self.get_surface()
         if surface is not None:
             largeur, hauteur = max(self.get_width(), 1), max(self.get_height(), 1)
@@ -154,6 +158,8 @@ class Fenetre(Gtk.ApplicationWindow):
         self.get_application().quit()
 
     def _touche(self, _controle, keyval, _code, _etats) -> bool:
+        # Sans focus clavier (mode NONE) c'est mort-vivant : la fermeture
+        # réelle est Shift+Tab (portail) et ✕ Fermer du panneau.
         if keyval == Gdk.KEY_Escape and self._mode == "overlay":
             self.basculer()
             return True
@@ -225,22 +231,22 @@ class Fenetre(Gtk.ApplicationWindow):
 
     def _attacher_deplacement(self, ident: str, conteneur: Gtk.Box) -> None:
         """Drag au doigt/souris : aimantation douce pendant le mouvement,
-        position convertie en fractions (persistance) au relâchement."""
-        depart = {"x": 0, "y": 0}
+        position convertie en fractions (persistance) au relâchement.
 
-        def debut(_geste, _x, _y):
-            depart["x"] = conteneur.get_margin_start()
-            depart["y"] = conteneur.get_margin_top()
-
+        Les offsets GTK4 sont livrés dans le repère du widget, qui bouge
+        dès qu'on applique une marge : la base est la marge COURANTE
+        (`placement.pas_de_drag`), sinon le widget traîne derrière la
+        souris (bug du 2026-10-17, cause racine en test)."""
         def mise_a_jour(_geste, dx, dy):
             largeur, hauteur = self.get_width(), self.get_height()
             if largeur <= 0:
                 return
-            x, y = placement.ajuster(
-                depart["x"] + dx, depart["y"] + dy,
-                conteneur.get_width(), conteneur.get_height(), largeur, hauteur)
-            conteneur.set_margin_start(int(x))
-            conteneur.set_margin_top(int(y))
+            x, y = placement.pas_de_drag(
+                conteneur.get_margin_start(), conteneur.get_margin_top(),
+                dx, dy, conteneur.get_width(), conteneur.get_height(),
+                largeur, hauteur)
+            conteneur.set_margin_start(x)
+            conteneur.set_margin_top(y)
 
         def fin(_geste, _dx, _dy):
             largeur, hauteur = self.get_width(), self.get_height()
@@ -253,7 +259,6 @@ class Fenetre(Gtk.ApplicationWindow):
             config.sauver(config.chemin_defaut(), self.conf)
 
         geste = Gtk.GestureDrag()
-        geste.connect("drag-begin", debut)
         geste.connect("drag-update", mise_a_jour)
         geste.connect("drag-end", fin)
         conteneur.add_controller(geste)
@@ -358,7 +363,8 @@ class Fenetre(Gtk.ApplicationWindow):
             for cle, entree in self.conf["widgets"].items()]
         self.panneau = Panneau(entrees, self.basculer_actif, self.fermer,
                                on_reglages=lambda i, b: self.ouvrir_reglages(b, i),
-                               ecran=self._ligne_ecran())
+                               ecran=self._ligne_ecran(),
+                               on_fermer=self.basculer)
         self.panneau.set_halign(Gtk.Align.CENTER)
         self.panneau.set_valign(Gtk.Align.CENTER)
         self.racine.add_overlay(self.panneau)
