@@ -3,5 +3,11 @@
   "Ludodex Overlay": "Ludodex Overlay",
   "Clock": "Horloge",
   "24-hour format": "Format 24 h",
-  "Show seconds": "Afficher les secondes"
+  "Show seconds": "Afficher les secondes",
+  "Close: Shift+Tab / Esc": "Fermer : Shift+Tab / Échap",
+  "Quit": "Quitter",
+  "Add widget": "Ajouter une widget",
+  "Pin": "Épingler",
+  "Settings": "Réglages",
+  "Remove": "Retirer"
 }

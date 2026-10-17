@@ -4,12 +4,16 @@
 Un seul `Gtk.Application` par machine (application_id fixe) : le second
 lancement met à jour `--game` sans ouvrir de deuxième fenêtre.
 
-Modes de la fenêtre (complétés tâche 7) :
-- « hidden »   : défaut, fenêtre invisible, en attente de Shift+Tab ;
-- « overlay »  : voile plein écran + panneau (tâche 7) ;
-- « pinned »   : seuls les widgets épinglés restent visibles (tâche 7).
+Modes de la fenêtre (validés au spike sur KWin) :
+- « overlay » : voile plein écran + panneau + clavier exclusif (saisie au panneau) ;
+- « pinned »  : seuls les widgets épinglés restent visibles, translucides et
+                non interactifs — la région d'entrée est vidée, les clics
+                traversent vers le jeu ;
+- « hidden »  : fenêtre invisible, en attente de Shift+Tab.
 """
 import os, sys
+
+import cairo
 
 import gi
 gi.require_version("Gtk", "4.0")
@@ -17,14 +21,22 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("Gtk4LayerShell", "1.0")
 from gi.repository import Gdk, Gio, GLib, Gtk, Gtk4LayerShell
 
-from . import config
+from . import config, placement
 from .i18n import tr
+from .panel import Panneau
 from .widgets import REGISTRE, options_defauts
 
 ID = "io.github.AdrienPiechocki.LudodexOverlay"
 
-# Style des widgets (classes CSS auto-ajoutées par leur fabrique).
-CSS = b".clock { font-family: monospace; font-size: 48px; font-weight: bold; }"
+# Styles d'application (chaque conteneur porte sa classe CSS).
+CSS = b"""
+window { background-color: transparent; }
+.clock { font-family: monospace; font-size: 48px; font-weight: bold; }
+.voile { background-color: rgba(10, 10, 14, 0.55); }
+.panneau { background-color: rgba(24, 24, 32, 0.96); border-radius: 14px; padding: 18px; color: #f2f2f5; }
+.panneau-titre { font-size: 20px; font-weight: bold; margin-bottom: 6px; }
+.widget { background-color: rgba(0, 0, 0, 0.45); border-radius: 10px; padding: 8px; }
+"""
 
 
 def _installer_css() -> None:
@@ -37,8 +49,8 @@ def _installer_css() -> None:
 
 
 def _texte(morceau) -> str:
-    """Un élément des arguments `aay` de GApplication, quel que soit son type
-    d'emballage (bytes, str ou liste d'entiers)."""
+    """Un élément des arguments d'une GApplicationCommandLine, quel que soit
+    son type d'emballage (str, bytes ou liste d'entiers)."""
     if isinstance(morceau, (bytes, bytearray)):
         return bytes(morceau).decode("utf-8", "replace")
     if isinstance(morceau, str):
@@ -64,7 +76,7 @@ def notifier(resume: str, corps: str) -> None:
 
 
 class Fenetre(Gtk.ApplicationWindow):
-    """Fenêtre layer-shell unique : un seul voile pour tous les widgets."""
+    """Fenêtre layer-shell unique : voile, panneau et widgets flottants."""
 
     def __init__(self, app: Gtk.Application):
         super().__init__(application=app, title=tr("Ludodex Overlay"))
@@ -74,37 +86,244 @@ class Fenetre(Gtk.ApplicationWindow):
         for bord in (Gtk4LayerShell.Edge.TOP, Gtk4LayerShell.Edge.RIGHT,
                      Gtk4LayerShell.Edge.BOTTOM, Gtk4LayerShell.Edge.LEFT):
             Gtk4LayerShell.set_anchor(self, bord, True)
+        _installer_css()
         self._mode = "hidden"
         self.conf = config.charger(config.chemin_defaut())
-        self.instances: "list[tuple]" = []  # [(spécimen Widget, rendu)]
-        _installer_css()
-        boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        boite.set_margin_top(24)
-        boite.set_margin_start(24)
+        self.instances: "list[tuple]" = []  # [(spécimen Widget, conteneur)]
+        self.panneau: "Panneau | None" = None
+        self._tick_id: "int | None" = None
+        # Racine : enfant plein écran (le voile) + enfants flottants par-dessus.
+        self.racine = Gtk.Overlay()
+        self._voile = Gtk.Box(css_classes=["voile"])
+        self.racine.set_child(self._voile)
+        self.set_child(self.racine)
+        controle = Gtk.EventControllerKey()
+        controle.connect("key-pressed", self._touche)
+        self.add_controller(controle)
+        self.connect("map", lambda *_: self.placer_tout())
+        self.construire_widgets()
+        self._placer_panneau()
+        self.set_visible(False)
+
+    # ------------------------------------------------------------------ modes
+
+    def definer_mode(self, mode: str) -> None:
+        """Applique un mode : visibilité, clavier, région d'entrée, voile,
+        panneau et vie du tick (rafraîchi seulement quand visible)."""
+        self._mode = mode
+        self.set_visible(mode != "hidden")
+        Gtk4LayerShell.set_keyboard_mode(
+            self, Gtk4LayerShell.KeyboardMode.EXCLUSIVE if mode == "overlay"
+            else Gtk4LayerShell.KeyboardMode.NONE)
+        surface = self.get_surface()
+        if surface is not None:
+            largeur, hauteur = max(self.get_width(), 1), max(self.get_height(), 1)
+            if mode == "pinned":
+                # Clics traversants : région vide (validé KWin au spike).
+                surface.set_input_region(cairo.Region())
+            else:
+                surface.set_input_region(cairo.Region(
+                    cairo.RectangleInt(x=0, y=0, width=largeur, height=hauteur)))
+        self._voile.set_visible(mode == "overlay")
+        if self.panneau is not None:
+            self.panneau.set_visible(mode == "overlay")
+        if mode != "overlay":
+            self.reveler_barre(None, False)
+        self._gerer_tick(mode != "hidden")
+        if mode == "overlay":
+            self.placer_tout()
+
+    def basculer(self) -> None:
+        """Ouvre/ferme l'overlay : fermé → épinglés seuls (ou rien), sinon voile."""
+        if self._mode == "overlay":
+            epingle = any(entree.get("epingle")
+                          for entree in self.conf["widgets"].values())
+            self.definer_mode("pinned" if epingle else "hidden")
+        else:
+            self.definer_mode("overlay")
+
+    def fermer(self) -> None:
+        """⏻ Quitter : l'overlay est orphelin, il doit toujours pouvoir sortir."""
+        self.get_application().quit()
+
+    def _touche(self, _controle, keyval, _code, _etats) -> bool:
+        if keyval == Gdk.KEY_Escape and self._mode == "overlay":
+            self.basculer()
+            return True
+        return False
+
+    def _gerer_tick(self, actif: bool) -> None:
+        if actif and self._tick_id is None:
+            self._tick_id = GLib.timeout_add_seconds(1, self._tick)
+        elif not actif and self._tick_id is not None:
+            GLib.source_remove(self._tick_id)
+            self._tick_id = None
+
+    def _tick(self) -> bool:
+        for specimen, _conteneur in self.instances:
+            specimen.tick()
+        return True
+
+    # ---------------------------------------------------------------- widgets
+
+    def construire_widgets(self) -> None:
+        """Construit les widgets actifs de la config dans des conteneurs
+        flottants (drag + barre d'outils au survol)."""
         for cle_cfg, entree in self.conf["widgets"].items():
             if not entree.get("actif") or cle_cfg not in REGISTRE:
                 continue
             spec = REGISTRE[cle_cfg]
             options = {**options_defauts(spec), **entree.get("options", {})}
             specimen = spec(**options)
-            rendu = specimen.fabrique()
-            boite.append(rendu)
-            self.instances.append((specimen, rendu))
-        self.set_child(boite)
-        self._tick_id = GLib.timeout_add_seconds(1, self._tick)
-        self.set_visible(False)
+            conteneur = Gtk.Box(orientation=Gtk.Orientation.VERTICAL,
+                                css_classes=["widget"])
+            conteneur.append(specimen.fabrique())
+            reveleur = Gtk.Revealer(
+                transition_type=Gtk.RevealerTransitionType.CROSSFADE,
+                transition_duration=120)
+            reveleur.set_child(self._barre_outils(cle_cfg))
+            conteneur.append(reveleur)
+            conteneur.set_halign(Gtk.Align.START)
+            conteneur.set_valign(Gtk.Align.START)
+            self.racine.add_overlay(conteneur)
+            self._attacher_deplacement(cle_cfg, conteneur)
+            self._attacher_survol(conteneur, reveleur)
+            self.instances.append((specimen, conteneur))
 
-    def _tick(self) -> bool:
-        """Rafraîchit les widgets visibles (source retirée en mode hidden —
-        la tâche 7 affine cette vie)."""
-        for specimen, _conteneur in self.instances:
-            specimen.tick()
-        return True
+    def reconstruire(self) -> None:
+        """Détruit et rebâtit widgets + panneau (après un changement d'état)."""
+        for _specimen, conteneur in self.instances:
+            self.racine.remove_overlay(conteneur)
+            conteneur.unparent()
+        self.instances.clear()
+        self.construire_widgets()
+        self._placer_panneau()
+        self.placer_tout()
 
-    def definer_mode(self, mode: str) -> None:
-        """« hidden » → cachée ; sinon → visible (voile et clavier : tâche 7)."""
-        self._mode = mode
-        self.set_visible(mode != "hidden")
+    def placer_tout(self) -> None:
+        """Repositionne les widgets d'après les fractions sauvegardées —
+        clampé à l'écran courant (écran/résolution ayant pu changer)."""
+        largeur, hauteur = self.get_width(), self.get_height()
+        if largeur <= 0 or hauteur <= 0:
+            return
+        for specimen, conteneur in self.instances:
+            pos = self.conf["widgets"][type(specimen).id]["pos"]
+            x, y = placement.frac_vers_px(pos["x"], pos["y"], largeur, hauteur)
+            x, y = placement.ajuster(
+                x, y, conteneur.get_width(), conteneur.get_height(),
+                largeur, hauteur)
+            conteneur.set_margin_start(int(x))
+            conteneur.set_margin_top(int(y))
+
+    def _attacher_deplacement(self, ident: str, conteneur: Gtk.Box) -> None:
+        """Drag au doigt/souris : aimantation douce pendant le mouvement,
+        position convertie en fractions (persistance) au relâchement."""
+        depart = {"x": 0, "y": 0}
+
+        def debut(_geste, _x, _y):
+            depart["x"] = conteneur.get_margin_start()
+            depart["y"] = conteneur.get_margin_top()
+
+        def mise_a_jour(_geste, dx, dy):
+            largeur, hauteur = self.get_width(), self.get_height()
+            if largeur <= 0:
+                return
+            x, y = placement.ajuster(
+                depart["x"] + dx, depart["y"] + dy,
+                conteneur.get_width(), conteneur.get_height(), largeur, hauteur)
+            conteneur.set_margin_start(int(x))
+            conteneur.set_margin_top(int(y))
+
+        def fin(_geste, _dx, _dy):
+            largeur, hauteur = self.get_width(), self.get_height()
+            if largeur <= 0:
+                return
+            pos = self.conf["widgets"][ident]["pos"]
+            pos["x"], pos["y"] = placement.px_vers_frac(
+                conteneur.get_margin_start(), conteneur.get_margin_top(),
+                largeur, hauteur)
+            config.sauver(config.chemin_defaut(), self.conf)
+
+        geste = Gtk.GestureDrag()
+        geste.connect("drag-begin", debut)
+        geste.connect("drag-update", mise_a_jour)
+        geste.connect("drag-end", fin)
+        conteneur.add_controller(geste)
+
+    def _attacher_survol(self, conteneur: Gtk.Box, reveleur: Gtk.Revealer) -> None:
+        """Barre d'outils révélée au survol (mode overlay seulement)."""
+        mouvement = Gtk.EventControllerMotion()
+        # enter/leave livrent (contrôleur, x, y) : on ignore les coordonnées.
+        mouvement.connect(
+            "enter", lambda _c, _x, _y, r=reveleur: self.reveler_barre(r, self._mode == "overlay"))
+        mouvement.connect("leave", lambda _c, _x, _y, r=reveleur: self.reveler_barre(r, False))
+        conteneur.add_controller(mouvement)
+
+    def reveler_barre(self, reveleur: Gtk.Revealer | None, visible: bool) -> None:
+        if visible and reveleur is not None:
+            reveleur.set_reveal_child(True)
+        elif reveleur is not None:
+            reveleur.set_reveal_child(False)
+        else:  # fermeture générale (changement de mode)
+            for _specimen, conteneur in self.instances:
+                enfant = conteneur.get_last_child()
+                if isinstance(enfant, Gtk.Revealer):
+                    enfant.set_reveal_child(False)
+
+    def _barre_outils(self, ident: str) -> Gtk.Widget:
+        """📌 Épingler · ⚙ Réglages · ✕ Retirer — tooltips pour économiser la place."""
+        boite = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6,
+                        halign=Gtk.Align.CENTER, margin_top=4)
+        epingle = Gtk.Button(label="📌")
+        epingle.set_tooltip_text(tr("Pin"))
+        epingle.connect("clicked", lambda *_: self.basculer_epingle(ident))
+        reglages = Gtk.Button(label="⚙")
+        reglages.set_tooltip_text(tr("Settings"))
+        reglages.connect("clicked", lambda *_: self.ouvrir_reglages(reglages, ident))
+        retirer = Gtk.Button(label="✕")
+        retirer.set_tooltip_text(tr("Remove"))
+        retirer.connect("clicked", lambda *_: self.basculer_actif(ident, False))
+        for bouton in (epingle, reglages, retirer):
+            boite.append(bouton)
+        return boite
+
+    def ouvrir_reglages(self, bouton: Gtk.Button, ident: str) -> None:
+        """Popover réglages du widget — rempli tâche 8 (transparence, options)."""
+        pop = Gtk.Popover()
+        pop.set_child(Gtk.Label(
+            label=tr("Settings"), margin_top=12, margin_bottom=12,
+            margin_start=16, margin_end=16))
+        pop.set_parent(bouton)
+        pop.popup()
+
+    # ----------------------------------------------------------------- états
+
+    def basculer_actif(self, ident: str, actif: bool) -> None:
+        """Activation/désactivation d'un widget (interrupteur ou ✕)."""
+        self.conf["widgets"][ident]["actif"] = bool(actif)
+        config.sauver(config.chemin_defaut(), self.conf)
+        self.reconstruire()
+
+    def basculer_epingle(self, ident: str) -> None:
+        """Épinglage : le widget restera visible en mode « pinned »."""
+        entree = self.conf["widgets"][ident]
+        entree["epingle"] = not entree.get("epingle", False)
+        config.sauver(config.chemin_defaut(), self.conf)
+
+    def _placer_panneau(self) -> None:
+        """(Re)construit le panneau central selon l'état courant de la config."""
+        if self.panneau is not None:
+            self.racine.remove_overlay(self.panneau)
+            self.panneau.unparent()
+        entrees = [
+            (cle, tr(REGISTRE[cle].nom) if cle in REGISTRE else cle,
+             bool(entree.get("actif")))
+            for cle, entree in self.conf["widgets"].items()]
+        self.panneau = Panneau(entrees, self.basculer_actif, self.fermer)
+        self.panneau.set_halign(Gtk.Align.CENTER)
+        self.panneau.set_valign(Gtk.Align.CENTER)
+        self.racine.add_overlay(self.panneau)
+        self.panneau.set_visible(self._mode == "overlay")
 
 
 class OverlayApp(Gtk.Application):
