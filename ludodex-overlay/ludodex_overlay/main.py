@@ -104,6 +104,7 @@ class Fenetre(Gtk.ApplicationWindow):
         self.connect("map", lambda *_: self.placer_tout())
         self.construire_widgets()
         self._placer_panneau()
+        self.appliquer_ecran()
         self.set_visible(False)
 
     # ------------------------------------------------------------------ modes
@@ -351,11 +352,66 @@ class Fenetre(Gtk.ApplicationWindow):
              bool(entree.get("actif")))
             for cle, entree in self.conf["widgets"].items()]
         self.panneau = Panneau(entrees, self.basculer_actif, self.fermer,
-                               on_reglages=lambda i, b: self.ouvrir_reglages(b, i))
+                               on_reglages=lambda i, b: self.ouvrir_reglages(b, i),
+                               ecran=self._ligne_ecran())
         self.panneau.set_halign(Gtk.Align.CENTER)
         self.panneau.set_valign(Gtk.Align.CENTER)
         self.racine.add_overlay(self.panneau)
         self.panneau.set_visible(self._mode == "overlay")
+
+    # ----------------------------------------------------------------- écran
+
+    def _noms_sorties(self) -> "list[str]":
+        """Noms des connecteurs des moniteurs (vides → réglage masqué)."""
+        display = Gdk.Display.get_default()
+        if display is None:
+            return []
+        noms = []
+        for moniteur in display.get_monitors():
+            nom = moniteur.get_connector()
+            if nom:
+                noms.append(nom)
+        return noms
+
+    def _ligne_ecran(self) -> "Gtk.Box | None":
+        """Ligne « Écran de l'overlay » : auto ou sortie nommée, persistée."""
+        noms = self._noms_sorties()
+        if not noms:
+            return None
+        modele = Gtk.StringList()
+        modele.append(tr("Auto"))
+        for nom in noms:
+            modele.append(nom)
+        liste = Gtk.DropDown(model=modele)
+        regle = self.conf.get("ecran", "auto")
+        liste.set_selected(noms.index(regle) + 1 if regle in noms else 0)
+        # Connecté APRÈS la valeur initiale : construction sans faux signal.
+        liste.connect("notify::selected", self._ecran_change)
+        boite = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        boite.append(Gtk.Label(label=tr("Overlay screen"),
+                               hexpand=True, halign=Gtk.Align.START))
+        boite.append(liste)
+        return boite
+
+    def _ecran_change(self, liste: Gtk.DropDown, _ps) -> None:
+        index = liste.get_selected()
+        noms = self._noms_sorties()
+        self.conf["ecran"] = "auto" if index == 0 else noms[index - 1]
+        config.sauver(config.chemin_defaut(), self.conf)
+        self.appliquer_ecran()
+
+    def appliquer_ecran(self) -> None:
+        """Place la fenêtre sur la sortie demandée (si elle existe encore),
+        sinon laisse le composant choisir (auto)."""
+        noms = self._noms_sorties()
+        nom = config.choix_sortie(self.conf.get("ecran", "auto"), noms)
+        cible = None
+        if nom is not None:
+            for moniteur in Gdk.Display.get_default().get_monitors():
+                if moniteur.get_connector() == nom:
+                    cible = moniteur
+                    break
+        Gtk4LayerShell.set_monitor(self, cible)
 
 
 class OverlayApp(Gtk.Application):

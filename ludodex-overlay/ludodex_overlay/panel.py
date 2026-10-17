@@ -15,9 +15,12 @@ class Panneau(Gtk.Box):
 
     def __init__(self, entrees: "list[tuple[str, str, bool]]",
                  on_toggle: callable, on_quitter: callable,
-                 on_reglages: "callable | None" = None):
+                 on_reglages: "callable | None" = None,
+                 ecran: "Gtk.Widget | None" = None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=8,
                          css_classes=["panneau"])
+        if ecran is not None:
+            self.append(ecran)  # réglage global « Écran de l'overlay »
         self.append(Gtk.Label(label=tr("Ludodex Overlay"), css_classes=["panneau-titre"]))
         for ident, nom, actif in entrees:
             self.append(self._ligne(ident, nom, actif, on_toggle, on_reglages))
