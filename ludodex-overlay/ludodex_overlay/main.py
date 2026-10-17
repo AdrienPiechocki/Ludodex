@@ -192,9 +192,10 @@ class Fenetre(Gtk.ApplicationWindow):
     def basculer(self) -> None:
         """Ouvre/ferme l'overlay : fermé → épinglés seuls (ou rien), sinon voile."""
         if self._mode == "overlay":
-            epingle = any(entree.get("epingle")
-                          for entree in self.conf["widgets"].values())
-            self.definer_mode("pinned" if epingle else "hidden")
+            # Seuls les widgets ACTIFS et épinglés justifient « pinned » —
+            # un widget épinglé puis désactivé ne doit pas détourner la
+            # fermeture (bug du 2026-10-18, voir config.epingle_actif).
+            self.definer_mode("pinned" if config.epingle_actif(self.conf) else "hidden")
         else:
             self.definer_mode("overlay")
 
