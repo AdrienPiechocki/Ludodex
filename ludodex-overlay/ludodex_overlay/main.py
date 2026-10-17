@@ -129,15 +129,7 @@ class Fenetre(Gtk.ApplicationWindow):
         # hook relâche la capture de la souris de l'intérieur du processus
         # (spike 2026-10-17) — zéro changement de focus, zéro miniaturisation.
         hook.ecrire_etat(bool(self.conf.get("souris_libre", True)) and mode == "overlay")
-        surface = self.get_surface()
-        if surface is not None:
-            largeur, hauteur = max(self.get_width(), 1), max(self.get_height(), 1)
-            if mode == "pinned":
-                # Clics traversants : région vide (validé KWin au spike).
-                surface.set_input_region(cairo.Region())
-            else:
-                surface.set_input_region(cairo.Region(
-                    cairo.RectangleInt(x=0, y=0, width=largeur, height=hauteur)))
+        self._appliquer_region_entree()
         self._voile.set_visible(mode == "overlay")
         if self.panneau is not None:
             self.panneau.set_visible(mode == "overlay")
@@ -151,6 +143,35 @@ class Fenetre(Gtk.ApplicationWindow):
         self._gerer_tick(mode != "hidden")
         if mode == "overlay":
             self.placer_tout()
+            self._retablir_region(0)
+
+    def _retablir_region(self, essai: int) -> bool:
+        """Au mappage la taille est encore 0×0 : on re-pose la région
+        d'entrée jusqu'à ce que l'arrive de l'allocation (10 × 50 ms max)."""
+        self._appliquer_region_entree()
+        if self.get_width() > 0 or essai >= 10 or self._mode != "overlay":
+            return False
+        GLib.timeout_add(50, self._retablir_region, essai + 1)
+        return False
+
+    def _appliquer_region_entree(self) -> None:
+        """Région d'entrée du mode courant — AUSSI rappelée à chaque
+        allocation (signal size-allocate) : au mappage la taille est encore
+        0, et poser une région 1×1 alors rendait tout l'overlay cliquable à
+        travers (bug du 2026-10-18, à partir de la deuxième ouverture) —
+        c'est l'allocation qui fait foi, pas l'instant du changement de mode."""
+        surface = self.get_surface()
+        if surface is None:
+            return  # premier mappage : défaut plein, l'allocation suit
+        if self._mode == "pinned":
+            # Clics traversants : région vide (validé KWin au spike).
+            surface.set_input_region(cairo.Region())
+            return
+        largeur, hauteur = self.get_width(), self.get_height()
+        if largeur <= 0 or hauteur <= 0:
+            return  # non alloué : on laisse tel quel, size-allocate suit
+        surface.set_input_region(cairo.Region(
+            cairo.RectangleInt(x=0, y=0, width=largeur, height=hauteur)))
 
     def basculer(self) -> None:
         """Ouvre/ferme l'overlay : fermé → épinglés seuls (ou rien), sinon voile."""
@@ -272,12 +293,14 @@ class Fenetre(Gtk.ApplicationWindow):
         conteneur.add_controller(geste)
 
     def _attacher_survol(self, conteneur: Gtk.Box, reveleur: Gtk.Revealer) -> None:
-        """Barre d'outils révélée au survol (mode overlay seulement)."""
+        """Barre d'outils révélée au survol (mode overlay seulement).
+
+        Les coordonnées de enter/leave varient selon la version GTK
+        (GTK 4.24 les a retirées) : les arguments optionnels sont absorbés."""
         mouvement = Gtk.EventControllerMotion()
-        # enter/leave livrent (contrôleur, x, y) : on ignore les coordonnées.
         mouvement.connect(
-            "enter", lambda _c, _x, _y, r=reveleur: self.reveler_barre(r, self._mode == "overlay"))
-        mouvement.connect("leave", lambda _c, _x, _y, r=reveleur: self.reveler_barre(r, False))
+            "enter", lambda _c, *_coords, r=reveleur: self.reveler_barre(r, self._mode == "overlay"))
+        mouvement.connect("leave", lambda _c, *_coords, r=reveleur: self.reveler_barre(r, False))
         conteneur.add_controller(mouvement)
 
     def reveler_barre(self, reveleur: Gtk.Revealer | None, visible: bool) -> None:
