@@ -260,19 +260,6 @@ class SettingsMixin:
             self._steam_sync_btn = st_key_row, st_id_row, st_sync_row, st_sync_btn
         page.add(st_group)
 
-        # Le carnet de notes de l'overlay (Shift+Tab) : synchro deux-chemins,
-        # « le plus récent gagne ». Absent des réglages = activé.
-        notes_group = Adw.PreferencesGroup(
-            title=tr("Notes"),
-            description=tr("Two-way sync with the Steam overlay notepad (Shift+Tab). "
-                           "When both sides change, the most recent wins."))
-        notes_sw = Adw.SwitchRow(title=tr("Sync notes with the Steam overlay"),
-                                 active=P.get_setting(self.con, "steam_notes_sync") != "0")
-        notes_sw.connect("notify::active", self._on_notes_sync)
-        notes_group.add(notes_sw)
-        self._steam_notes_sync_sw = notes_sw  # référence pour les tests
-        page.add(notes_group)
-
         win = Adw.Dialog(content_width=560, content_height=560)
         win.set_child(toolbar)
         win.connect("closed", self._on_settings_closed)
@@ -383,13 +370,6 @@ class SettingsMixin:
                 w.set_sensitive(on)
         if hasattr(self, "_refresh_achievements"):
             self._refresh_achievements()
-
-    def _on_notes_sync(self, row, _p):
-        """Coupe/ramène la synchro deux-chemins du carnet avec l'overlay Steam.
-
-        Couper n'efface rien : chaque côté garde sa note, et la reprise se
-        fait au prochain arbitrage « le plus récent gagne »."""
-        P.set_setting(self.con, "steam_notes_sync", "1" if row.get_active() else "0")
 
     def _on_steam_credentials(self, *_row):
         """Enregistre clé Web API + SteamID64 (chaque ligne confirme la sienne ;

@@ -279,12 +279,6 @@
   "Your notes": "Tes notes",
   "Pick a game on the left to write a note.": "Sélectionne un jeu à gauche pour rédiger une note.",
   "Has a note": "A une note",
-  "New note": "Nouvelle note",
-  "Delete note": "Supprimer la note",
-  "Delete this note?": "Supprimer cette note ?",
-  "It will also be removed from the Steam overlay notebook.": "Elle sera aussi retirée du carnet de l'overlay Steam.",
-  "Untitled note": "Sans titre",
-  "Title": "Titre",
   "Markdown help": "Aide Markdown",
   "Table of contents": "Sommaire",
   "No heading in this note": "Aucun titre dans cette note",
@@ -298,8 +292,8 @@
   "Text size": "Taille du texte",
   "In points": "En points",
   "The live preview is always on: click a checkbox to toggle it, click a link to open it.": "L'aperçu est toujours actif : clique sur une case pour la cocher ou la décocher, sur un lien pour l'ouvrir.",
-  "empty text: a note is deleted from the Ludodex interface": "texte vide : une note se supprime depuis l'interface Ludodex",
-  "no argument: show; \"text\": add a note": "sans argument : affiche ; \"texte\" : ajoute une note",
+  "note cleared": "note effacée",
+  "no argument: show; \"\": clear the note": "sans argument : affiche ; \"\" : efface la note",
   "Achievements": "Succès",
   "Achievement tracker": "Suivi des succès",
   "Set up a tracker": "Configurer un suivi",
@@ -455,7 +449,5 @@
   "Open {name}": "Ouvrir {name}",
   "Couldn't open the launcher": "Impossible d'ouvrir le lanceur",
   "! couldn't open the launcher: {e}": "! impossible d'ouvrir le lanceur : {e}",
-  "! no Lutris installer for this game": "! aucun installateur Lutris pour ce jeu sur lutris.net",
-  "Two-way sync with the Steam overlay notepad (Shift+Tab). When both sides change, the most recent wins.": "Synchro bidirectionnelle avec le bloc-notes de l'overlay Steam (Maj+Échap). Quand les deux côtés changent, le plus récent gagne.",
-  "Sync notes with the Steam overlay": "Synchroniser les notes avec l'overlay Steam"
+  "! no Lutris installer for this game": "! aucun installateur Lutris pour ce jeu sur lutris.net"
 }
