@@ -182,18 +182,19 @@ def set_setting(con, key, value):
 
 
 def get_note(con, gid):
-    """Note libre attachée à un jeu ('' si aucune)."""
+    """Note libre attachée à un jeu ('' si aucune).
+
+    GELÉ : la page Notes lit `game_notes` (voir `notes_of_game`)."""
     r = con.execute("SELECT notes FROM games WHERE id=?", (gid,)).fetchone()
     return r["notes"] if r else ""
 
 
 def set_note(con, gid, text):
     """Enregistre la note d'un jeu (chaîne vide = note effacée) et pose
-    l'horodatage `notes_modified` : c'est l'instant que la synchro Steam opposera
-    aux `time_modified` des notes overlay (point d'étroit unique, UI et CLI).
+    l'horodatage `notes_modified`.
 
-    GELÉ : la page Notes lit `game_notes` ; cette colonne ne sert plus qu'aux
-    bases héritées (migration) et à l'ancienne CLI avant repositionnement."""
+    GELÉ : plus utilisée ni par l'UI ni par la CLI (toutes deux passent par
+    `game_notes`) ; seules la migration et les bases héritées la lisent encore."""
     con.execute("UPDATE games SET notes=?, notes_modified=? WHERE id=?",
                 (text or "", int(time.time()), gid))
     con.commit()

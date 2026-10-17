@@ -3,9 +3,10 @@
 import argparse, datetime, urllib.error
 
 from i18n import available, get_lang, tr
-from .db import db, find, save_lang, get_note, set_note
+from .db import db, find, save_lang, notes_of_game, create_note
 from .launch import launch_text, set_launch_override, check_command
 from .steam import backfill_steam_logs
+from .steamnotes import synchroniser
 from .tags import diagnose, fetch_missing_tags
 from .covers import sgdb_key, covers_dir, cover_file, fetch_missing_covers, fetch_cover, SgdbAuthError, \
     set_custom_cover, clear_custom_cover
@@ -47,9 +48,10 @@ def main():
     a.add_argument("name"); a.add_argument("command")
     rn = sub.add_parser("rename")  # le nom modifié résiste aux réimportations
     rn.add_argument("name"); rn.add_argument("new", help=tr('new name ("" = original name on next import)'))
-    nt = sub.add_parser("note")  # note libre attachée à un jeu
+    nt = sub.add_parser("note")  # notes libres attachées à un jeu (modèle multiple)
     nt.add_argument("name")
-    nt.add_argument("text", nargs="?", default=None, help=tr('no argument: show; "": clear the note'))
+    nt.add_argument("text", nargs="?", default=None,
+                    help=tr('no argument: show; "text": add a note'))
     ex = sub.add_parser("exe")  # chemin ou commande de lancement personnalisé
     ex.add_argument("name")
     ex.add_argument("command", nargs="?", default=None, help=tr('no argument: show; "": restore the default launch'))
@@ -128,10 +130,22 @@ def main():
     elif args.cmd == "note":
         g = find(con, args.name)
         if args.text is None:
-            print(get_note(con, g["id"]))
+            # lecture : TOUTES les notes du jeu — titre entre crochets, puis
+            # corps, les notes séparées d'une ligne vide
+            blocs = []
+            for n in notes_of_game(con, g["id"]):
+                titre = (n["title"] or "").strip()
+                blocs.append((f"[{titre}]\n" if titre else "") + (n["content"] or ""))
+            print("\n\n".join(blocs))
         else:
-            set_note(con, g["id"], args.text)
-            print("OK:", g["name"] if args.text.strip() else tr("note cleared"))
+            if not args.text.strip():
+                raise SystemExit(tr("empty text: a note is deleted from the Ludodex interface"))
+            create_note(con, g["id"], "", args.text)  # nouvelle note locale (steam_id vide)
+            try:
+                synchroniser(con, g["id"])  # la poussée lui donne son id overlay si Steam répond
+            except OSError:
+                pass  # dossier Steam inaccessible : la note locale tient quand même
+            print("OK:", g["name"])
     elif args.cmd == "exe":
         g = find(con, args.name)
         if args.command is None:
