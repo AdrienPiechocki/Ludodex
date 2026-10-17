@@ -76,6 +76,20 @@ CREATE TABLE IF NOT EXISTS steam_achievements (
     earned_at INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (game_id, ach_id)
 );
+
+-- Notes multiples par jeu : source de vérité ; `steam_id` = id de la note dans
+-- le carnet overlay ('' = note locale), `deleted` = tombe (poussée qui retire).
+CREATE TABLE IF NOT EXISTS game_notes (
+    id INTEGER PRIMARY KEY,
+    game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+    steam_id TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL DEFAULT '',
+    modified INTEGER NOT NULL DEFAULT 0,
+    deleted INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_game_notes_steam
+    ON game_notes(game_id, steam_id) WHERE steam_id != '';
 """
 
 # Base des autres sources (Lutris / itch.io / Flatpak / RetroArch).
@@ -131,6 +145,15 @@ def db():
     tcols = {r["name"] for r in con.execute("PRAGMA table_info(tracker_logs)")}
     if "yaml" not in tcols:  # la position de lecture vaut pour le YAML qui l'a produite
         con.execute("ALTER TABLE tracker_logs ADD COLUMN yaml TEXT NOT NULL DEFAULT ''")
+    # Anciennes notes uniques -> game_notes : une ligne par jeu, UNE seule fois
+    # (le marqueur distingue « base d'avant » de « jeu dont l'utilisateur a
+    # supprimé sa note migrée » — sinon la suppression ressusciterait la ligne).
+    if get_setting(con, "game_notes_migrated") != "1":
+        con.executemany(
+            "INSERT INTO game_notes (game_id, title, content, modified) VALUES (?, '', ?, ?)",
+            [(g["id"], g["notes"], g["notes_modified"] or 0)
+             for g in con.execute("SELECT id, notes, notes_modified FROM games WHERE notes != ''")])
+        set_setting(con, "game_notes_migrated", "1")
     ensure_auto_collections(con)
     con.execute("PRAGMA foreign_keys=ON")
     load_lang(con)  # langue choisie dans les réglages (sinon celle du système)
@@ -167,10 +190,68 @@ def get_note(con, gid):
 def set_note(con, gid, text):
     """Enregistre la note d'un jeu (chaîne vide = note effacée) et pose
     l'horodatage `notes_modified` : c'est l'instant que la synchro Steam opposera
-    aux `time_modified` des notes overlay (point d'étroit unique, UI et CLI)."""
+    aux `time_modified` des notes overlay (point d'étroit unique, UI et CLI).
+
+    GELÉ : la page Notes lit `game_notes` ; cette colonne ne sert plus qu'aux
+    bases héritées (migration) et à l'ancienne CLI avant repositionnement."""
     con.execute("UPDATE games SET notes=?, notes_modified=? WHERE id=?",
                 (text or "", int(time.time()), gid))
     con.commit()
+
+
+# ---------- notes multiples (game_notes) ----------
+
+def notes_of_game(con, gid):
+    """Notes visibles d'un jeu, dans l'ordre de création."""
+    return con.execute("SELECT id, steam_id, title, content, modified FROM game_notes "
+                       "WHERE game_id=? AND deleted=0 ORDER BY id", (gid,)).fetchall()
+
+
+def note_row(con, gid, steam_id):
+    """Ligne sync (tombes comprises) portant l'id overlay `steam_id`, ou None."""
+    return con.execute("SELECT * FROM game_notes WHERE game_id=? AND steam_id=?",
+                       (gid, steam_id)).fetchone()
+
+
+def create_note(con, gid, title="", content="", steam_id="", modified=0):
+    """Crée une note (locale si `steam_id` vide) et rend son id de ligne."""
+    cur = con.execute("INSERT INTO game_notes (game_id, steam_id, title, content, modified) "
+                      "VALUES (?, ?, ?, ?, ?)", (gid, steam_id, title, content, modified))
+    con.commit()
+    return cur.lastrowid
+
+
+def set_note_row(con, rowid, title, content):
+    """Édite une note depuis Ludodex : l'horodatage local prend l'instant présent."""
+    con.execute("UPDATE game_notes SET title=?, content=?, modified=? WHERE id=?",
+                (title, content, int(time.time()), rowid))
+    con.commit()
+
+
+def touch_note_row(con, rowid, modified):
+    """Hérite de l'horodatage Steam après import (invariant de synchro)."""
+    con.execute("UPDATE game_notes SET modified=? WHERE id=?", (modified, rowid))
+    con.commit()
+
+
+def tombstone_note(con, rowid):
+    """Suppression logique : la poussée suivante retire la note du fichier."""
+    con.execute("UPDATE game_notes SET deleted=1 WHERE id=?", (rowid,))
+    con.commit()
+
+
+def purge_tombstones(con, gid):
+    """Oublie les tombes — seulement APÈS une poussée réussie qui les a servies."""
+    con.execute("DELETE FROM game_notes WHERE game_id=? AND deleted=1", (gid,))
+    con.commit()
+
+
+def vanished_rows(con, gid, steam_ids):
+    """Rowids sync dont l'id overlay a disparu du fichier — miroir : supprimés."""
+    ids = set(steam_ids)
+    lignes = con.execute("SELECT id, steam_id FROM game_notes "
+                         "WHERE game_id=? AND deleted=0 AND steam_id != ''", (gid,)).fetchall()
+    return [r["id"] for r in lignes if r["steam_id"] not in ids]
 
 
 def shows_not_installed(con):
