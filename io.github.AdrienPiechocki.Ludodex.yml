@@ -48,5 +48,7 @@ modules:
           - .flatpak-builder
           - .build-cache
           - .pytest_cache
+          - .superpowers
           - build
           - __pycache__
+          - ludodex-overlay
