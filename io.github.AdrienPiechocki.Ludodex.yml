@@ -50,5 +50,6 @@ modules:
           - .pytest_cache
           - .superpowers
           - build
+          - docs
           - __pycache__
           - ludodex-overlay

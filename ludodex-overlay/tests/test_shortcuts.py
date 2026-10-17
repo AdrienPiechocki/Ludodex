@@ -45,3 +45,29 @@ def test_session_depuis_reponse_derive_sans_resultat():
 def test_veille_secondes_bornees():
     # Dialogue KDE jamais validé → l'overlay doit sortir : bornage du watchdog.
     assert shortcuts.VEILLE_SECONDES == 45
+
+
+def _raccourci_lie():
+    """Raccourci déjà lié à NOTRE session de portal (post-Bind)."""
+    bascules = []
+    racc = shortcuts.RaccourciPortal(lambda: bascules.append(True), lambda _msg: None)
+    racc._lie = True
+    racc._session = "/org/freedesktop/portal/desktop/session/1_42/ludodexsession"
+    return racc, bascules
+
+
+def test_activated_de_ma_session_bascule():
+    racc, bascules = _raccourci_lie()
+    params = GLib.Variant("(ssua{sv})", (racc._session, "overlay", 0, {}))
+    racc._sur_activated(None, None, "/", "iface", "Activated", params)
+    assert len(bascules) == 1
+
+
+def test_activated_d_une_autre_session_est_ignoree():
+    """`Activated` est diffusé à tous les abonnés : le signal d'une AUTRE
+    application (session étrangère) ne doit pas ouvrir notre overlay."""
+    racc, bascules = _raccourci_lie()
+    params = GLib.Variant("(ssua{sv})",
+                          ("/org/freedesktop/portal/desktop/session/1_77/autre", "overlay", 0, {}))
+    racc._sur_activated(None, None, "/", "iface", "Activated", params)
+    assert bascules == []

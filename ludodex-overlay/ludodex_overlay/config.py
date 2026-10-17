@@ -24,14 +24,31 @@ def defauts() -> dict:
 
 
 def _fusionner(base: dict, dessus: dict) -> dict:
-    """Fusion récursive : les valeurs présentes dans `dessus` gagnent,
-    les clés absentes de `dessus` conservent leur défaut."""
+    """Fusion récursive : les valeurs présentes dans `dessus` gagnent SI LEUR
+    TYPE correspond au défaut ; clés absentes, mal typées (`null` à la place
+    d'un objet, chaîne à la place d'un nombre…) ou inconnues du schéma
+    conservent le défaut — un JSON édité à la main ne plante jamais."""
     for cle, valeur in dessus.items():
-        if isinstance(valeur, dict) and isinstance(base.get(cle), dict):
-            _fusionner(base[cle], valeur)
-        else:
+        defaut = base.get(cle)
+        if isinstance(defaut, dict):
+            if isinstance(valeur, dict):
+                _fusionner(defaut, valeur)
+        elif _type_conforme(defaut, valeur):
             base[cle] = valeur
     return base
+
+
+def _type_conforme(defaut, valeur) -> bool:
+    """Un remplacement n'est accepté que du type du défaut : booléen strict,
+    nombre entier ou réel (jamais booléen), chaîne… et jamais pour une clé
+    absente des défauts (defaut None = clé étrangère, ignorée)."""
+    if defaut is None:
+        return False
+    if isinstance(defaut, bool):
+        return isinstance(valeur, bool)
+    if isinstance(defaut, (int, float)):
+        return isinstance(valeur, (int, float)) and not isinstance(valeur, bool)
+    return isinstance(valeur, type(defaut))
 
 
 def charger(chemin: typing.Union[str, pathlib.Path]) -> dict:

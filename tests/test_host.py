@@ -81,6 +81,24 @@ def test_launch_hors_flatpak_sans_changement(monkeypatch):
     assert cap["argv"] == ["xdg-open", "https://example.org"]
 
 
+def test_launch_sans_suivi_de_session_ne_lance_pas_l_overlay(monkeypatch):
+    """CLI (`launch` sans `on_exit`) : sans suivi de session, l'overlay serait
+    tué par atexit à la sortie du processus quelques secondes plus tard —
+    il ne démarre pas (relecture : le pire serait un dialogue KDE qui
+    apparaît puis meurt dessous)."""
+    appels = []
+
+    def fake(argv, **kw):
+        appels.append(list(argv))
+        return object()
+
+    monkeypatch.setattr(L.subprocess, "Popen", fake)
+    con = _con_jeu()
+    g = dict(con.execute("SELECT * FROM games").fetchone())
+    assert L.launch(con, g) is True
+    assert appels == [["xdg-open", "https://example.org"]]  # seul le jeu
+
+
 def test_detached_dans_flatpak_passe_par_l_hote(monkeypatch):
     monkeypatch.setattr(platform, "in_flatpak", lambda env=None: True)
     cap = {}

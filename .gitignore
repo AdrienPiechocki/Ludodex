@@ -167,3 +167,5 @@ build/
 
 # Espace de travail des cycles superpowers (scratch)
 .superpowers/
+# Notes de conception : jamais committées (règle maison, rappelée par la relecture)
+docs/

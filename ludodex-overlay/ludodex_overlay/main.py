@@ -129,6 +129,11 @@ class Fenetre(Gtk.ApplicationWindow):
         self._voile.set_visible(mode == "overlay")
         if self.panneau is not None:
             self.panneau.set_visible(mode == "overlay")
+        for specimen, conteneur in self.instances:
+            # Table des modes : en « pinned », seuls les widgets épinglés
+            # restent rendus — les autres disparaissent du jeu.
+            epingle = bool(self.conf["widgets"][type(specimen).id].get("epingle"))
+            conteneur.set_visible(epingle if mode == "pinned" else True)
         if mode != "overlay":
             self.reveler_barre(None, False)
         self._gerer_tick(mode != "hidden")
@@ -449,6 +454,8 @@ class OverlayApp(Gtk.Application):
                 on_echec=self._raccourci_echec)
             self.raccourci.demarrer()
         if self.demo:
+            self.demo = False  # une seule fois : un 2ᵉ lancement (`--game`)
+            # ne rouvre pas le voile au-dessus d'une session déjà lancée.
             self.fenetre.definer_mode("overlay")
         # sans --demo : ne rien changer — hidden au 1ᵉʳ lancement, et on
         # n'abîme pas un overlay déjà ouvert si un 2ᵉ jeu relance la session.

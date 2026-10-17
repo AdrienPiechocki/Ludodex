@@ -47,3 +47,18 @@ def test_choix_sortie():
     assert config.choix_sortie("auto", ["DP-1", "eDP-2"]) is None
     assert config.choix_sortie("eDP-2", ["DP-1", "eDP-2"]) == "eDP-2"
     assert config.choix_sortie("HDMI-3", ["DP-1", "eDP-2"]) is None
+
+
+def test_charger_rejette_les_types_errones(tmp_path):
+    """Config JSON éditée à la main : `null`, chaîne à la place d'un nombre,
+    clé inconnue — jamais de plantage au démarrage, le défaut tient."""
+    p = tmp_path / "c.json"
+    p.write_text('{"ecran": 5, "truc": "inconnu", '
+                 '"widgets": {"horloge": {"options": null, "transparence": "plein", "epingle": 1}}}')
+    d = config.charger(p)
+    assert d["ecran"] == "auto"
+    assert "truc" not in d
+    h = d["widgets"]["horloge"]
+    assert h["options"] == {"format_24h": True, "secondes": False}
+    assert h["transparence"] == 0.0
+    assert h["epingle"] is False

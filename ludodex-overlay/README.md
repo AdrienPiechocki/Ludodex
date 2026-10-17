@@ -24,6 +24,9 @@ tué par Ludodex à chaque lancement de jeu.
   valables sur n'importe quel écran.
 - **Fin de session** : l'overlay meurt avec le jeu (même rappel qui clôt la
   session de jeu, plus `atexit`). Aucun processus ni instance ne subsiste.
+  Limite assumée (spec) : si la session se termine hors des chemins suivis
+  par Ludodex (partie de moins de 5 s, lancement d'URI jamais vu, crash de
+  Ludodex), l'overlay peut rester — le bouton **⏻ Quitter** le referme.
 - **Session X11** (hors périmètre v1) : sortie silencieuse immédiate, le jeu
   se lance normalement.
 - **Addon absent** : Ludodex lance le jeu normalement, sans alerte.

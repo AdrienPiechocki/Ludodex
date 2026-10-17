@@ -397,7 +397,9 @@ def launch(con, g, on_exit=None):
         def on_exit(sid, _o=origine):
             overlay.arreter_overlay()
             _o(sid)
-    if get_setting(con, "overlay", "1") == "1":
+    # Sans suivi de session (CLI : `on_exit=None`), l'overlay serait tué par
+    # atexit à la sortie du processus — il ne démarre pas du tout.
+    if on_exit is not None and get_setting(con, "overlay", "1") == "1":
         overlay.lancer_overlay(str(g["name"]))
     if on_exit is not None and cur.rowcount:  # INSERT ignoré = rien d'ouvert à suivre
         # Un argv contenant "://" est remis à xdg-open : le processus tenu n'est que

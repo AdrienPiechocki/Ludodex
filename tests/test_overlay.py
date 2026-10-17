@@ -47,6 +47,8 @@ def test_arreter_vise_le_groupe_de_processus(monkeypatch):
     signaux = []
     monkeypatch.setattr(overlay.os, "killpg",
                         lambda pid, num: signaux.append((pid, num)))
+    monkeypatch.setattr(overlay.subprocess, "run",
+                        lambda argv, **kw: None)  # surtout pas de vrai `flatpak kill` ici
 
     class FauxProc:
         pid = 4242

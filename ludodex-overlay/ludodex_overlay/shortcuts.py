@@ -92,7 +92,10 @@ class RaccourciPortal:
         self._veille_id: "int | None" = None
 
     def demarrer(self) -> None:
-        """Lance la chaîne : bus → abonnements → CreateSession."""
+        """Lance la chaîne : veille puis bus → abonnements → CreateSession.
+        La veille (45 s) part DÈS LE DÉPART : toute la chaîne est bornée,
+        y compris un portail jamais répondant — aucune attente muette."""
+        self._veille_id = GLib.timeout_add_seconds(VEILLE_SECONDES, self._veille_ecoulee)
         Gio.bus_get(Gio.BusType.SESSION, None, self._bus_pret)
 
     # ------------------------------------------------------------- bus prêt
@@ -139,7 +142,6 @@ class RaccourciPortal:
             BUS, CHEMIN, IFACE, "BindShortcuts",
             opts_bind(session, [("overlay", tr("Open/close overlay"), "SHIFT+Tab")]),
             None, Gio.DBusCallFlags.NONE, -1, None, self._bind_fini)
-        self._veille_id = GLib.timeout_add_seconds(VEILLE_SECONDES, self._veille_ecoulee)
 
     def _bind_fini(self, _proxy, res) -> None:
         try:
@@ -158,7 +160,11 @@ class RaccourciPortal:
     # -------------------------------------------------------------- signaux
 
     def _sur_activated(self, _bus, _sender, _chemin, _iface, _membre, params) -> None:
-        if self._lie:
+        # Signal diffusé à tous les abonnés : seul NOTRE session de portal
+        # (argument 0) compte — d'autres apps ont leurs propres raccourcis.
+        if not self._lie:
+            return
+        if params.unpack()[0] == self._session:
             self.on_toggle()
 
     # --------------------------------------------------------------- veille
