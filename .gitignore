@@ -164,3 +164,6 @@ build/
 
 # flatpak-builder
 .flatpak-builder/
+
+# Espace de travail des cycles superpowers (scratch)
+.superpowers/
