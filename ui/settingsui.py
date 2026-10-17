@@ -291,14 +291,21 @@ class SettingsMixin:
 
     def _on_overlay_toggle(self, row, _ps):
         """Réglage « Overlay in-game » : prochains lancements seulement."""
-        P.set_setting(self.con, "overlay", "1" if row.active else "0")
+        # `get_active()` et non l'attribut `active` : la propriété n'est pas
+        # exposée en introspection Python sur Adw.SwitchRow — lire `row.active`
+        # lève une AttributeError avalée par PyGObject et le réglage n'était
+        # JAMAIS écrit (bug du 2026-10-18 : les interrupteurs revenaient au
+        # défaut ; mécanisme verrouillé par tests/test_settingsui.py).
+        P.set_setting(self.con, "overlay", "1" if row.get_active() else "0")
 
     def _on_souris_libre_toggle(self, row, _ps):
         """Réglage « Libérer la souris des jeux » : prochains lancements seulement.
 
         Transmis à l'overlay par flag (`--souris-libre` / `--sans-souris-libre`)
         au lancement de la session — l'overlay ne stocke plus ce réglage."""
-        P.set_setting(self.con, "souris_libre", "1" if row.active else "0")
+        # Idem que l'interrupteur ci-dessus : `get_active()` et non `row.active`
+        # (non exposé en introspection — l'écriture n'avait jamais lieu).
+        P.set_setting(self.con, "souris_libre", "1" if row.get_active() else "0")
 
     def _on_module(self, sw, _p, name):
         P.set_setting(self.con, f"module_{name}", "1" if sw.get_active() else "0")
