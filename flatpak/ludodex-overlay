@@ -1,0 +1,3 @@
+#!/bin/sh
+# Wrapper de l'addon : le paquet vit dans /app/share/ludodex-overlay.
+PYTHONPATH=/app/share/ludodex-overlay exec python3 -m ludodex_overlay.main "$@"
