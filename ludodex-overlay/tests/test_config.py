@@ -7,6 +7,7 @@ from ludodex_overlay import config
 def test_defauts_pour_horloge():
     d = config.defauts()
     assert d["ecran"] == "auto"
+    assert d["souris_libre"] is True
     h = d["widgets"]["horloge"]
     assert h["actif"] is True and h["epingle"] is False
     assert h["pos"] == {"x": 0.03, "y": 0.06}

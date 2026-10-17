@@ -11,6 +11,7 @@ def defauts() -> dict:
     """Schéma complet avec les valeurs d'usine."""
     return {
         "ecran": "auto",
+        "souris_libre": True,
         "widgets": {
             "horloge": {
                 "actif": True,

@@ -19,11 +19,14 @@ class Panneau(Gtk.Box):
                  on_toggle: callable, on_quitter: callable,
                  on_reglages: "callable | None" = None,
                  ecran: "Gtk.Widget | None" = None,
-                 on_fermer: "callable | None" = None):
+                 on_fermer: "callable | None" = None,
+                 souris: "Gtk.Widget | None" = None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=8,
                          css_classes=["panneau"])
         if ecran is not None:
             self.append(ecran)  # réglage global « Écran de l'overlay »
+        if souris is not None:
+            self.append(souris)  # réglage global « Libérer la souris des jeux »
         self.append(Gtk.Label(label=tr("Ludodex Overlay"), css_classes=["panneau-titre"]))
         for ident, nom, actif in entrees:
             self.append(self._ligne(ident, nom, actif, on_toggle, on_reglages))

@@ -16,6 +16,42 @@ def test_command_overlay_dans_le_sandbox():
     assert cmd[-2:] == ["--game", "SULFUR"]
 
 
+def test_chemin_hook_user_et_systeme():
+    utilisateur = overlay.chemin_hook({"HOME": "/h"})
+    assert utilisateur == "/h/.local/share/flatpak/app/%s/current/active/files/lib/libludodex-hook.so" \
+        % overlay.OVERLAY_APP_ID
+    assert overlay.chemin_hook_systeme() == \
+        "/var/lib/flatpak/app/%s/current/active/files/lib/libludodex-hook.so" % overlay.OVERLAY_APP_ID
+
+
+def test_preparer_hook_copie_le_shim(tmp_path):
+    env = {"HOME": str(tmp_path)}
+    src = tmp_path / ".local/share/flatpak/app" / overlay.OVERLAY_APP_ID / \
+        "current/active/files/lib"
+    src.mkdir(parents=True)
+    (src / "libludodex-hook.so").write_bytes(b"shim")
+    chemin = overlay.preparer_hook(env=env)
+    assert chemin == str(tmp_path / ".local/share/ludodex-hook/libludodex-hook.so")
+    assert (tmp_path / ".local/share/ludodex-hook/libludodex-hook.so").read_bytes() == b"shim"
+    assert (tmp_path / ".local/share/ludodex-hook/etat").read_text() == "0"
+
+
+def test_preparer_hook_sans_addon_renvoie_none(tmp_path):
+    assert overlay.preparer_hook(env={"HOME": str(tmp_path)}) is None
+
+
+def test_command_avec_hook_prefixe_env():
+    cmd = overlay.command_avec_hook(["jeu", "--fullscreen"], "/x/libludodex-hook.so")
+    assert cmd[:2] == ["env", "LD_PRELOAD=/x/libludodex-hook.so"]
+    assert cmd[2:] == ["jeu", "--fullscreen"]
+
+
+def test_command_avec_hook_cumule_le_preload_existant(monkeypatch):
+    monkeypatch.setenv("LD_PRELOAD", "/ancien/shim.so")
+    cmd = overlay.command_avec_hook(["jeu"], "/x/shim.so")
+    assert cmd[1] == "LD_PRELOAD=/x/shim.so:/ancien/shim.so"
+
+
 def test_lancer_sans_addon_est_silencieux(monkeypatch):
     """Addon non installé : False, aucune alerte (spec : échec silencieux)."""
     def faux_popen(*args, **kwargs):

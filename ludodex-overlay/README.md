@@ -16,6 +16,16 @@ tué par Ludodex à chaque lancement de jeu.
   panneau referment l'overlay ; le bouton **⏻ Quitter** termine
   l'application — elle n'est jamais muette : si le raccourci refuse, une
   notification explique pourquoi puis l'overlay s'arrête.
+- **Libération de la souris des jeux** (interrupteur « Libérer la souris des
+  jeux », activé par défaut) : Ludodex injecte `libludodex-hook.so` dans le
+  processus du jeu via `LD_PRELOAD` (le principe de l'overlay Steam). Quand
+  l'overlay s'ouvre, le hook relâche la capture de souris **de l'intérieur du
+  jeu** (SDL2 complet, SDL3 et X11 en partie) et empêche sa re-capture jusqu'à
+  la fermeture — le jeu garde le focus, il ne se miniaturise jamais. Le jeu
+  reprend la main tout seul à sa prochaine tentative de capture.
+  ⚠ Jeux en ligne avec anti-cheat : une injection `LD_PRELOAD` peut être
+  mal vue — désactivez l'interrupteur pour ces jeux (le jeu tourne alors
+  normalement, sans libération automatique de la souris).
 - Dans l'overlay : un panneau central (interrupteurs de widgets, réglages,
   écran) et les widgets flottants, **déplaçables à la souris/doigt** avec
   aimantation douxe aux bords. Réglages par widget : transparence (30 %

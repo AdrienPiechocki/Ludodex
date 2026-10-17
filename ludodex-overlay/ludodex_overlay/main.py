@@ -23,7 +23,7 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("Gtk4LayerShell", "1.0")
 from gi.repository import Gdk, Gio, GLib, Gtk, Gtk4LayerShell
 
-from . import config, placement
+from . import config, hook, placement
 from .i18n import tr
 from .panel import Panneau, popover_reglages
 from .shortcuts import RaccourciPortal
@@ -89,6 +89,10 @@ class Fenetre(Gtk.ApplicationWindow):
         for bord in (Gtk4LayerShell.Edge.TOP, Gtk4LayerShell.Edge.RIGHT,
                      Gtk4LayerShell.Edge.BOTTOM, Gtk4LayerShell.Edge.LEFT):
             Gtk4LayerShell.set_anchor(self, bord, True)
+        # -1 = ignorer les zones réservées : le voile couvre TOUT l'écran,
+        # barre des tâches comprise (avec 0, le protocole fait éviter les
+        # panneaux et le voile se fait rogner sur leur zone — bug du 2026-10-17).
+        Gtk4LayerShell.set_exclusive_zone(self, -1)
         _installer_css()
         self._mode = "hidden"
         self.conf = config.charger(config.chemin_defaut())
@@ -121,6 +125,10 @@ class Fenetre(Gtk.ApplicationWindow):
         # plein écran se minimisent alors d'eux-mêmes) : le jeu garde son
         # clavier, l'overlay s'utilise à la souris + Shift+Tab.
         Gtk4LayerShell.set_keyboard_mode(self, Gtk4LayerShell.KeyboardMode.NONE)
+        # Drapeau pour le hook LD_PRELOAD injecté dans le jeu : ouvert → le
+        # hook relâche la capture de la souris de l'intérieur du processus
+        # (spike 2026-10-17) — zéro changement de focus, zéro miniaturisation.
+        hook.ecrire_etat(bool(self.conf.get("souris_libre", True)) and mode == "overlay")
         surface = self.get_surface()
         if surface is not None:
             largeur, hauteur = max(self.get_width(), 1), max(self.get_height(), 1)
@@ -352,6 +360,21 @@ class Fenetre(Gtk.ApplicationWindow):
         entree["epingle"] = not entree.get("epingle", False)
         config.sauver(config.chemin_defaut(), self.conf)
 
+    def _ligne_souris(self) -> Gtk.Box:
+        """Interrupteur global « Libérer la souris des jeux » (persisté)."""
+        ligne = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        ligne.append(Gtk.Label(label=tr("Release game mouse"),
+                               hexpand=True, halign=Gtk.Align.START))
+        interrupteur = Gtk.Switch(active=bool(self.conf.get("souris_libre", True)))
+        interrupteur.connect("notify::active", self._souris_change)
+        ligne.append(interrupteur)
+        return ligne
+
+    def _souris_change(self, interrupteur, _ps) -> None:
+        self.conf["souris_libre"] = bool(interrupteur.get_active())
+        config.sauver(config.chemin_defaut(), self.conf)
+        hook.ecrire_etat(self.conf["souris_libre"] and self._mode == "overlay")
+
     def _placer_panneau(self) -> None:
         """(Re)construit le panneau central selon l'état courant de la config."""
         if self.panneau is not None:
@@ -364,7 +387,8 @@ class Fenetre(Gtk.ApplicationWindow):
         self.panneau = Panneau(entrees, self.basculer_actif, self.fermer,
                                on_reglages=lambda i, b: self.ouvrir_reglages(b, i),
                                ecran=self._ligne_ecran(),
-                               on_fermer=self.basculer)
+                               on_fermer=self.basculer,
+                               souris=self._ligne_souris())
         self.panneau.set_halign(Gtk.Align.CENTER)
         self.panneau.set_valign(Gtk.Align.CENTER)
         self.racine.add_overlay(self.panneau)
@@ -469,6 +493,13 @@ class OverlayApp(Gtk.Application):
     def _raccourci_echec(self, message: str) -> None:
         notifier(tr("Ludodex Overlay"), message)
         self.quit()
+
+    def do_shutdown(self) -> None:
+        # Fin de vie : le jeu doit pouvoir reprendre sa souris même si
+        # l'overlay sort par ici (Ludodex remet l'état à zéro au lancement
+        # suivant, pour couvrir aussi un crash).
+        hook.ecrire_etat(False)
+        super().do_shutdown()
 
 
 def main() -> None:

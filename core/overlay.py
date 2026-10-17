@@ -16,6 +16,54 @@ _proc = None            # processus overlay de la session en cours
 _atexit_fait = False    # atexit enregistré une seule fois
 
 
+def chemin_hook(env: dict = None) -> str:
+    """Emplacement du shim dans l'installation UTILISATRICE de l'addon
+    (`current/active` suit la déploiement active, quel que soit le binaire)."""
+    home = (env or os.environ).get("HOME") or os.path.expanduser("~")
+    return (f"{home}/.local/share/flatpak/app/{OVERLAY_APP_ID}"
+            "/current/active/files/lib/libludodex-hook.so")
+
+
+def chemin_hook_systeme() -> str:
+    return (f"/var/lib/flatpak/app/{OVERLAY_APP_ID}"
+            "/current/active/files/lib/libludodex-hook.so")
+
+
+def preparer_hook(env: dict = None) -> "str | None":
+    """Copie le shim de l'addon dans un dossier HÔTE lisible par le jeu et
+    remet l'état à « fermé ». None si l'addon est absent (best-effort).
+
+    Le jeu recevra ce chemin par LD_PRELOAD (façon Steam) : le hook relâche
+    la capture de souris de l'intérieur du processus — sans changement de
+    focus, donc sans miniaturisation (spike du 2026-10-17)."""
+    home = (env or os.environ).get("HOME") or os.path.expanduser("~")
+    source = chemin_hook(env)
+    if not os.path.isfile(source):
+        source = chemin_hook_systeme()
+        if not os.path.isfile(source):
+            return None
+    dossier = f"{home}/.local/share/ludodex-hook"
+    chemin = f"{dossier}/libludodex-hook.so"
+    try:
+        os.makedirs(dossier, exist_ok=True)
+        if (not os.path.isfile(chemin)
+                or os.path.getsize(chemin) != os.path.getsize(source)):
+            with open(source, "rb") as src, open(chemin, "wb") as dst:
+                dst.write(src.read())
+        with open(f"{dossier}/etat", "w", encoding="utf-8") as f:
+            f.write("0")  # chaque session démarre « souris capturée »
+    except OSError:
+        return None
+    return chemin
+
+
+def command_avec_hook(argv: list, chemin: str) -> list:
+    """Préfixe `env LD_PRELOAD=…` — cumule un préload déjà présent."""
+    existant = os.environ.get("LD_PRELOAD", "").strip(":")
+    charge = f"{chemin}:{existant}" if existant else chemin
+    return ["env", f"LD_PRELOAD={charge}", *argv]
+
+
 def command_overlay(nom_jeu: str, env: dict = None) -> list:
     """Commande hôte qui démarre l'overlay pour la session d'un jeu.
 

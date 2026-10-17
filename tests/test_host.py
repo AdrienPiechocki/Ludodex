@@ -63,6 +63,7 @@ def _popen_capture(monkeypatch, cap):
 
 def test_launch_dans_flatpak_passe_par_l_hote(monkeypatch):
     monkeypatch.setattr(platform, "in_flatpak", lambda env=None: True)
+    monkeypatch.setattr(L.overlay, "preparer_hook", lambda env=None: None)  # shim absent : argv intact
     cap = {}
     _popen_capture(monkeypatch, cap)
     con = _con_jeu()
@@ -73,6 +74,7 @@ def test_launch_dans_flatpak_passe_par_l_hote(monkeypatch):
 
 
 def test_launch_hors_flatpak_sans_changement(monkeypatch):
+    monkeypatch.setattr(L.overlay, "preparer_hook", lambda env=None: None)  # shim absent : argv intact
     cap = {}
     _popen_capture(monkeypatch, cap)
     con = _con_jeu()
@@ -97,6 +99,25 @@ def test_launch_sans_suivi_de_session_ne_lance_pas_l_overlay(monkeypatch):
     g = dict(con.execute("SELECT * FROM games").fetchone())
     assert L.launch(con, g) is True
     assert appels == [["xdg-open", "https://example.org"]]  # seul le jeu
+
+
+def test_launch_injecte_le_hook_souris(monkeypatch):
+    """Overlay actif : le jeu reçoit LD_PRELOAD=libludodex-hook.so — sans lui,
+    la capture souris des FPS ne serait jamais relâchée (spike du 2026-10-17)."""
+    monkeypatch.setattr(L.overlay, "preparer_hook",
+                        lambda env=None: "/x/libludodex-hook.so")
+    appels = []
+
+    def fake(argv, **kw):
+        appels.append(list(argv))
+        return object()
+
+    monkeypatch.setattr(L.subprocess, "Popen", fake)
+    con = _con_jeu()
+    g = dict(con.execute("SELECT * FROM games").fetchone())
+    assert L.launch(con, g, on_exit=lambda _sid: None) is True  # session = overlay
+    assert appels[0][:2] == ["env", "LD_PRELOAD=/x/libludodex-hook.so"]
+    assert appels[0][2] == "xdg-open"  # le jeu suit, juste enveloppé
 
 
 def test_detached_dans_flatpak_passe_par_l_hote(monkeypatch):

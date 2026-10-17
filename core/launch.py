@@ -380,6 +380,12 @@ def launch(con, g, on_exit=None):
         env, argv = split_env(cmd)
         if not argv:
             raise ValueError(tr("empty command"))
+        # Overlay actif : le jeu reçoit le hook de libération de souris
+        # (LD_PRELOAD, façon Steam) — préparé avant le spawn du jeu.
+        if on_exit is not None and get_setting(con, "overlay", "1") == "1":
+            shim = overlay.preparer_hook(env=env)
+            if shim is not None:
+                argv = overlay.command_avec_hook(argv, shim)
         proc = subprocess.Popen(platform.host_argv(argv, env), cwd=cwd,
                                 env={**os.environ, **env} if env else None,
                                 start_new_session=True)
