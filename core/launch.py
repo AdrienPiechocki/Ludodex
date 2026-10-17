@@ -405,8 +405,10 @@ def launch(con, g, on_exit=None):
             _o(sid)
     # Sans suivi de session (CLI : `on_exit=None`), l'overlay serait tué par
     # atexit à la sortie du processus — il ne démarre pas du tout.
+    # `souris_libre` : réglage de Ludodex, transmis à l'overlay par flag.
     if on_exit is not None and get_setting(con, "overlay", "1") == "1":
-        overlay.lancer_overlay(str(g["name"]))
+        overlay.lancer_overlay(str(g["name"]),
+                               souris_libre=get_setting(con, "souris_libre", "1") == "1")
     if on_exit is not None and cur.rowcount:  # INSERT ignoré = rien d'ouvert à suivre
         # Un argv contenant "://" est remis à xdg-open : le processus tenu n'est que
         # le passe-plat, qui rend la main en ms. Pour un jeu connu (Heroic), on suit

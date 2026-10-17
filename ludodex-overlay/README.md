@@ -13,34 +13,38 @@ tué par Ludodex à chaque lancement de jeu.
   minimiseraient d'eux-mêmes dès la perte de focus (constat du 2026-10-17,
   KWin active toute fenêtre layer-shell qui se carte — même en ON_DEMAND).
   Tout se pilote à la souris : **Shift+Tab** ou le bouton **✕ Fermer** du
-  panneau referment l'overlay ; le bouton **⏻ Quitter** termine
-  l'application — elle n'est jamais muette : si le raccourci refuse, une
+  panneau referment l'overlay — l'application reste en tâche de fond pour la
+  fin de session ; elle n'est jamais muette : si le raccourci refuse, une
   notification explique pourquoi puis l'overlay s'arrête.
-- **Libération de la souris des jeux** (interrupteur « Libérer la souris des
-  jeux », activé par défaut) : Ludodex injecte `libludodex-hook.so` dans le
+- **Libération de la souris des jeux** (réglage « Libérer la souris des
+  jeux » de Ludodex — Réglages → Général, activé par défaut, transmis à
+  l'overlay par drapeau au lancement de la session) : Ludodex injecte `libludodex-hook.so` dans le
   processus du jeu via `LD_PRELOAD` (le principe de l'overlay Steam). Quand
   l'overlay s'ouvre, le hook relâche la capture de souris **de l'intérieur du
   jeu** (SDL2 complet, SDL3 et X11 en partie) et empêche sa re-capture jusqu'à
   la fermeture — le jeu garde le focus, il ne se miniaturise jamais. Le jeu
   reprend la main tout seul à sa prochaine tentative de capture.
   ⚠ Jeux en ligne avec anti-cheat : une injection `LD_PRELOAD` peut être
-  mal vue — désactivez l'interrupteur pour ces jeux (le jeu tourne alors
+  mal vue — désactivez ce réglage (le jeu tourne alors
   normalement, sans libération automatique de la souris).
 - Dans l'overlay : un panneau central (interrupteurs de widgets, réglages,
   écran) et les widgets flottants, **déplaçables à la souris/doigt** avec
-  aimantation douxe aux bords. Réglages par widget : transparence (30 %
+  aimantation douce aux bords. Les réglages d'un widget (⚙) s'ouvrent
+  **en ligne**, sous le widget : transparence (30 %
   d'opacité minimum), épinglage, options (24 h/12 h, secondes).
 - Les réglages sont **globaux** (tous jeux) et persistés dans
   `~/.config/ludodex-overlay/config.json` (`$XDG_CONFIG_HOME` respecté ;
   dans le sandbox, `~/.var/app/io.github.AdrienPiechocki.LudodexOverlay/`).
-- **Écran** : « Auto » par défaut, ou sortie choisie par son nom (DP-1,
-  eDP-2…), persistée ; les positions widgets restent des fractions, donc
+- **Écran** : aucun réglage — l'overlay apparaît **là où est le jeu** (la
+  surface layer-shell n'est liée à aucune sortie, le composant la place sur
+  l'écran actif) ; les positions widgets restent des fractions, donc
   valables sur n'importe quel écran.
 - **Fin de session** : l'overlay meurt avec le jeu (même rappel qui clôt la
   session de jeu, plus `atexit`). Aucun processus ni instance ne subsiste.
   Limite assumée (spec) : si la session se termine hors des chemins suivis
   par Ludodex (partie de moins de 5 s, lancement d'URI jamais vu, crash de
-  Ludodex), l'overlay peut rester — le bouton **⏻ Quitter** le referme.
+  Ludodex), l'overlay peut rester — **Shift+Tab** ou **✕ Fermer** le
+  referment à la main.
 - **Session X11** (hors périmètre v1) : sortie silencieuse immédiate, le jeu
   se lance normalement.
 - **Addon absent** : Ludodex lance le jeu normalement, sans alerte.
@@ -61,6 +65,7 @@ défaut).
 ```sh
 flatpak run io.github.AdrienPiechocki.LudodexOverlay --demo   # voile + panneau immédiatement
 flatpak run io.github.AdrienPiechocki.LudodexOverlay --game "Nom du jeu"
+flatpak run io.github.AdrienPiechocki.LudodexOverlay --game "Nom" --sans-souris-libre  # sans libération de la souris
 ```
 
 Au **premier** lancement (nouvelle app), KDE affiche une demande de

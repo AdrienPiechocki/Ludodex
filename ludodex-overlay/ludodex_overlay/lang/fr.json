@@ -6,7 +6,6 @@
   "Show seconds": "Afficher les secondes",
   "Close: Shift+Tab": "Fermer : Shift+Tab",
   "Close": "Fermer",
-  "Quit": "Quitter",
   "Add widget": "Ajouter une widget",
   "Pin": "Épingler",
   "Settings": "Réglages",
@@ -14,8 +13,5 @@
   "Transparency": "Transparence",
   "Open/close overlay": "Ouvrir/fermer l'overlay",
   "Shortcut unavailable — the overlay has stopped.": "Raccourci global indisponible — l'overlay s'arrête.",
-  "The shortcut dialog was not confirmed.": "La demande de raccourci n'a pas été confirmée.",
-  "Overlay screen": "Écran de l'overlay",
-  "Release game mouse": "Libérer la souris des jeux",
-  "Auto": "Auto"
+  "The shortcut dialog was not confirmed.": "La demande de raccourci n'a pas été confirmée."
 }

@@ -25,7 +25,7 @@ from gi.repository import Gdk, Gio, GLib, Gtk, Gtk4LayerShell
 
 from . import config, hook, placement
 from .i18n import tr
-from .panel import Panneau, popover_reglages
+from .panel import Panneau, conteneur_reglages
 from .shortcuts import RaccourciPortal
 from .widgets import REGISTRE, options_defauts
 
@@ -38,7 +38,8 @@ window { background-color: transparent; }
 .voile { background-color: rgba(10, 10, 14, 0.55); }
 .panneau { background-color: rgba(24, 24, 32, 0.96); border-radius: 14px; padding: 18px; color: #f2f2f5; }
 .panneau-titre { font-size: 20px; font-weight: bold; margin-bottom: 6px; }
-.widget { background-color: rgba(0, 0, 0, 0.45); border-radius: 10px; padding: 8px; }
+.widget { background-color: transparent; border-radius: 10px; padding: 8px; }
+.reglages-widget { background-color: rgba(24, 24, 32, 0.97); border-radius: 10px; padding: 10px; color: #f2f2f5; }
 """
 
 
@@ -97,6 +98,7 @@ class Fenetre(Gtk.ApplicationWindow):
         self._mode = "hidden"
         self.conf = config.charger(config.chemin_defaut())
         self.instances: "list[tuple]" = []  # [(spécimen Widget, conteneur)]
+        self._reglages: "dict[str, Gtk.Revealer]" = {}  # panneau réglages inline par widget
         self.panneau: "Panneau | None" = None
         self._tick_id: "int | None" = None
         # Racine : enfant plein écran (le voile) + enfants flottants par-dessus.
@@ -107,11 +109,22 @@ class Fenetre(Gtk.ApplicationWindow):
         controle = Gtk.EventControllerKey()
         controle.connect("key-pressed", self._touche)
         self.add_controller(controle)
-        self.connect("map", lambda *_: self.placer_tout())
+        # Au `map`, l'allocation n'est pas encore faite (largeur 0) :
+        # `placer_tout` rend la main sans rien placer et rien ne le rappelle —
+        # l'horloge restait en haut à gauche au 1ᵉʳ lancement (bug du
+        # 2026-10-18). Un re-placement différé suit l'allocation réelle.
+        self.connect("map", lambda *_: self._placer_au_map())
         self.construire_widgets()
         self._placer_panneau()
-        self.appliquer_ecran()
         self.set_visible(False)
+
+    def _placer_au_map(self, essai: int = 0) -> bool:
+        """Repositionne les widgets dès que l'allocation arrive (10 × 50 ms max)."""
+        self.placer_tout()
+        if self.get_width() > 0 or essai >= 10 or self._mode == "hidden":
+            return False  # allocation faite (ou épuisé) : fini
+        GLib.timeout_add(50, self._placer_au_map, essai + 1)
+        return False
 
     # ------------------------------------------------------------------ modes
 
@@ -128,7 +141,10 @@ class Fenetre(Gtk.ApplicationWindow):
         # Drapeau pour le hook LD_PRELOAD injecté dans le jeu : ouvert → le
         # hook relâche la capture de la souris de l'intérieur du processus
         # (spike 2026-10-17) — zéro changement de focus, zéro miniaturisation.
-        hook.ecrire_etat(bool(self.conf.get("souris_libre", True)) and mode == "overlay")
+        # La volonté (libérer ou non) vient de Ludodex via `--souris-libre`.
+        app = self.get_application()
+        souris_libre = bool(getattr(app, "souris_libre", True))
+        hook.ecrire_etat(souris_libre and mode == "overlay")
         self._appliquer_region_entree()
         self._voile.set_visible(mode == "overlay")
         if self.panneau is not None:
@@ -226,11 +242,21 @@ class Fenetre(Gtk.ApplicationWindow):
                 transition_duration=120)
             reveleur.set_child(self._barre_outils(cle_cfg))
             conteneur.append(reveleur)
+            # Réglages INLINE (même conteneur, donc même surface) : un
+            # `Gtk.Popover` ouvrirait une surface que KWin ACTIVE et le jeu
+            # plein écran se miniaturiserait (bug du 2026-10-18). Révélé par
+            # ⚙, refermé par un ✕ dédié.
+            reglages_reveleur = Gtk.Revealer(
+                transition_type=Gtk.RevealerTransitionType.CROSSFADE,
+                transition_duration=120)
+            reglages_reveleur.set_child(self._panneau_reglages(cle_cfg))
+            conteneur.append(reglages_reveleur)
             conteneur.set_halign(Gtk.Align.START)
             conteneur.set_valign(Gtk.Align.START)
             self.racine.add_overlay(conteneur)
             self._attacher_deplacement(cle_cfg, conteneur)
             self._attacher_survol(conteneur, reveleur)
+            self._reglages[cle_cfg] = reglages_reveleur
             self.instances.append((specimen, conteneur))
 
     def reconstruire(self) -> None:
@@ -239,6 +265,7 @@ class Fenetre(Gtk.ApplicationWindow):
             self.racine.remove_overlay(conteneur)
             conteneur.unparent()
         self.instances.clear()
+        self._reglages.clear()  # les Revealer de réglages ont été détruits avec les conteneurs
         self.construire_widgets()
         self._placer_panneau()
         self.placer_tout()
@@ -323,7 +350,7 @@ class Fenetre(Gtk.ApplicationWindow):
         epingle.connect("clicked", lambda *_: self.basculer_epingle(ident))
         reglages = Gtk.Button(label="⚙")
         reglages.set_tooltip_text(tr("Settings"))
-        reglages.connect("clicked", lambda *_: self.ouvrir_reglages(reglages, ident))
+        reglages.connect("clicked", lambda *_: self.basculer_reglages(ident))
         retirer = Gtk.Button(label="✕")
         retirer.set_tooltip_text(tr("Remove"))
         retirer.connect("clicked", lambda *_: self.basculer_actif(ident, False))
@@ -331,16 +358,42 @@ class Fenetre(Gtk.ApplicationWindow):
             boite.append(bouton)
         return boite
 
-    def ouvrir_reglages(self, bouton: Gtk.Button, ident: str) -> None:
-        """Popover réglages du widget : options du schema, transparence, épinglage."""
+    def basculer_reglages(self, ident: str) -> None:
+        """Ouvre/ferme le panneau de réglages INLINE du widget (⚙).
+
+        Pas de popover : un `Gtk.Popover` ouvre une surface que KWin ACTIVE,
+        ce qui fait perdre le focus au jeu plein écran et le minimise (bug
+        constaté le 2026-10-18). Rendu dans le conteneur du widget, il n'y a
+        pas de surface nouvelle — le jeu garde le focus."""
+        reveleur = self._reglages.get(ident)
+        if reveleur is None:
+            return
+        ouvrir = not reveleur.get_reveal_child()
+        self._fermer_tous_reglages()
+        reveleur.set_reveal_child(ouvrir)
+
+    def _fermer_tous_reglages(self) -> None:
+        for reveleur in self._reglages.values():
+            reveleur.set_reveal_child(False)
+
+    def _panneau_reglages(self, ident: str) -> Gtk.Widget:
+        """Contenu des réglages inline : ✕ Fermer + boîte de réglages du widget."""
+        boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4,
+                        css_classes=["reglages-widget"])
+        ferme = Gtk.Button(label="✕ " + tr("Close"), halign=Gtk.Align.END)
+        ferme.connect("clicked", lambda *_: self.basculer_reglages(ident))
+        boite.append(ferme)
+        boite.append(self._contenu_reglages(ident))
+        return boite
+
+    def _contenu_reglages(self, ident: str) -> Gtk.Widget:
+        """Options du schema + transparence + épinglage, dans le conteneur du widget."""
         spec = REGISTRE[ident]
         entree = self.conf["widgets"][ident]
         valeurs = {**options_defauts(spec), **entree.get("options", {}),
                    "transparence": float(entree.get("transparence", 0.0)),
                    "epingle": bool(entree.get("epingle", False))}
-        pop = popover_reglages(bouton, ident, spec.schema, valeurs, self.reglage_change)
-        pop.connect("closed", lambda p: p.unparent())
-        pop.popup()
+        return conteneur_reglages(ident, spec.schema, valeurs, self.reglage_change)
 
     def conteneur_de(self, ident: str) -> "Gtk.Box | None":
         for specimen, conteneur in self.instances:
@@ -383,21 +436,6 @@ class Fenetre(Gtk.ApplicationWindow):
         entree["epingle"] = not entree.get("epingle", False)
         config.sauver(config.chemin_defaut(), self.conf)
 
-    def _ligne_souris(self) -> Gtk.Box:
-        """Interrupteur global « Libérer la souris des jeux » (persisté)."""
-        ligne = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        ligne.append(Gtk.Label(label=tr("Release game mouse"),
-                               hexpand=True, halign=Gtk.Align.START))
-        interrupteur = Gtk.Switch(active=bool(self.conf.get("souris_libre", True)))
-        interrupteur.connect("notify::active", self._souris_change)
-        ligne.append(interrupteur)
-        return ligne
-
-    def _souris_change(self, interrupteur, _ps) -> None:
-        self.conf["souris_libre"] = bool(interrupteur.get_active())
-        config.sauver(config.chemin_defaut(), self.conf)
-        hook.ecrire_etat(self.conf["souris_libre"] and self._mode == "overlay")
-
     def _placer_panneau(self) -> None:
         """(Re)construit le panneau central selon l'état courant de la config."""
         if self.panneau is not None:
@@ -407,79 +445,33 @@ class Fenetre(Gtk.ApplicationWindow):
             (cle, tr(REGISTRE[cle].nom) if cle in REGISTRE else cle,
              bool(entree.get("actif")))
             for cle, entree in self.conf["widgets"].items()]
-        self.panneau = Panneau(entrees, self.basculer_actif, self.fermer,
-                               on_reglages=lambda i, b: self.ouvrir_reglages(b, i),
-                               ecran=self._ligne_ecran(),
-                               on_fermer=self.basculer,
-                               souris=self._ligne_souris())
+        self.panneau = Panneau(entrees, self.basculer_actif,
+                               on_reglages=self.basculer_reglages,
+                               on_fermer=self.basculer)
         self.panneau.set_halign(Gtk.Align.CENTER)
         self.panneau.set_valign(Gtk.Align.CENTER)
         self.racine.add_overlay(self.panneau)
         self.panneau.set_visible(self._mode == "overlay")
 
-    # ----------------------------------------------------------------- écran
-
-    def _noms_sorties(self) -> "list[str]":
-        """Noms des connecteurs des moniteurs (vides → réglage masqué)."""
-        display = Gdk.Display.get_default()
-        if display is None:
-            return []
-        noms = []
-        for moniteur in display.get_monitors():
-            nom = moniteur.get_connector()
-            if nom:
-                noms.append(nom)
-        return noms
-
-    def _ligne_ecran(self) -> "Gtk.Box | None":
-        """Ligne « Écran de l'overlay » : auto ou sortie nommée, persistée."""
-        noms = self._noms_sorties()
-        if not noms:
-            return None
-        modele = Gtk.StringList()
-        modele.append(tr("Auto"))
-        for nom in noms:
-            modele.append(nom)
-        liste = Gtk.DropDown(model=modele)
-        regle = self.conf.get("ecran", "auto")
-        liste.set_selected(noms.index(regle) + 1 if regle in noms else 0)
-        # Connecté APRÈS la valeur initiale : construction sans faux signal.
-        liste.connect("notify::selected", self._ecran_change)
-        boite = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        boite.append(Gtk.Label(label=tr("Overlay screen"),
-                               hexpand=True, halign=Gtk.Align.START))
-        boite.append(liste)
-        return boite
-
-    def _ecran_change(self, liste: Gtk.DropDown, _ps) -> None:
-        index = liste.get_selected()
-        noms = self._noms_sorties()
-        self.conf["ecran"] = "auto" if index == 0 else noms[index - 1]
-        config.sauver(config.chemin_defaut(), self.conf)
-        self.appliquer_ecran()
-
-    def appliquer_ecran(self) -> None:
-        """Place la fenêtre sur la sortie demandée (si elle existe encore),
-        sinon laisse le composant choisir (auto)."""
-        noms = self._noms_sorties()
-        nom = config.choix_sortie(self.conf.get("ecran", "auto"), noms)
-        cible = None
-        if nom is not None:
-            for moniteur in Gdk.Display.get_default().get_monitors():
-                if moniteur.get_connector() == nom:
-                    cible = moniteur
-                    break
-        Gtk4LayerShell.set_monitor(self, cible)
+    # Les réglages globaux (écran, souris) ne vivent plus dans l'overlay :
+    # l'écran suit le jeu (composant), la souris se pilote depuis Ludodex
+    # (réglage transmis par `--souris-libre` au lancement de la session).
 
 
 class OverlayApp(Gtk.Application):
-    """Application unique : lit `--game NOM` et `--demo`, puis active la fenêtre."""
+    """Application unique : lit `--game NOM`, `--demo` et `--souris-libre`,
+    puis active la fenêtre.
+
+    `--souris-libre` (défaut) : Ludodex décide si l'overlay doit relâcher la
+    capture souris du jeu (réglage de Ludodex, plus de l'overlay) ; sans lui,
+    la souris reste capturée même à l'ouverture de l'overlay."""
 
     def __init__(self):
         super().__init__(application_id=ID,
                          flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
         self.nom_jeu = ""
         self.demo = False
+        self.souris_libre = True  # défaut ON, ré-écrit par --souris-libre/--sans-souris-libre
         self.fenetre: "Fenetre | None" = None
         self.raccourci: "RaccourciPortal | None" = None
 
@@ -490,6 +482,10 @@ class OverlayApp(Gtk.Application):
         for i, arg in enumerate(args):
             if arg == "--demo":
                 self.demo = True
+            elif arg == "--souris-libre":  # Ludodex : relâche la souris du jeu
+                self.souris_libre = True
+            elif arg == "--sans-souris-libre":  # réglage OFF transmis par Ludodex
+                self.souris_libre = False
             elif arg == "--game" and i + 1 < len(args):
                 self.nom_jeu = args[i + 1]
             elif arg.startswith("--game="):

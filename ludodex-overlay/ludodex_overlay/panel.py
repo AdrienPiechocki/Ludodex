@@ -1,11 +1,14 @@
 """panel.py — panneau central de l'overlay (mode « overlay » uniquement).
 
-Une ligne par widget activable (interrupteur + réglages), un bouton
+Une ligne par widget activable (interrupteur + réglages ⚙), un bouton
 « Ajouter une widget » insensible (un seul widget en v1) et, en bas, le
-bouton Fermer (Shift+Tab aussi) et Quitter — l'overlay ne prend jamais le
-focus clavier (le jeu le garderait sinon, et plein écran se minimiserait) :
-tout se pilote à la souris, l'overlay est orphelin et doit toujours
-pouvoir être fermé à la main.
+bouton ✕ Fermer (Shift+Tab aussi) — l'overlay ne prend jamais le focus
+clavier (le jeu le garderait sinon, et plein écran se minimiserait) : tout
+se pilote à la souris.
+
+Pas de bouton « Quitter » : l'overlay est orphelin, il vit le temps de la
+session de jeu et Ludodex le tue à la fin de celle-ci ; un « Quitter »
+manuel ne laisserait que la sortie par ✕ Fermer ou Shift+Tab.
 """
 from gi.repository import Gtk
 
@@ -13,20 +16,14 @@ from .i18n import tr
 
 
 class Panneau(Gtk.Box):
-    """Panneau « Ludodex Overlay » : interrupteurs de widgets et action de sortie."""
+    """Panneau « Ludodex Overlay » : interrupteurs de widgets et fermeture."""
 
     def __init__(self, entrees: "list[tuple[str, str, bool]]",
-                 on_toggle: callable, on_quitter: callable,
+                 on_toggle: callable,
                  on_reglages: "callable | None" = None,
-                 ecran: "Gtk.Widget | None" = None,
-                 on_fermer: "callable | None" = None,
-                 souris: "Gtk.Widget | None" = None):
+                 on_fermer: "callable | None" = None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=8,
                          css_classes=["panneau"])
-        if ecran is not None:
-            self.append(ecran)  # réglage global « Écran de l'overlay »
-        if souris is not None:
-            self.append(souris)  # réglage global « Libérer la souris des jeux »
         self.append(Gtk.Label(label=tr("Ludodex Overlay"), css_classes=["panneau-titre"]))
         for ident, nom, actif in entrees:
             self.append(self._ligne(ident, nom, actif, on_toggle, on_reglages))
@@ -38,9 +35,6 @@ class Panneau(Gtk.Box):
         if on_fermer is not None:
             fermer.connect("clicked", lambda *_: on_fermer())
         bas.append(fermer)
-        quitter = Gtk.Button(label="⏻ " + tr("Quit"))
-        quitter.connect("clicked", lambda *_: on_quitter())
-        bas.append(quitter)
         self.append(bas)
 
     def _ligne(self, ident: str, nom: str, actif: bool, on_toggle: callable,
@@ -57,15 +51,20 @@ class Panneau(Gtk.Box):
         reglages = Gtk.Button(label="⚙")
         reglages.set_tooltip_text(tr("Settings"))
         if on_reglages is not None:
-            reglages.connect("clicked", lambda b, i=ident: on_reglages(i, b))
+            reglages.connect("clicked", lambda b, i=ident: on_reglages(i))
         ligne.append(reglages)
         return ligne
 
 
-def popover_reglages(parent: Gtk.Widget, ident: str, schema: "list[dict]",
-                     valeurs: dict, on_changement: callable) -> Gtk.Popover:
-    """Popover de réglages d'un widget : options du `schema` (bool → case,
-    scale → curseur), puis transparence et épinglage communs à tout widget.
+def conteneur_reglages(ident: str, schema: "list[dict]", valeurs: dict,
+                       on_changement: callable) -> Gtk.Box:
+    """Boîte de réglages d'un widget SANS surface propre : options du `schema`
+    (bool → case, scale → curseur), puis transparence et épinglage communs.
+
+    Construite hors popover (bug du 2026-10-18 : un `Gtk.Popover` ouvre une
+    nouvelle surface que KWin ACTIVE, ce qui fait perdre le focus au jeu plein
+    écran et le minimise). Rendue INLINE dans le conteneur du widget, elle
+    n'a pas de surface à activer — le jeu garde le focus.
 
     `valeurs` : options fusionnées + `transparence` + `epingle`. Chaque
     changement appelle `on_changement(ident, cle, valeur)`."""
@@ -109,7 +108,4 @@ def popover_reglages(parent: Gtk.Widget, ident: str, schema: "list[dict]",
                     lambda c, i=ident: on_changement(i, "epingle", c.get_active()))
     contenu.append(epingle)
 
-    pop = Gtk.Popover()
-    pop.set_child(contenu)
-    pop.set_parent(parent)
-    return pop
+    return contenu

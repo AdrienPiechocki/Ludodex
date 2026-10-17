@@ -1,17 +1,20 @@
 """config.py — configuration JSON globale de l'overlay.
 
-Réglages globaux (tous jeux confondus) : écran, et par widget {actif, position
-en fractions, transparence, épinglage, options}. Un fichier absent, illisible
-ou partiel retombe toujours sur les défauts : jamais de plantage au démarrage.
-"""
+Réglages globaux (tous jeux confondus) : écran (auto), et par widget {actif,
+position en fractions, transparence, épinglage, options}. Un fichier absent,
+illisible ou partiel retombe toujours sur les défauts : jamais de plantage au
+démarrage.
+
+Note : l'écran et la libération de la souris ne sont plus réglés ICI. L'écran
+suit le jeu (aucun `set_monitor` : le composant place la surface layer-shell là
+où est le pointeur/focus), et « libérer la souris » est un réglage de Ludodex
+passé à l'overlay par une drapeau au lancement (`--souris-libre`)."""
 import json, os, pathlib, typing
 
 
 def defauts() -> dict:
     """Schéma complet avec les valeurs d'usine."""
     return {
-        "ecran": "auto",
-        "souris_libre": True,
         "widgets": {
             "horloge": {
                 "actif": True,
@@ -82,11 +85,3 @@ def chemin_defaut(env: typing.Optional[dict] = None) -> pathlib.Path:
     environ = os.environ if env is None else env
     racine = environ.get("XDG_CONFIG_HOME") or str(pathlib.Path.home() / ".config")
     return pathlib.Path(racine) / "ludodex-overlay" / "config.json"
-
-
-def choix_sortie(regle: str, dispo: typing.List[str]) -> typing.Optional[str]:
-    """Écran demandé : `auto` → None (le composant choisit), sinon le nom de
-    la sortie si elle existe encore sur la machine, sinon None (retour auto)."""
-    if regle == "auto" or regle not in dispo:
-        return None
-    return regle

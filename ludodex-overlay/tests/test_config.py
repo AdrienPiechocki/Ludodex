@@ -6,12 +6,11 @@ from ludodex_overlay import config
 
 def test_defauts_pour_horloge():
     d = config.defauts()
-    assert d["ecran"] == "auto"
-    assert d["souris_libre"] is True
     h = d["widgets"]["horloge"]
     assert h["actif"] is True and h["epingle"] is False
     assert h["pos"] == {"x": 0.03, "y": 0.06}
     assert h["options"] == {"format_24h": True, "secondes": False}
+    assert set(d) == {"widgets"}  # écran et souris ne sont plus réglés ici
 
 
 def test_charger_fichier_absent_renvoie_les_defauts(tmp_path):
@@ -30,7 +29,7 @@ def test_charger_fusionne_les_defauts(tmp_path):
     d = config.charger(p)
     assert d["widgets"]["horloge"]["epingle"] is True
     assert d["widgets"]["horloge"]["actif"] is True      # clé absente → défaut
-    assert d["ecran"] == "auto"
+    assert set(d) == {"widgets"}
 
 
 def test_sauver_puis_charger(tmp_path):
@@ -44,12 +43,6 @@ def test_chemin_defaut_suit_xdg():
     assert config.chemin_defaut({}) == pathlib.Path.home() / ".config/ludodex-overlay/config.json"
 
 
-def test_choix_sortie():
-    assert config.choix_sortie("auto", ["DP-1", "eDP-2"]) is None
-    assert config.choix_sortie("eDP-2", ["DP-1", "eDP-2"]) == "eDP-2"
-    assert config.choix_sortie("HDMI-3", ["DP-1", "eDP-2"]) is None
-
-
 def test_charger_rejette_les_types_errones(tmp_path):
     """Config JSON éditée à la main : `null`, chaîne à la place d'un nombre,
     clé inconnue — jamais de plantage au démarrage, le défaut tient."""
@@ -57,8 +50,7 @@ def test_charger_rejette_les_types_errones(tmp_path):
     p.write_text('{"ecran": 5, "truc": "inconnu", '
                  '"widgets": {"horloge": {"options": null, "transparence": "plein", "epingle": 1}}}')
     d = config.charger(p)
-    assert d["ecran"] == "auto"
-    assert "truc" not in d
+    assert "ecran" not in d and "truc" not in d
     h = d["widgets"]["horloge"]
     assert h["options"] == {"format_24h": True, "secondes": False}
     assert h["transparence"] == 0.0

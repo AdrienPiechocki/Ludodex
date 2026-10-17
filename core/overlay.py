@@ -64,21 +64,28 @@ def command_avec_hook(argv: list, chemin: str) -> list:
     return ["env", f"LD_PRELOAD={charge}", *argv]
 
 
-def command_overlay(nom_jeu: str, env: dict = None) -> list:
+def command_overlay(nom_jeu: str, souris_libre: bool = True, env: dict = None) -> list:
     """Commande hôte qui démarre l'overlay pour la session d'un jeu.
 
+    `souris_libre` (réglage de Ludodex) : l'overlay relâche la capture souris
+    du jeu à l'ouverture ; à False il ne le fait pas. Le flag part DUPLICATA
+    (`--souris-libre` / `--sans-souris-libre`) car une instance déjà vivante
+    reçoit la commande par `do_command_line` : c'est la dernière valeur qui
+    gagne, et il faut pouvoir repasser à False.
+
     Sur l'hôte : `flatpak run … --game NOM`. Dans le sandbox Ludodex :
-    enveloppée par le `sh -c` de dépouillement d'`host_argv` — les deux
-    derniers arguments restent `--game` / le nom."""
-    return platform.host_argv(
-        ["flatpak", "run", OVERLAY_APP_ID, "--game", nom_jeu], env=env)
+    enveloppée par le `sh -c` de dépouillement d'`host_argv` — les
+    arguments `--game`/nom et le flag souris restent en queue."""
+    argv = ["flatpak", "run", OVERLAY_APP_ID, "--game", nom_jeu,
+            "--souris-libre" if souris_libre else "--sans-souris-libre"]
+    return platform.host_argv(argv, env=env)
 
 
-def lancer_overlay(nom_jeu: str) -> bool:
+def lancer_overlay(nom_jeu: str, souris_libre: bool = True) -> bool:
     """Démarre l'overlay — False si l'addon est absent (silencieux)."""
     global _proc, _atexit_fait
     try:
-        _proc = subprocess.Popen(command_overlay(nom_jeu),
+        _proc = subprocess.Popen(command_overlay(nom_jeu, souris_libre=souris_libre),
                                  stdout=subprocess.DEVNULL,
                                  stderr=subprocess.DEVNULL,
                                  start_new_session=True)

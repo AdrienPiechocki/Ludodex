@@ -7,13 +7,22 @@ from core import overlay
 
 def test_command_overlay_sur_hote():
     assert overlay.command_overlay("SULFUR") == [
-        "flatpak", "run", "io.github.AdrienPiechocki.LudodexOverlay", "--game", "SULFUR"]
+        "flatpak", "run", "io.github.AdrienPiechocki.LudodexOverlay",
+        "--game", "SULFUR", "--souris-libre"]
+
+
+def test_command_overlay_sans_souris_libre():
+    """Réglage Ludodex « Libérer la souris des jeux » à OFF : le flag
+    --sans-souris-libre part (l'overlay ne relâche pas la souris)."""
+    assert overlay.command_overlay("SULFUR", souris_libre=False) == [
+        "flatpak", "run", "io.github.AdrienPiechocki.LudodexOverlay",
+        "--game", "SULFUR", "--sans-souris-libre"]
 
 
 def test_command_overlay_dans_le_sandbox():
     cmd = overlay.command_overlay("SULFUR", env={"FLATPAK_ID": "io.github.AdrienPiechocki.Ludodex"})
     assert cmd[0] == "flatpak-spawn" and "--host" in cmd
-    assert cmd[-2:] == ["--game", "SULFUR"]
+    assert cmd[-3:] == ["--game", "SULFUR", "--souris-libre"]
 
 
 def test_chemin_hook_user_et_systeme():
