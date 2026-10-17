@@ -6,23 +6,19 @@ from core import overlay
 
 
 def test_command_overlay_sur_hote():
+    """Aucun flag souris : l'overlay libère TOUJOURS la souris dès l'ouverture.
+    Le réglage « Libérer la souris des jeux » a été retiré — il ne servait à
+    rien : la porte anti-re-capture doit être active dès l'ouverture pour que
+    la libération tienne (sans porte, le jeu re-capture aussitôt)."""
     assert overlay.command_overlay("SULFUR") == [
         "flatpak", "run", "io.github.AdrienPiechocki.LudodexOverlay",
-        "--game", "SULFUR", "--souris-libre"]
-
-
-def test_command_overlay_sans_souris_libre():
-    """Réglage Ludodex « Libérer la souris des jeux » à OFF : le flag
-    --sans-souris-libre part (l'overlay ne relâche pas la souris)."""
-    assert overlay.command_overlay("SULFUR", souris_libre=False) == [
-        "flatpak", "run", "io.github.AdrienPiechocki.LudodexOverlay",
-        "--game", "SULFUR", "--sans-souris-libre"]
+        "--game", "SULFUR"]
 
 
 def test_command_overlay_dans_le_sandbox():
     cmd = overlay.command_overlay("SULFUR", env={"FLATPAK_ID": "io.github.AdrienPiechocki.Ludodex"})
     assert cmd[0] == "flatpak-spawn" and "--host" in cmd
-    assert cmd[-3:] == ["--game", "SULFUR", "--souris-libre"]
+    assert cmd[-2:] == ["--game", "SULFUR"]
 
 
 def test_command_overlay_transmet_la_langue():
@@ -30,7 +26,7 @@ def test_command_overlay_transmet_la_langue():
     sans lui, l'overlay retomberait sur la langue du système hôte."""
     assert overlay.command_overlay("SULFUR", langue="fr") == [
         "flatpak", "run", "io.github.AdrienPiechocki.LudodexOverlay",
-        "--game", "SULFUR", "--souris-libre", "--lang", "fr"]
+        "--game", "SULFUR", "--lang", "fr"]
 
 
 def test_lancer_transmet_la_langue(monkeypatch):

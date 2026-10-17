@@ -64,36 +64,36 @@ def command_avec_hook(argv: list, chemin: str) -> list:
     return ["env", f"LD_PRELOAD={charge}", *argv]
 
 
-def command_overlay(nom_jeu: str, souris_libre: bool = True, langue: str = None,
-                    env: dict = None) -> list:
+def command_overlay(nom_jeu: str, langue: str = None, env: dict = None) -> list:
     """Commande hôte qui démarre l'overlay pour la session d'un jeu.
-
-    `souris_libre` (réglage de Ludodex) : l'overlay relâche la capture souris
-    du jeu à l'ouverture ; à False il ne le fait pas. Le flag part DUPLICATA
-    (`--souris-libre` / `--sans-souris-libre`) car une instance déjà vivante
-    reçoit la commande par `do_command_line` : c'est la dernière valeur qui
-    gagne, et il faut pouvoir repasser à False.
 
     `langue` : langue choisie dans Ludodex — sans `--lang`, l'overlay ne
     verrait que les variables POSIX du processus, donc la langue SYSTÈME
     (pas forcément celle de Ludodex, spec du 2026-10-18).
 
+    Aucun flag souris : l'overlay libère TOUJOURS la souris du jeu dès
+    l'ouverture et l'y maintient (porte anti-re-capture) jusqu'à la fermeture.
+    Le réglage « Libérer la souris des jeux » a été retiré (2026-10-18) : il
+    ne servait à rien — borné, il laissait le jeu re-capturer aussitôt, donc
+    la libération ne tenait pas. Pendant que vous jouez (overlay fermé),
+    l'overlay n'interfère pas du tout ; la parade anti-cheat réelle est le
+    réglage « In-game overlay » à OFF, qui supprime le LD_PRELOAD.
+
     Sur l'hôte : `flatpak run … --game NOM`. Dans le sandbox Ludodex :
     enveloppée par le `sh -c` de dépouillement d'`host_argv` — les
-    arguments `--game`/nom, le flag souris et `--lang` restent en queue."""
-    argv = ["flatpak", "run", OVERLAY_APP_ID, "--game", nom_jeu,
-            "--souris-libre" if souris_libre else "--sans-souris-libre"]
+    arguments `--game`/nom et `--lang` restent en queue."""
+    argv = ["flatpak", "run", OVERLAY_APP_ID, "--game", nom_jeu]
     if langue:
         argv += ["--lang", langue]
     return platform.host_argv(argv, env=env)
 
 
-def lancer_overlay(nom_jeu: str, souris_libre: bool = True, langue: str = None) -> bool:
+def lancer_overlay(nom_jeu: str, langue: str = None) -> bool:
     """Démarre l'overlay — False si l'addon est absent (silencieux)."""
     global _proc, _atexit_fait
     try:
         _proc = subprocess.Popen(
-            command_overlay(nom_jeu, souris_libre=souris_libre, langue=langue),
+            command_overlay(nom_jeu, langue=langue),
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True)

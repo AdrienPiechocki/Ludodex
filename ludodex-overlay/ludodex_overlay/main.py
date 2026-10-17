@@ -141,10 +141,13 @@ class Fenetre(Gtk.ApplicationWindow):
         # Drapeau pour le hook LD_PRELOAD injecté dans le jeu : ouvert → le
         # hook relâche la capture de la souris de l'intérieur du processus
         # (spike 2026-10-17) — zéro changement de focus, zéro miniaturisation.
-        # La volonté (libérer ou non) vient de Ludodex via `--souris-libre`.
-        app = self.get_application()
-        souris_libre = bool(getattr(app, "souris_libre", True))
-        hook.ecrire_etat(souris_libre and mode == "overlay")
+        # TOUJOURS à l'ouverture (parc manuel 2026-10-18 : « ouvrir l'overlay
+        # libère la souris, même sans l'option ») : la porte anti-re-capture
+        # du hook doit être active dès l'ouverture, sans quoi le jeu re-capture
+        # aussitôt et la libération ne tient pas. Le réglage « Libérer la
+        # souris des jeux » a été retiré ; la parade anti-cheat est « In-game
+        # overlay » à OFF dans Ludodex, qui supprime l'injection du hook.
+        hook.ecrire_etat(mode == "overlay")
         self._appliquer_region_entree()
         self._voile.set_visible(mode == "overlay")
         if self.panneau is not None:
@@ -481,17 +484,14 @@ class Fenetre(Gtk.ApplicationWindow):
         self.panneau.set_visible(self._mode == "overlay")
 
     # Les réglages globaux (écran, souris) ne vivent plus dans l'overlay :
-    # l'écran suit le jeu (composant), la souris se pilote depuis Ludodex
-    # (réglage transmis par `--souris-libre` au lancement de la session).
+    # l'écran suit le jeu (composant), la souris est toujours libérée à
+    # l'ouverture (le réglage « Libérer la souris des jeux » a été retiré).
 
 
 class OverlayApp(Gtk.Application):
-    """Application unique : lit `--game NOM`, `--demo`, `--souris-libre`
-    et `--lang CODE`, puis active la fenêtre.
+    """Application unique : lit `--game NOM`, `--demo` et `--lang CODE`,
+    puis active la fenêtre.
 
-    `--souris-libre` (défaut) : Ludodex décide si l'overlay doit relâcher la
-    capture souris du jeu (réglage de Ludodex, plus de l'overlay) ; sans lui,
-    la souris reste capturée même à l'ouverture de l'overlay.
     `--lang` : langue définie dans Ludodex — sans lui, détection sur les
     variables POSIX du processus (langue système)."""
 
@@ -500,7 +500,6 @@ class OverlayApp(Gtk.Application):
                          flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
         self.nom_jeu = ""
         self.demo = False
-        self.souris_libre = True  # défaut ON, ré-écrit par --souris-libre/--sans-souris-libre
         self.fenetre: "Fenetre | None" = None
         self.raccourci: "RaccourciPortal | None" = None
 
@@ -512,10 +511,6 @@ class OverlayApp(Gtk.Application):
         for i, arg in enumerate(args):
             if arg == "--demo":
                 self.demo = True
-            elif arg == "--souris-libre":  # Ludodex : relâche la souris du jeu
-                self.souris_libre = True
-            elif arg == "--sans-souris-libre":  # réglage OFF transmis par Ludodex
-                self.souris_libre = False
             elif arg == "--game" and i + 1 < len(args):
                 self.nom_jeu = args[i + 1]
             elif arg.startswith("--game="):

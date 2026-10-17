@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """tests/test_settingsui.py — persistance des interrupteurs de réglage.
 
-Bug du 2026-10-18 : « In-game overlay » et « Release game mouse » revenaient
-au défaut au redémarrage. Cause : les handlers lisaient `row.active`, attribut
-non exposé en introspection Python sur `Adw.SwitchRow` → AttributeError avalée
-par PyGObject → l'écriture n'avait JAMAIS lieu. Le bon accès est `row.get_active()`.
+Bug du 2026-10-18 : « In-game overlay » revenait au défaut au redémarrage.
+Cause : le handler lisait `row.active`, attribut non exposé en introspection
+Python sur `Adw.SwitchRow` → AttributeError avalée par PyGObject →
+l'écriture n'avait JAMAIS lieu. Le bon accès est `row.get_active()`.
 
 On rejoue le bug de bout en bout : le VRAI handler de `SettingsMixin` est appelé
 avec un `con` sqlite en mémoire et une ligne qui n'expose que `get_active()`
@@ -50,23 +50,3 @@ def test_overlay_toggle_persiste_vraiment_en_base():
     assert con.execute("SELECT value FROM settings WHERE key='overlay'").fetchone()[0] == "0"
     m._on_overlay_toggle(_Ligne(True), None)
     assert con.execute("SELECT value FROM settings WHERE key='overlay'").fetchone()[0] == "1"
-
-
-def test_souris_libre_toggle_persiste_vraiment_en_base():
-    con = _con()
-    m = _settingsui(con)
-    m._on_souris_libre_toggle(_Ligne(False), None)
-    assert con.execute("SELECT value FROM settings WHERE key='souris_libre'").fetchone()[0] == "0"
-    m._on_souris_libre_toggle(_Ligne(True), None)
-    assert con.execute("SELECT value FROM settings WHERE key='souris_libre'").fetchone()[0] == "1"
-
-
-def test_les_deux_cles_sont_couvertes():
-    """Filet : les deux handlers doivent écrire leur clé — un handler vidé ou
-    renommé ferait échouer ce test même si l'autre marche."""
-    for nom, cle in (("_on_overlay_toggle", "overlay"),
-                     ("_on_souris_libre_toggle", "souris_libre")):
-        con = _con()
-        m = _settingsui(con)
-        getattr(m, nom)(_Ligne(False), None)
-        assert con.execute("SELECT value FROM settings WHERE key=?", (cle,)).fetchone()[0] == "0"

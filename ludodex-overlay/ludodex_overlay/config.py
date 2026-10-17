@@ -7,8 +7,9 @@ démarrage.
 
 Note : l'écran et la libération de la souris ne sont plus réglés ICI. L'écran
 suit le jeu (aucun `set_monitor` : le composant place la surface layer-shell là
-où est le pointeur/focus), et « libérer la souris » est un réglage de Ludodex
-passé à l'overlay par une drapeau au lancement (`--souris-libre`)."""
+où est le pointeur/focus), et la souris est toujours libérée à l'ouverture de
+l'overlay — le réglage « Libérer la souris des jeux » de Ludodex a été retiré
+(le 2026-10-18) : borné, il laissait le jeu re-capturer aussitôt."""
 import json, os, pathlib, typing
 
 

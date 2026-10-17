@@ -60,19 +60,14 @@ class SettingsMixin:
         page.add(lang_group)
 
         # Overlay in-game : addon flatpak séparé, démarré à chaque lancement
-        # de jeu (absent → le jeu se lance simplement, sans alerte).
+        # de jeu (absent → le jeu se lance simplement, sans alerte). À OFF,
+        # aucun LD_PRELOAD n'est injecté dans le jeu — c'est la parade aux
+        # anti-cheats. L'overlay libère toujours la souris en s'ouvrant.
         ov_group = Adw.PreferencesGroup()
         ov_row = Adw.SwitchRow(title=tr("In-game overlay"),
                                active=P.get_setting(self.con, "overlay", "1") == "1")
         ov_row.connect("notify::active", self._on_overlay_toggle)
         ov_group.add(ov_row)
-        # Libération de la souris : réglage de Ludodex (transmis à l'overlay
-        # par flag au lancement). À OFF, un FPS à souris capturée garde sa
-        # souris même quand l'overlay est ouvert.
-        souris_row = Adw.SwitchRow(title=tr("Release game mouse"),
-                                   active=P.get_setting(self.con, "souris_libre", "1") == "1")
-        souris_row.connect("notify::active", self._on_souris_libre_toggle)
-        ov_group.add(souris_row)
         page.add(ov_group)
 
         imp_group = Adw.PreferencesGroup(
@@ -297,15 +292,6 @@ class SettingsMixin:
         # JAMAIS écrit (bug du 2026-10-18 : les interrupteurs revenaient au
         # défaut ; mécanisme verrouillé par tests/test_settingsui.py).
         P.set_setting(self.con, "overlay", "1" if row.get_active() else "0")
-
-    def _on_souris_libre_toggle(self, row, _ps):
-        """Réglage « Libérer la souris des jeux » : prochains lancements seulement.
-
-        Transmis à l'overlay par flag (`--souris-libre` / `--sans-souris-libre`)
-        au lancement de la session — l'overlay ne stocke plus ce réglage."""
-        # Idem que l'interrupteur ci-dessus : `get_active()` et non `row.active`
-        # (non exposé en introspection — l'écriture n'avait jamais lieu).
-        P.set_setting(self.con, "souris_libre", "1" if row.get_active() else "0")
 
     def _on_module(self, sw, _p, name):
         P.set_setting(self.con, f"module_{name}", "1" if sw.get_active() else "0")

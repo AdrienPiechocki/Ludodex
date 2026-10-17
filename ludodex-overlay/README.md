@@ -16,17 +16,16 @@ tué par Ludodex à chaque lancement de jeu.
   panneau referment l'overlay — l'application reste en tâche de fond pour la
   fin de session ; elle n'est jamais muette : si le raccourci refuse, une
   notification explique pourquoi puis l'overlay s'arrête.
-- **Libération de la souris des jeux** (réglage « Libérer la souris des
-  jeux » de Ludodex — Réglages → Général, activé par défaut, transmis à
-  l'overlay par drapeau au lancement de la session) : Ludodex injecte `libludodex-hook.so` dans le
-  processus du jeu via `LD_PRELOAD` (le principe de l'overlay Steam). Quand
-  l'overlay s'ouvre, le hook relâche la capture de souris **de l'intérieur du
-  jeu** (SDL2 complet, SDL3 et X11 en partie) et empêche sa re-capture jusqu'à
-  la fermeture — le jeu garde le focus, il ne se miniaturise jamais. Le jeu
-  reprend la main tout seul à sa prochaine tentative de capture.
+- **Libération de la souris des jeux** : Ludodex injecte `libludodex-hook.so`
+  dans le processus du jeu via `LD_PRELOAD` (le principe de l'overlay Steam).
+  Quand l'overlay s'ouvre, le hook relâche la capture de souris **de l'intérieur
+  du jeu** (SDL2 complet, SDL3 et X11 en partie) et empêche sa re-capture
+  jusqu'à la fermeture — le jeu garde le focus, il ne se miniaturise jamais.
+  Le jeu reprend la main tout seul à sa prochaine tentative de capture.
+  Pendant que vous jouez (overlay fermé), le hook n'interfère pas du tout.
   ⚠ Jeux en ligne avec anti-cheat : une injection `LD_PRELOAD` peut être
-  mal vue — désactivez ce réglage (le jeu tourne alors
-  normalement, sans libération automatique de la souris).
+  mal vue — désactivez « In-game overlay » dans Ludodex (Réglages → Général) :
+  aucun hook n'est alors injecté et le jeu tourne normalement.
 - Dans l'overlay : un panneau central (interrupteurs de widgets) et les
   widgets flottants, **déplaçables à la souris/doigt** avec aimantation
   douce aux bords — chaque bord et coin atteignable. Les réglages d'un
@@ -68,7 +67,6 @@ défaut).
 ```sh
 flatpak run io.github.AdrienPiechocki.LudodexOverlay --demo   # voile + panneau immédiatement
 flatpak run io.github.AdrienPiechocki.LudodexOverlay --game "Nom du jeu"
-flatpak run io.github.AdrienPiechocki.LudodexOverlay --game "Nom" --sans-souris-libre  # sans libération de la souris
 flatpak run io.github.AdrienPiechocki.LudodexOverlay --game "Nom" --lang fr          # langue forcée (sinon langue du système)
 ```
 

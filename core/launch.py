@@ -421,9 +421,7 @@ def launch(con, g, on_exit=None):
     # `langue` : celle de Ludodex (réglage utilisateur, sinon système) —
     # sans --lang, l'overlay ne verrait que les variables POSIX du processus.
     if on_exit is not None and get_setting(con, "overlay", "1") == "1":
-        overlay.lancer_overlay(str(g["name"]),
-                               souris_libre=get_setting(con, "souris_libre", "1") == "1",
-                               langue=get_lang())
+        overlay.lancer_overlay(str(g["name"]), langue=get_lang())
     if on_exit is not None and cur.rowcount:  # INSERT ignoré = rien d'ouvert à suivre
         # Un argv contenant "://" est remis à xdg-open : le processus tenu n'est que
         # le passe-plat, qui rend la main en ms. Pour un jeu connu (Heroic), on suit
