@@ -23,7 +23,7 @@ from gi.repository import Gdk, Gio, GLib, Gtk, Gtk4LayerShell
 
 from . import config, placement
 from .i18n import tr
-from .panel import Panneau
+from .panel import Panneau, popover_reglages
 from .widgets import REGISTRE, options_defauts
 
 ID = "io.github.AdrienPiechocki.LudodexOverlay"
@@ -177,6 +177,7 @@ class Fenetre(Gtk.ApplicationWindow):
             specimen = spec(**options)
             conteneur = Gtk.Box(orientation=Gtk.Orientation.VERTICAL,
                                 css_classes=["widget"])
+            conteneur.set_opacity(1 - 0.7 * float(entree.get("transparence", 0.0)))
             conteneur.append(specimen.fabrique())
             reveleur = Gtk.Revealer(
                 transition_type=Gtk.RevealerTransitionType.CROSSFADE,
@@ -288,13 +289,42 @@ class Fenetre(Gtk.ApplicationWindow):
         return boite
 
     def ouvrir_reglages(self, bouton: Gtk.Button, ident: str) -> None:
-        """Popover réglages du widget — rempli tâche 8 (transparence, options)."""
-        pop = Gtk.Popover()
-        pop.set_child(Gtk.Label(
-            label=tr("Settings"), margin_top=12, margin_bottom=12,
-            margin_start=16, margin_end=16))
-        pop.set_parent(bouton)
+        """Popover réglages du widget : options du schema, transparence, épinglage."""
+        spec = REGISTRE[ident]
+        entree = self.conf["widgets"][ident]
+        valeurs = {**options_defauts(spec), **entree.get("options", {}),
+                   "transparence": float(entree.get("transparence", 0.0)),
+                   "epingle": bool(entree.get("epingle", False))}
+        pop = popover_reglages(bouton, ident, spec.schema, valeurs, self.reglage_change)
+        pop.connect("closed", lambda p: p.unparent())
         pop.popup()
+
+    def conteneur_de(self, ident: str) -> "Gtk.Box | None":
+        for specimen, conteneur in self.instances:
+            if type(specimen).id == ident:
+                return conteneur
+        return None
+
+    def reglage_change(self, ident: str, cle: str, valeur) -> None:
+        """Un réglage bouge : config à jour, effet immédiat, sauvegarde."""
+        entree = self.conf["widgets"][ident]
+        if cle == "transparence":
+            entree["transparence"] = float(valeur)
+            conteneur = self.conteneur_de(ident)
+            if conteneur is not None:
+                # Jamais invisible : 100 % de transparence = 30 % d'opacité.
+                conteneur.set_opacity(1 - 0.7 * float(valeur))
+        elif cle == "epingle":
+            entree["epingle"] = bool(valeur)
+        else:
+            entree.setdefault("options", {})[cle] = valeur
+            # Contrat Widget : la clé du schema est un attribut du spécimen,
+            # mis à jour en direct (le rafraîchissement suivant l'applique).
+            for specimen, _conteneur in self.instances:
+                if type(specimen).id == ident:
+                    setattr(specimen, cle, valeur)
+                    specimen.tick()
+        config.sauver(config.chemin_defaut(), self.conf)
 
     # ----------------------------------------------------------------- états
 
@@ -319,7 +349,8 @@ class Fenetre(Gtk.ApplicationWindow):
             (cle, tr(REGISTRE[cle].nom) if cle in REGISTRE else cle,
              bool(entree.get("actif")))
             for cle, entree in self.conf["widgets"].items()]
-        self.panneau = Panneau(entrees, self.basculer_actif, self.fermer)
+        self.panneau = Panneau(entrees, self.basculer_actif, self.fermer,
+                               on_reglages=lambda i, b: self.ouvrir_reglages(b, i))
         self.panneau.set_halign(Gtk.Align.CENTER)
         self.panneau.set_valign(Gtk.Align.CENTER)
         self.racine.add_overlay(self.panneau)
