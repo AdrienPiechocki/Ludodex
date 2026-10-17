@@ -3,13 +3,14 @@
 
 Le bloc-notes de l'overlay (Shift+Tab) range ses notes par jeu dans
 `userdata/<compte>/2371090/remote/notes_<appid>` : un JSON dont le contenu est
-du BBCode, que le Steam Cloud propage entre les machines. Ludodex garde une
-seule note Markdown par jeu — ce module sert de pont entre les deux mondes. Il
-tient trois matières, dans l'ordre où elles s'empilent :
+du BBCode, que le Steam Cloud propage entre les machines. Ludodex garde un
+MIROIR note à note de ce carnet (table `game_notes`, tous les jeux) : ce module
+sert de pont entre les deux mondes. Il tient trois matières, dans l'ordre où
+elles s'empilent :
 
 1. la conversion BBCode ↔ Markdown (les paires ci-dessous, rien de plus) ;
 2. la lecture et l'écriture des fichiers Steam (écriture atomique) ;
-3. la décision d'aller-retour (« le plus récent gagne »).
+3. la synchronisation note à note (« le plus récent gagne », tombstones).
 
 Les balises inconnues ou non fermées perdent leurs crochets, jamais leur
 texte : une note reste lisible quelle que soit la saison de Steam.
@@ -21,7 +22,9 @@ import random
 import re
 import time
 
-from .db import get_setting, set_note
+from .db import (create_note, drop_note, get_setting, lier_steam_id, note_row,
+                 notes_of_game, purge_tombstones, set_note_import, tombstoned_ids,
+                 vanished_rows)
 from .steam import STEAM_ROOTS, steam_appid_of
 
 # Le carnet overlay de tous les jeux vit dans ce dossier distant du compte :
@@ -155,18 +158,6 @@ def markdown_en_bbcode(texte):
     return "".join(sortie)
 
 
-def titre_depuis_markdown(texte):
-    """(titre, corps) : le premier `# ` de la note devient le champ `title` de
-    la note overlay et LA LIGNE QUITTE le corps — c'est ce retrait qui rend le
-    cycle stable (pousser deux fois ne change rien)."""
-    if not texte:
-        return "", ""
-    m = re.match(r"# +(.*)\n?", texte)
-    if not m:
-        return "", texte
-    return m.group(1).strip(), texte[m.end():].lstrip("\n")
-
-
 def notes_steam_en_markdown(notes):
     """Toutes les notes overlay d'un jeu, fondues en un seul Markdown : chaque
     titre devient un titre `# `, les textes se suivent séparés d'une ligne
@@ -237,81 +228,124 @@ def nouvel_id():
     return "".join(random.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(8))
 
 
-def ecrire_notes(appid, note_id, titre, contenu, quand):
-    """Le carnet du jeu devient une SEULE note : les autres entrées sont
-    remplacées — leur texte est déjà dans la fusion. L'histoire (`time_created`)
-    de la note réutilisée survive ; `time_modified` porte l'invariant de synchro.
-    Écriture atomique : jamais de JSON tronqué sous la main de Steam."""
+def ecrire_notes_multi(appid, notes):
+    """Le carnet du jeu devient exactement `notes` — la liste complète, dans
+    l'ordre du carnet. Écriture atomique du fichier entier (tmp + rename) :
+    jamais de JSON tronqué sous la main de Steam."""
     f = fichier_notes(appid)
     if f is None:
         return
-    ancien = next((n for n in (lire_notes(appid) or []) if n.get("id") == note_id), None)
-    note = {"id": note_id, "appid": appid, "ordinal": 0,
-            "time_created": (ancien or {}).get("time_created", quand),
-            "time_modified": quand, "title": titre, "content": contenu}
     f.parent.mkdir(parents=True, exist_ok=True)
     tmp = f.with_name(f.name + ".tmp")
-    tmp.write_text(json.dumps({"notes": [note]}, ensure_ascii=False), encoding="utf-8")
+    tmp.write_text(json.dumps({"notes": notes}, ensure_ascii=False), encoding="utf-8")
     os.replace(tmp, f)
 
 
-# ---------- décision ----------
-
-def resoudre(note_ludodex, t_ludodex, notes_steam):
-    """Le arbitre d'aller-retour : ('importer', texte_steam, t_steam) /
-    ('pousser', note_ludodex, 0) / ('rien', '', 0).
-
-    Règles, dans l'ordre : un carnet illisible (None) n'est jamais écrasé ;
-    un `[p][/p]` de placeholder compte comme un côté vide ; un côté vide cède à
-    l'autre ; deux textes identiques ne bougent rien ; sinon le plus récent
-    gagne — **égalité ou premier contact (t_ludodex nul) : Steam gagne**.
-    """
-    if notes_steam is None:
-        return "rien", "", 0
-    st = notes_steam_en_markdown(notes_steam).strip()
-    ld = (note_ludodex or "").strip()
-    if not st and not ld:
-        return "rien", "", 0
-    if not st:
-        return "pousser", note_ludodex, 0
-    if not ld:
-        return "importer", st, max(n.get("time_modified") or 0 for n in notes_steam)
-    if st == ld:
-        return "rien", "", 0
-    t_steam = max(n.get("time_modified") or 0 for n in notes_steam)
-    if t_ludodex == 0 or t_steam >= t_ludodex:
-        return "importer", st, t_steam
-    return "pousser", note_ludodex, 0
-
-
 def synchroniser(con, gid):
-    """Le va-et-vient d'une note : importe la note overlay, pousse la note
-    Ludodex, ou ne fait rien. Retourne l'action prise ('ignore' hors champ :
-    réglage éteint, jeu non Steam ou carnet illisible). L'invariant qui rend
-    l'opération stable : `time_modified` poussé = `notes_modified` de Ludodex —
-    pousser puis rouvrir ne bouge donc rien."""
+    """Le va-et-vient note à note du carnet overlay : chaque note du fichier a
+    sa ligne `game_notes`, chaque arbitrage oppose `time_modified` de la note à
+    `modified` de la ligne — le plus récent gagne, égalité (ou premier contact)
+    → Steam. Retourne l'action prise ('ignore' hors champ : réglage éteint, jeu
+    non Steam, pas de compte ou fichier illisible — jamais écrasé).
+
+    Règles d'appoint, toutes testées :
+    - migration : une note locale dont le texte est EXACTEMENT la fusion du
+      carnet en est le doublon → retirée (modifiée entre-temps, elle reste) ;
+    - miroir : une note disparue du carnet est supprimée localement, mais
+      JAMAIS si le fichier n'existe pas (absence ≠ carnet vidé) ;
+    - placeholders vides (`[p][/p]`) : pas de ligne locale, mais préservés à
+      la poussée — Ludodex ne supprime rien qu'il n'a pas créé ;
+    - poussée : dicts existants mis à jour sur place (`ordinal`,
+      `time_created`, clés inconnues intacts), notes locales appendues avec un
+      nouvel id, tombes omises ; purgées UNIQUEMENT après écriture réussie.
+    L'invariant qui rend l'opération stable : `time_modified` poussé =
+    `modified` de la ligne — pousser puis rouvrir ne bouge donc rien."""
     if get_setting(con, "steam_notes_sync") == "0":
         return "ignore"
-    g = con.execute("SELECT source, ext_id, notes, notes_modified FROM games WHERE id=?",
-                    (gid,)).fetchone()
+    g = con.execute("SELECT source, ext_id FROM games WHERE id=?", (gid,)).fetchone()
+    if g is None:
+        return "ignore"
     appid = steam_appid_of(g)
-    if g is None or appid is None or compte_notes() is None:
+    if appid is None or compte_notes() is None:
         return "ignore"
-    notes = lire_notes(appid)
-    if notes is None:
+    fichier = lire_notes(appid)
+    if fichier is None:
         return "ignore"
-    action, texte, quand = resoudre(g["notes"], g["notes_modified"] or 0, notes)
-    if action == "importer":
-        set_note(con, gid, texte)
-        # l'horodatage Steam est hérité tel quel : pousser plus tard ne réécrit pas
-        con.execute("UPDATE games SET notes_modified=? WHERE id=?", (quand, gid))
-        con.commit()
-    elif action == "pousser":
-        note_id = (notes[0]["id"] if notes else nouvel_id())
-        titre, corps = titre_depuis_markdown(texte)
-        quand = g["notes_modified"] or int(time.time())
-        ecrire_notes(appid, note_id, titre, markdown_en_bbcode(corps), quand)
-        if not g["notes_modified"]:  # ligne héritée à 0 : le poussage referme l'invariant
-            con.execute("UPDATE games SET notes_modified=? WHERE id=?", (quand, gid))
-            con.commit()
-    return action
+    try:
+        existe = fichier_notes(appid).exists()
+    except OSError:
+        existe = False
+
+    importe = False
+
+    # Dédup de migration : locale dont le texte = fusion du carnet → doublon.
+    if fichier:
+        fusion = notes_steam_en_markdown(fichier).strip()
+        for ligne in notes_of_game(con, gid):
+            if ligne["steam_id"] == "" and ligne["content"].strip() == fusion:
+                drop_note(con, ligne["id"])
+                importe = True
+
+    # Miroir (miroir, pas de reconstruction) : id disparu du fichier → ligne
+    # supprimée. Un fichier absent n'a rien à supprimer.
+    if existe:
+        for rowid in vanished_rows(con, gid, [n["id"] for n in fichier]):
+            drop_note(con, rowid)
+            importe = True
+
+    # Import : arbitrage par note, Steam gagne les égalités ; le placeholder
+    # vide ne devient pas de ligne (les lignes ne servent qu'à ce qui se voit).
+    for n in fichier:
+        titre = (n.get("title") or "").strip()
+        corps = bbcode_en_markdown(n["content"]).strip()
+        if not titre and not corps:
+            continue
+        ligne = note_row(con, gid, n["id"])
+        if ligne is None:
+            create_note(con, gid, titre, corps, steam_id=n["id"],
+                        modified=n.get("time_modified") or 0)
+            importe = True
+        elif (not ligne["deleted"] and (titre, corps) != (ligne["title"], ligne["content"])
+              and (n.get("time_modified") or 0) >= ligne["modified"]):
+            set_note_import(con, ligne["id"], titre, corps, n.get("time_modified") or 0)
+            importe = True
+
+    # Poussée : le carnet reconstruit garde l'ordre et l'histoire des entrées
+    # existantes ; les lignes locales repartent avec un id neuf, les tombes
+    # disparaissent, tout le reste (notes inconnues de Ludodex) est préservé.
+    tombe = set(tombstoned_ids(con, gid))
+    lignes = notes_of_game(con, gid)          # deleted=0 : les tombes n'y sont pas
+    par_id = {l["steam_id"]: l for l in lignes if l["steam_id"]}
+    sortie, a_lier, pousse = [], [], False
+    for n in fichier:
+        if n["id"] in tombe:
+            pousse = True                     # à retirer du carnet
+            continue
+        ligne = par_id.get(n["id"])
+        if ligne is None:
+            sortie.append(n)                  # inconnue de Ludodex (placeholder) : préservée
+            continue
+        maj = dict(n)
+        maj["title"] = ligne["title"]
+        maj["content"] = markdown_en_bbcode(ligne["content"])
+        maj["time_modified"] = ligne["modified"]
+        if maj != n:
+            pousse = True
+        sortie.append(maj)
+    for ligne in lignes:
+        if ligne["steam_id"]:
+            continue
+        nid = nouvel_id()
+        quand = ligne["modified"] or int(time.time())
+        sortie.append({"id": nid, "appid": appid, "ordinal": len(sortie),
+                       "time_created": quand, "time_modified": quand,
+                       "title": ligne["title"], "content": markdown_en_bbcode(ligne["content"])})
+        a_lier.append((ligne["id"], nid, quand))
+        pousse = True
+    if pousse:
+        ecrire_notes_multi(appid, sortie)
+        for rowid, nid, quand in a_lier:
+            lier_steam_id(con, rowid, nid, quand)  # l'id n'est liquide qu'après écriture
+        purge_tombstones(con, gid)
+        return "pousser"
+    return "importer" if importe else "rien"

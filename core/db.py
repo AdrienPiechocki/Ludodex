@@ -254,6 +254,36 @@ def vanished_rows(con, gid, steam_ids):
     return [r["id"] for r in lignes if r["steam_id"] not in ids]
 
 
+def set_note_import(con, rowid, title, content, modified):
+    """Édite une note depuis l'import overlay : l'horodatage de Steam est
+    hérité tel quel (invariant de synchro : `modified` = `time_modified`)."""
+    con.execute("UPDATE game_notes SET title=?, content=?, modified=? WHERE id=?",
+                (title, content, modified, rowid))
+    con.commit()
+
+
+def lier_steam_id(con, rowid, steam_id, modified):
+    """Une note locale poussée devient sync : elle prend l'id que le carnet
+    lui a donné et l'horodatage qui vient d'être poussé (invariant refermé)."""
+    con.execute("UPDATE game_notes SET steam_id=?, modified=? WHERE id=?",
+                (steam_id, modified, rowid))
+    con.commit()
+
+
+def drop_note(con, rowid):
+    """Suppression réelle : soit la ligne héritée de la migration dont le
+    texte est un doublon du carnet, soit le miroir d'une note disparue."""
+    con.execute("DELETE FROM game_notes WHERE id=?", (rowid,))
+    con.commit()
+
+
+def tombstoned_ids(con, gid):
+    """Ids overlay des notes supprimées dans Ludodex, en attente de poussée."""
+    return [r["steam_id"] for r in con.execute(
+        "SELECT steam_id FROM game_notes WHERE game_id=? AND deleted=1 AND steam_id != ''",
+        (gid,))]
+
+
 def shows_not_installed(con):
     """Vrai si les jeux possédés non installés sont affichés (donc proposables au tirage)."""
     return get_setting(con, "show_not_installed") == "1"
