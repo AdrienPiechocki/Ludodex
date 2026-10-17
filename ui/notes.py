@@ -23,6 +23,7 @@ from .markdown import (HEADING_SCALE, anchor_matches, heading_level, heading_tex
                        is_fence, line_elements, link_at, markers_revealed, task_at)
 
 NOTE_SAVE_DELAY = 600  # ms d'inactivité avant d'enregistrer une note
+NOTE_POLL_S = 2        # s entre deux regards sur le fichier overlay de la note affichée
 
 # Auto-complétion : ouvrant -> fermant ; un fermant tapé alors qu'il est déjà
 # présent est simplement sauté.
@@ -50,6 +51,8 @@ class NotesMixin:
         self._note_loading = False   # on charge une note : le « changed » ne doit pas enregistrer
         self._note_dirty = False
         self._note_timeout = None
+        self._note_poll = None      # veille du fichier overlay (temps réel Steam)
+        self._note_poll_cible = None
         self._note_rows = {}
         self._md_applying = False    # pose des balises en cours : on ignore les signaux
         self._md_idle = None
@@ -852,6 +855,59 @@ class NotesMixin:
         self.note_buffer.place_cursor(self.note_buffer.get_start_iter())
         self._apply_md()
         self.notes_right.set_visible_child_name("editor")
+        self._start_note_poll()
+
+    # ---------- veille du fichier overlay (synchro temps réel) ----------
+
+    def _start_note_poll(self):
+        """Regarde le fichier overlay de la note affichée toutes les `NOTE_POLL_S` :
+        une note écrite dans Steam apparaît sans attendre une réouverture."""
+        if self._note_poll is not None:
+            GLib.source_remove(self._note_poll)
+        self._note_poll_cible = self._stat_note_fichier(self.notes_game_id)
+        self._note_poll = GLib.timeout_add_seconds(NOTE_POLL_S, self._poll_note_file)
+
+    def _stat_note_fichier(self, gid):
+        """(mtime_ns, taille) du fichier overlay de `gid`, ou None (pas un jeu
+        Steam, pas de carnet, fichier parti — la veille n'a rien à surveiller)."""
+        if gid is None:
+            return None
+        g = self.con.execute("SELECT source, ext_id FROM games WHERE id=?", (gid,)).fetchone()
+        appid = P.steam_appid_of(g) if g else None
+        if appid is None:
+            return None
+        f = P.fichier_notes(appid)
+        try:
+            st = f.stat() if f is not None else None
+        except OSError:
+            return None
+        return (st.st_mtime_ns, st.st_size) if st is not None else None
+
+    def _poll_note_file(self):
+        """Le fichier a bougé : la note est ré arbitrée et l'éditeur suivi.
+
+        **Ludodex gagne la course** — si l'utilisateur est en train de taper,
+        le buffer n'est pas touché (un inédit vaut plus qu'un import)."""
+        gid = self.notes_game_id
+        if gid is None:
+            self._note_poll = None
+            return False                       # la page ne montre plus rien : la veille s'arrête
+        cible = self._stat_note_fichier(gid)
+        if cible is not None and cible != self._note_poll_cible:
+            self._note_poll_cible = cible
+            if not self._note_dirty:
+                try:
+                    P.synchroniser(self.con, gid)
+                except OSError:
+                    return True                 # dossier Steam grisé un instant : on réessaiera
+                texte = P.get_note(self.con, gid)
+                if texte != self._note_text():
+                    self._note_loading = True
+                    self.note_buffer.set_text(texte or "")
+                    self._note_loading = False
+                    self._note_dirty = False
+                    self._apply_md()
+        return True
 
     def _note_subtitle(self, gid):
         inst, hid, pt, status = self.con.execute(
@@ -863,6 +919,9 @@ class NotesMixin:
     def _clear_note_editor(self):
         self.notes_game_id = None
         self._note_dirty = False
+        if self._note_poll is not None:        # plus de note affichée : la veille s'arrête
+            GLib.source_remove(self._note_poll)
+            self._note_poll = None
         self._set_toc([])
         self.notes_right.set_visible_child_name("empty")
 

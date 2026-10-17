@@ -44,6 +44,50 @@ def test_lien_texte_minuscule_survit():
     assert sn.bbcode_en_markdown("[url]https://x.fr[/url]") == "[https://x.fr](https://x.fr)"
 
 
+def test_titres_h1_h3():
+    assert sn.bbcode_en_markdown("[h1]Test[/h1]") == "# Test"
+    assert sn.bbcode_en_markdown("[h2]Suite[/h2]") == "## Suite"
+    assert sn.bbcode_en_markdown("[h3]Détail[/h3]") == "### Détail"
+    assert sn.bbcode_en_markdown("[h1]T[/h1][p]x[/p]") == "# T\n\nx"
+    assert sn.markdown_en_bbcode("# Test") == "[h1]Test[/h1]"
+    assert sn.markdown_en_bbcode("## Test") == "[h2]Test[/h2]"
+    assert sn.markdown_en_bbcode("###### Test") == "[h3]Test[/h3]"  # Steam n'a que trois niveaux
+
+
+def test_strike_comme_l_overlay():
+    assert sn.bbcode_en_markdown("[strike]barré[/strike]") == "~~barré~~"
+    assert sn.bbcode_en_markdown("[s]barré[/s]") == "~~barré~~"
+    assert sn.markdown_en_bbcode("~~barré~~") == "[p][s]barré[/s][/p]"
+
+
+def test_note_reelle_sulfur_simporte_proprement():
+    # contenu exact de l'overlay tel qu'écrit par l'utilisateur le 2026-10-17 :
+    # titre [h1], éléments de liste enveloppés dans [p], fermetures [/*],
+    # checkbox échappée \[ ] — tout doit devenir du Markdown lisible…
+    brut = ("[h1]Test[/h1][p][/p][p]ceci est un test[/p][p][/p]"
+            "[list][*][p]\\[ ] [/p][/*][*][p]test 2[/p][/*][/list]")
+    md = sn.bbcode_en_markdown(brut)
+    assert md == "# Test\n\nceci est un test\n\n- [ ]\n- test 2"
+    # …et le cycle de repoussoir complet (titre -> champ `title`, corps -> contenu)
+    # doit rester stable et propre (jamais de [/*] ni de [/[i]])
+    titre, corps = sn.titre_depuis_markdown(md)
+    repousse = sn.markdown_en_bbcode(corps)
+    assert "[/*]" not in repousse and "[/[i]]" not in repousse
+    assert "\\[ ]" in repousse                    # la checkbox repart échappée, comme Steam
+    cycle = sn.notes_steam_en_markdown([{"title": titre, "content": repousse}])
+    assert cycle == md
+
+
+def test_notes_reelles_fusionnent_proprement():
+    notes = [
+        {"id": "mvcbnnzb", "title": "ceci est un test",
+         "content": "[h1]Test[/h1][p][/p][p]ceci est un test[/p]",
+         "time_modified": 1792237439},
+        {"id": "mvcbr588", "title": "", "content": "[p][/p]", "time_modified": 1792237405},
+    ]
+    assert sn.notes_steam_en_markdown(notes) == "# ceci est un test\n\n# Test\n\nceci est un test"
+
+
 def test_tags_inconnus_gardent_le_texte():
     assert sn.bbcode_en_markdown("[zz]gardi[/zz]") == "gardi"
     assert sn.bbcode_en_markdown("[b]gardi") == "gardi"   # balise non fermée : texte gardé

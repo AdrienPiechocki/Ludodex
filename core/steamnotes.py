@@ -40,22 +40,35 @@ _MDURL_RE = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
 _PAIRES_BB = ((r"\[b\](.*?)\[/b\]", lambda m: "**" + m.group(1) + "**"),
               (r"\[i\](.*?)\[/i\]", lambda m: "*" + m.group(1) + "*"),
               (r"\[u\](.*?)\[/u\]", lambda m: "__" + m.group(1) + "__"),
-              (r"\[s\](.*?)\[/s\]", lambda m: "~~" + m.group(1) + "~~"))
+              (r"\[s\](.*?)\[/s\]", lambda m: "~~" + m.group(1) + "~~"),
+              (r"\[strike\](.*?)\[/strike\]", lambda m: "~~" + m.group(1) + "~~"))
 # `**` avant `*` : sinon le gras se couperait en deux italiques. Chaque marqueur
 # Markdown devient une PAIRE ouvre/ferme du côté BBCode.
 _PAIRES_MD = (("**", "[b]", "[/b]"), ("*", "[i]", "[/i]"), ("__", "[u]", "[/u]"),
               ("~~", "[s]", "[/s]"))
 
+# Titres de l'overlay (trois niveaux, comme Steam) <-> `# `…`### `.
+_HEADING_BB = re.compile(r"\[h([123])\](.*?)\[/h\1\]", re.S)
+_HEADING_MD = re.compile(r"^(#{1,6}) +(.*)$")
+
 _LIST_LINE = re.compile(r"^[ \t]*[-*+] +(.*)$", re.M)
 _OLIST_LINE = re.compile(r"^[ \t]*\d+[.)] +(.*)$", re.M)
-_TAG_RE = re.compile(r"\[/?[a-z][a-z0-9]*(?:=[^\]]*)?\]")
+# Balise restante : nom sans espace (`[b]`, `[quote=x]`, `[/*]`, `[*]`) — un
+# `[niveau 3]` saisi dans un texte n'est PAS une balise et garde ses crochets.
+_TAG_RE = re.compile(r"\[/?(?:[a-z][a-z0-9]*|\*)(?:=[^\]]*)?\]")
 
 
 def _liste_en_lignes(numerotee):
     """`[list]…[/list]` -> lignes Markdown, terminées par une ligne vide : un bloc
-    qui suit la liste ne doit jamais s'y coller."""
+    qui suit la liste ne doit jamais s'y coller. L'overlay enveloppe ses items
+    dans `[p]` et les ferme par `[/*]` — ces marques sont avalées ici, sinon
+    elles casseraient la liste ou corrompraient le repoussoir."""
     def conv(m):
-        items = [i.strip() for i in m.group(1).split("[*]") if i.strip()]
+        items = []
+        for i in m.group(1).split("[*]"):
+            i = i.replace("[/*]", "").replace("[p]", " ").replace("[/p]", " ").strip()
+            if i:
+                items.append(i)
         if numerotee:
             corps = "\n".join(f"{n}. {i}" for n, i in enumerate(items, 1))
         else:
@@ -67,22 +80,25 @@ def _liste_en_lignes(numerotee):
 def bbcode_en_markdown(content):
     """Contenu BBCode d'une note Steam, rendu en Markdown de base.
 
-    Les liens sont protégés par sentinelles pendant toutes les conversions :
-    le marqueur `[texte](url)` généré ne doit pas repasser pour une balise
-    inconnue par le nettoyage final — sinon un texte minuscule serait avalé.
+    Les crochets littéraux de Steam (`\\[ ]`, case à cocher) et les liens sont
+    protégés par sentinelles pendant toutes les conversions : le marqueur
+    `[texte](url)` généré ne doit pas repasser pour une balise inconnue par le
+    nettoyage final — sinon un texte minuscule serait avalé.
     """
     s = content or ""
+    s = s.replace("\\[", "\x02")   # crochet littéral de l'overlay (checkbox)
     # les liens d'abord, avant les paires en ligne dont le texte peut en contenir
     s = _URLEQ_RE.sub(lambda m: f"\x00{m.group(2)}\x01({m.group(1)})", s)
     s = _URL_RE.sub(lambda m: f"\x00{m.group(1)}\x01({m.group(1)})", s)
+    s = _HEADING_BB.sub(lambda m: "#" * int(m.group(1)) + " " + m.group(2).strip() + "\n\n", s)
     s = re.sub(r"\[list\](.*?)\[/list\]", _liste_en_lignes(False), s, flags=re.S)
     s = re.sub(r"\[olist\](.*?)\[/olist\]", _liste_en_lignes(True), s, flags=re.S)
     for motif, remp in _PAIRES_BB:
         s = re.sub(motif, remp, s, flags=re.S)
     # `[p]a[/p][p]b[/p]` -> paragraphes ; un `[p][/p]` vide ne laisse rien
     s = s.replace("[p]", "").replace("[/p]", "\n\n")
-    s = _TAG_RE.sub("", s)      # inconnues, mal fermées : texte gardé
-    s = s.replace("\x00", "[").replace("\x01", "]")
+    s = _TAG_RE.sub("", s)      # inconnues, mal fermées, [/*] orphelin : texte gardé
+    s = s.replace("\x00", "[").replace("\x01", "]").replace("\x02", "[")
     s = re.sub(r"\n{3,}", "\n\n", s)
     return s.strip()
 
@@ -105,21 +121,34 @@ def _en_ligne(s):
     return s
 
 
+def _echappe_checkbox(item):
+    """La case à cocher du Markdown (`- [ ]`) repart échappée `\\[ ]`, comme
+    l'écrit l'overlay — sinon Steam l'interpréterait comme une extension de
+    crochets au lieu d'une case."""
+    if re.match(r"\[[ xX]\]", item):
+        return "\\[" + item[1:]
+    return item
+
+
 def markdown_en_bbcode(texte):
     """Note Markdown ramenée au BBCode de l'overlay : blocs séparés par une
-    ligne vide, chacun `[p]` ou liste — l'aller-retour d'un texte de base est
-    stable, octet pour octet."""
+    ligne vide, chacun `[p]`, titre ou liste — l'aller-retour d'un texte de
+    base est stable, octet pour octet."""
     s = (texte or "").strip()
     if not s:
         return ""
     sortie = []
     for bloc in re.split(r"\n\s*\n", s):
         lignes = bloc.split("\n")
-        if all(_LIST_LINE.match(l) for l in lignes):
-            items = [_LIST_LINE.match(l).group(1) for l in lignes]
+        titre = _HEADING_MD.match(bloc) if len(lignes) == 1 else None
+        if titre:  # Steam n'a que trois niveaux de titre
+            n = min(len(titre.group(1)), 3)
+            sortie.append(f"[h{n}]{titre.group(2)}[/h{n}]")
+        elif all(_LIST_LINE.match(l) for l in lignes):
+            items = [_echappe_checkbox(_LIST_LINE.match(l).group(1)) for l in lignes]
             sortie.append("[list]" + "[*]".join([""] + items) + "[/list]")
         elif all(_OLIST_LINE.match(l) for l in lignes):
-            items = [_OLIST_LINE.match(l).group(1) for l in lignes]
+            items = [_echappe_checkbox(_OLIST_LINE.match(l).group(1)) for l in lignes]
             sortie.append("[olist]" + "[*]".join([""] + items) + "[/olist]")
         else:
             sortie.append("[p]" + _en_ligne(bloc) + "[/p]")
@@ -174,7 +203,8 @@ def compte_notes():
     return l[0] if l else None
 
 
-def _fichier_notes(appid):
+def fichier_notes(appid):
+    """Fichier overlay d'une note de jeu (`…/remote/notes_<appid>`), ou None."""
     c = compte_notes()
     return (c / NOTES_REMOTE / f"notes_{appid}") if c else None
 
@@ -184,7 +214,7 @@ def lire_notes(appid):
     illisible — un JSON qu'on ne comprend pas n'est jamais écrasé. Une entrée
     inutilisable (pas un dict, sans `id`/`content` textuels) rend tout le
     fichier illisible : mieux vaut ne rien faire qu'écraser à moitié."""
-    f = _fichier_notes(appid)
+    f = fichier_notes(appid)
     if f is None or not f.exists():
         return []
     try:
@@ -212,7 +242,7 @@ def ecrire_notes(appid, note_id, titre, contenu, quand):
     remplacées — leur texte est déjà dans la fusion. L'histoire (`time_created`)
     de la note réutilisée survive ; `time_modified` porte l'invariant de synchro.
     Écriture atomique : jamais de JSON tronqué sous la main de Steam."""
-    f = _fichier_notes(appid)
+    f = fichier_notes(appid)
     if f is None:
         return
     ancien = next((n for n in (lire_notes(appid) or []) if n.get("id") == note_id), None)
