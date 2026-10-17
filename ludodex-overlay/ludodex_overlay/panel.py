@@ -20,13 +20,18 @@ class Panneau(Gtk.Box):
 
     def __init__(self, entrees: "list[tuple[str, str, bool]]",
                  on_toggle: callable,
-                 on_reglages: "callable | None" = None,
+                 fabrique_reglages: "callable | None" = None,
                  on_fermer: "callable | None" = None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=8,
                          css_classes=["panneau"])
+        # ⚙ du panneau : les réglages s'ouvrent ICI, sous la ligne —
+        # `fabrique_reglages(ident)` rend le contenu (sans surface propre).
+        self._fabrique_reglages = fabrique_reglages
+        self._lignes: "dict[str, Gtk.Box]" = {}
+        self._reglages_ouverts: "dict[str, Gtk.Box]" = {}
         self.append(Gtk.Label(label=tr("Ludodex Overlay"), css_classes=["panneau-titre"]))
         for ident, nom, actif in entrees:
-            self.append(self._ligne(ident, nom, actif, on_toggle, on_reglages))
+            self.append(self._ligne(ident, nom, actif, on_toggle))
         self.append(Gtk.Button(label=tr("Add widget"), sensitive=False))
         bas = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12,
                       margin_top=8)
@@ -37,9 +42,13 @@ class Panneau(Gtk.Box):
         bas.append(fermer)
         self.append(bas)
 
-    def _ligne(self, ident: str, nom: str, actif: bool, on_toggle: callable,
-               on_reglages: "callable | None") -> Gtk.Box:
-        """Ligne d'un widget : nom + interrupteur + réglages (⚙)."""
+    def _ligne(self, ident: str, nom: str, actif: bool,
+               on_toggle: callable) -> Gtk.Box:
+        """Ligne d'un widget : nom + interrupteur + réglages (⚙).
+
+        Le ⚙ ouvre les réglages INLINE DANS LE PANNEAU, juste sous la
+        ligne (demandé le 2026-10-18) — pas de popover (KWin activerait sa
+        surface et le jeu plein écran se miniaturiserait, bug du même jour)."""
         ligne = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         ligne.append(Gtk.Label(label=nom, hexpand=True, halign=Gtk.Align.START))
         interrupteur = Gtk.Switch(active=actif)
@@ -50,10 +59,42 @@ class Panneau(Gtk.Box):
         ligne.append(interrupteur)
         reglages = Gtk.Button(label="⚙")
         reglages.set_tooltip_text(tr("Settings"))
-        if on_reglages is not None:
-            reglages.connect("clicked", lambda b, i=ident: on_reglages(i))
+        if self._fabrique_reglages is not None:
+            reglages.connect("clicked", lambda b, i=ident: self.basculer_reglages(i))
         ligne.append(reglages)
+        self._lignes[ident] = ligne
         return ligne
+
+    def basculer_reglages(self, ident: str) -> None:
+        """⚙ : réglages de `ident` à côté du bouton. Un seul à la fois,
+        re-cliquer (ou ✕) referme."""
+        if ident in self._reglages_ouverts:
+            self.fermer_reglages(ident)
+            return
+        self.fermer_tous_reglages()
+        contenu = self._fabrique_reglages(ident)
+        if contenu is None:  # ident inconnu (config venue d'une autre version)
+            return
+        boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4,
+                        css_classes=["reglages-widget"])
+        ferme = Gtk.Button(label="✕ " + tr("Close"), halign=Gtk.Align.END)
+        ferme.connect("clicked", lambda *_: self.fermer_reglages(ident))
+        boite.append(ferme)
+        boite.append(contenu)
+        self._reglages_ouverts[ident] = boite
+        # Sous la ligne du widget concerné, dans le panneau même.
+        self.insert_child_after(boite, self._lignes[ident])
+
+    def fermer_reglages(self, ident: str) -> None:
+        """Referme le réglages inline ouvert pour `ident` (s'il y en a)."""
+        boite = self._reglages_ouverts.pop(ident, None)
+        if boite is not None:
+            self.remove(boite)
+
+    def fermer_tous_reglages(self) -> None:
+        """Referme tous les réglages inline ouverts (un seul à la fois)."""
+        for ident in list(self._reglages_ouverts):
+            self.fermer_reglages(ident)
 
 
 def conteneur_reglages(ident: str, schema: "list[dict]", valeurs: dict,

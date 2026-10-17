@@ -406,8 +406,11 @@ class Fenetre(Gtk.ApplicationWindow):
         boite.append(self._contenu_reglages(ident))
         return boite
 
-    def _contenu_reglages(self, ident: str) -> Gtk.Widget:
-        """Options du schema + transparence + épinglage, dans le conteneur du widget."""
+    def _contenu_reglages(self, ident: str) -> "Gtk.Widget | None":
+        """Options du schema + transparence + épinglage ; `None` si l'identifiant
+        n'est pas au registre (config venue d'une autre version de l'addon)."""
+        if ident not in REGISTRE:
+            return None
         spec = REGISTRE[ident]
         entree = self.conf["widgets"][ident]
         valeurs = {**options_defauts(spec), **entree.get("options", {}),
@@ -466,7 +469,11 @@ class Fenetre(Gtk.ApplicationWindow):
              bool(entree.get("actif")))
             for cle, entree in self.conf["widgets"].items()]
         self.panneau = Panneau(entrees, self.basculer_actif,
-                               on_reglages=self.basculer_reglages,
+                               # ⚙ du panneau : réglages inline DANS le
+                               # panneau, sous la ligne (demandé le
+                               # 2026-10-18) — le revealer du widget reste
+                               # porté par le ⚙ de sa barre d'outils.
+                               fabrique_reglages=self._contenu_reglages,
                                on_fermer=self.basculer)
         self.panneau.set_halign(Gtk.Align.CENTER)
         self.panneau.set_valign(Gtk.Align.CENTER)
