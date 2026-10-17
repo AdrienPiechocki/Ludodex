@@ -835,6 +835,10 @@ class NotesMixin:
 
     def _show_note(self, gid):
         self.notes_game_id = gid
+        try:
+            P.synchroniser(self.con, gid)  # le carnet overlay se vide (ou se remplit) ici
+        except OSError:
+            pass  # dossier Steam inaccessible : la note reste éditable
         g = self.con.execute("SELECT name, notes FROM games WHERE id=?", (gid,)).fetchone()
         if not g:
             self._clear_note_editor()
@@ -883,6 +887,10 @@ class NotesMixin:
             return False
         gid, text = self.notes_game_id, self._note_text()
         P.set_note(self.con, gid, text)
+        try:
+            P.synchroniser(self.con, gid)  # la poussée reprend l'horodatage que set_note vient de poser
+        except OSError:
+            pass  # dossier Steam inaccessible : la note locale tient quand même
         self._note_dirty = False
         row = self._note_rows.get(gid)  # la pastille de la liste suit l'état de la note
         if row is not None:

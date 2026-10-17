@@ -449,5 +449,7 @@
   "Open {name}": "Ouvrir {name}",
   "Couldn't open the launcher": "Impossible d'ouvrir le lanceur",
   "! couldn't open the launcher: {e}": "! impossible d'ouvrir le lanceur : {e}",
-  "! no Lutris installer for this game": "! aucun installateur Lutris pour ce jeu sur lutris.net"
+  "! no Lutris installer for this game": "! aucun installateur Lutris pour ce jeu sur lutris.net",
+  "Two-way sync with the Steam overlay notepad (Shift+Tab). When both sides change, the most recent wins.": "Synchro bidirectionnelle avec le bloc-notes de l'overlay Steam (Maj+Échap). Quand les deux côtés changent, le plus récent gagne.",
+  "Sync notes with the Steam overlay": "Synchroniser les notes avec l'overlay Steam"
 }
