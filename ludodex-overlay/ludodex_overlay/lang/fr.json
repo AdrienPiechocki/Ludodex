@@ -1,4 +1,7 @@
 {
   "_name": "Français",
-  "Ludodex Overlay": "Ludodex Overlay"
+  "Ludodex Overlay": "Ludodex Overlay",
+  "Clock": "Horloge",
+  "24-hour format": "Format 24 h",
+  "Show seconds": "Afficher les secondes"
 }

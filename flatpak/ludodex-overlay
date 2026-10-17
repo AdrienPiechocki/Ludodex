@@ -1,3 +1,10 @@
 #!/bin/sh
 # Wrapper de l'addon : le paquet vit dans /app/share/ludodex-overlay.
+#
+# LD_PRELOAD obligatoire : gtk4-layer-shell doit être chargé AVANT
+# libwayland-client, sinon l'init layer surface échoue silencieusement
+# (la GI charge la lib trop tard) — preuve au log de fumée du 2026-10-17.
+# Le lib lui-même demande LD_PRELOAD=libgtk4-layer-shell.so (linking.md),
+# pas la variante liblayer-shell-preload.so (réservée aux apps non contrôlées).
+LD_PRELOAD=/app/lib/libgtk4-layer-shell.so \
 PYTHONPATH=/app/share/ludodex-overlay exec python3 -m ludodex_overlay.main "$@"

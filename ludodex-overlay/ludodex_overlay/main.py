@@ -13,12 +13,27 @@ import os, sys
 
 import gi
 gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
 gi.require_version("Gtk4LayerShell", "1.0")
-from gi.repository import Gio, GLib, Gtk, Gtk4LayerShell
+from gi.repository import Gdk, Gio, GLib, Gtk, Gtk4LayerShell
 
+from . import config
 from .i18n import tr
+from .widgets import REGISTRE, options_defauts
 
 ID = "io.github.AdrienPiechocki.LudodexOverlay"
+
+# Style des widgets (classes CSS auto-ajoutées par leur fabrique).
+CSS = b".clock { font-family: monospace; font-size: 48px; font-weight: bold; }"
+
+
+def _installer_css() -> None:
+    """CSS d'application (une seule fois au démarrage de la fenêtre)."""
+    fournisseur = Gtk.CssProvider()
+    fournisseur.load_from_data(CSS)
+    Gtk.StyleContext.add_provider_for_display(
+        Gdk.Display.get_default(), fournisseur,
+        Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
 
 def _texte(morceau) -> str:
@@ -60,16 +75,36 @@ class Fenetre(Gtk.ApplicationWindow):
                      Gtk4LayerShell.Edge.BOTTOM, Gtk4LayerShell.Edge.LEFT):
             Gtk4LayerShell.set_anchor(self, bord, True)
         self._mode = "hidden"
-        self.set_child(Gtk.Label(label=tr("Ludodex Overlay")))
-        self.hide()
+        self.conf = config.charger(config.chemin_defaut())
+        self.instances: "list[tuple]" = []  # [(spécimen Widget, rendu)]
+        _installer_css()
+        boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        boite.set_margin_top(24)
+        boite.set_margin_start(24)
+        for cle_cfg, entree in self.conf["widgets"].items():
+            if not entree.get("actif") or cle_cfg not in REGISTRE:
+                continue
+            spec = REGISTRE[cle_cfg]
+            options = {**options_defauts(spec), **entree.get("options", {})}
+            specimen = spec(**options)
+            rendu = specimen.fabrique()
+            boite.append(rendu)
+            self.instances.append((specimen, rendu))
+        self.set_child(boite)
+        self._tick_id = GLib.timeout_add_seconds(1, self._tick)
+        self.set_visible(False)
+
+    def _tick(self) -> bool:
+        """Rafraîchit les widgets visibles (source retirée en mode hidden —
+        la tâche 7 affine cette vie)."""
+        for specimen, _conteneur in self.instances:
+            specimen.tick()
+        return True
 
     def definer_mode(self, mode: str) -> None:
         """« hidden » → cachée ; sinon → visible (voile et clavier : tâche 7)."""
         self._mode = mode
-        if mode == "hidden":
-            self.hide()
-        else:
-            self.show()
+        self.set_visible(mode != "hidden")
 
 
 class OverlayApp(Gtk.Application):
