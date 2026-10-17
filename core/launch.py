@@ -154,6 +154,8 @@ def close_open_sessions(con, now=None):
         if minutes >= PROGRESS_MIN_MINUTES:
             con.execute("UPDATE games SET status='en_cours' "
                         "WHERE id=? AND status IN ('backlog','pause')", (r["game_id"],))
+    if rows:
+        overlay.arreter_overlay()  # l'overlay vit le temps de la session : il meurt avec elle
     con.commit()
     return len(rows)
 
@@ -168,6 +170,12 @@ def close_session(con, sid, now=None):
     row = con.execute("SELECT game_id, started FROM sessions WHERE id=? AND ended=0", (sid,)).fetchone()
     if not row:
         return False
+    # Tué ICI, au point de passage unique de la fin de session : le bouton
+    # « Terminer la session » contournait le wrapper `on_exit` et laissait
+    # l'overlay vivre (bug du 2026-10-18). Un kill n'a lieu que lorsque NOUS
+    # clôturons : une session déjà close ne doit pas tuer l'overlay du jeu
+    # en cours (lancement suivant, fermeture d'app).
+    overlay.arreter_overlay()
     minutes = max(0, (now - row["started"]) // 60)
     con.execute("UPDATE sessions SET ended=?, minutes=? WHERE id=?", (now, minutes, sid))
     if minutes >= PROGRESS_MIN_MINUTES:
@@ -406,14 +414,10 @@ def launch(con, g, on_exit=None):
     cur = con.execute("INSERT OR IGNORE INTO sessions (game_id, started, ended, minutes) VALUES (?, ?, 0, 0)",
                       (g["id"], now))
     con.commit()
-    if on_exit is not None:  # l'overlay meurt à la fin de session, comme le jeu
-        origine = on_exit
-        def on_exit(sid, _o=origine):
-            overlay.arreter_overlay()
-            _o(sid)
     # Sans suivi de session (CLI : `on_exit=None`), l'overlay serait tué par
-    # atexit à la sortie du processus — il ne démarre pas du tout.
-    # `souris_libre` : réglage de Ludodex, transmis à l'overlay par flag.
+    # atexit à la sortie du processus — il ne démarre pas du tout. Son arrêt
+    # est désormais porté par `close_session`/`close_open_sessions` (le point
+    # de passage unique de toute fin de session), pas par un wrapper ici.
     # `langue` : celle de Ludodex (réglage utilisateur, sinon système) —
     # sans --lang, l'overlay ne verrait que les variables POSIX du processus.
     if on_exit is not None and get_setting(con, "overlay", "1") == "1":

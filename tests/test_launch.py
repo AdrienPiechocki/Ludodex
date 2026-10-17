@@ -57,3 +57,41 @@ def test_lancement_direct_charge_le_hook(monkeypatch):
     assert L.launch(_con(), dict(JEU_FLATPAK), on_exit=lambda sid: None)
     assert appels["hook"] == [1]
     assert appels["spawn"][0][:2] == ["env", "LD_PRELOAD=/x/shim.so"]
+
+
+def test_close_session_tue_l_overlay(monkeypatch):
+    """Le bouton « Terminer la session » clôt la session ICI, en contournant
+    le wrapper `on_exit` qui tuait l'overlay — l'overlay vit le temps de la
+    session : il doit mourir dès que NOUS la clôturons (bug du 2026-10-18)."""
+    morts = []
+    monkeypatch.setattr(L.overlay, "arreter_overlay", lambda: morts.append(1))
+    con = _con()
+    cur = con.execute(
+        "INSERT INTO sessions (game_id, started, ended, minutes) VALUES (1, 100, 0, 0)")
+    con.commit()
+    assert L.close_session(con, cur.lastrowid, now=160)
+    assert morts == [1]
+
+
+def test_close_session_deja_fermee_ne_tue_pas_l_overlay(monkeypatch):
+    """Une session déjà close (fermeture d'app, lancement suivant) ne doit
+    PAS tuer l'overlay de la session EN COURS : le kill n'a lieu que lorsque
+    NOUS clôturons vraiment — sinon un jeu qui se termine après qu'un autre
+    ait été lancé tuerait l'overlay du nouveau."""
+    morts = []
+    monkeypatch.setattr(L.overlay, "arreter_overlay", lambda: morts.append(1))
+    assert L.close_session(_con(), 999, now=160) is False  # session inexistante
+    assert morts == []
+
+
+def test_close_open_sessions_tue_l_overlay(monkeypatch):
+    """Même invariant sur la clôture multiple (fermeture de l'application,
+    lancement suivant) : toute fin de session emporte l'overlay avec elle."""
+    morts = []
+    monkeypatch.setattr(L.overlay, "arreter_overlay", lambda: morts.append(1))
+    con = _con()
+    con.execute(
+        "INSERT INTO sessions (game_id, started, ended, minutes) VALUES (1, 100, 0, 0)")
+    con.commit()
+    assert L.close_open_sessions(con, now=160) == 1
+    assert morts == [1]
