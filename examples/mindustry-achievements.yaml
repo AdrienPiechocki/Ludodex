@@ -1,0 +1,1994 @@
+# Mindustry achievements for Ludodex ("Achievements" module).
+#
+# To use with the "Ludodex Logger" mod for Mindustry (LudodexLogger.zip, a script mod: scripts/main.js).
+# The mod writes each event as one line, both to the game log (last_log.txt in the Mindustry data folder)
+# and to <data folder>/ludodex.log (appended across sessions). Each pattern is a free-search regular expression,
+# applied line by line. Format of the lines produced by the mod:
+#   GAME STARTED: <map> | mode=<mode> | campaign=true|false | sector=<id> | planet=<planet>
+#   SECTOR ENTERED / SECTOR CAPTURED / SECTOR LOST / SECTOR LAUNCH: <sector id> | name=... | planet=... [| initial=true|false]
+#   WAVE REACHED: N | mode=... | sector=... | planet=...       GAME OVER: victory|defeat | sector=... | wave=N | ...
+#   GAME SAVED / GAME LOADED: <map>                              ITEM LAUNCHED: <item> | amount=N
+#   RESEARCH COMPLETE: <content> | type=block|unit|item|sector|...    RESOURCE UNLOCKED: <item|liquid> | type=...
+#   BLOCK BUILT: <block> | by=player|builder      BLOCK DECONSTRUCTED: x1      BLOCK DESTROYED: <block> | team=... | ours=true|false
+#   CORE DESTROYED: <core> | team=... | ours=true|false
+#   UNIT PRODUCED: <unit> | factory=<block>      ENEMY DESTROYED: <unit> | team=... | boss=true|false | flying=true|false
+#   UNIT LOST: <unit>      UNIT DROWNED: <unit> | ours=true|false      PLAYER DIED: <unit>      PLAYER UNIT: <unit>
+#   ITEM MILESTONE: <item> | amount=N      (N in 100, 1000, 4000, 9000, 13000; never logged with infinite resources)
+#   SCHEMATIC CREATED: x1   MULTIPLAYER HOSTED / MULTIPLAYER JOINED: x1   PLAYER JOINED: <name>
+#   GAME TRIGGER: thoriumReactorOverheat | impactPower | forceProjectorBreak | acceleratorUse | tutorialComplete
+#   LUDODEX LOGGER READY: hooked=N | missing=<events absent from your game version, or "none">
+#
+# Notes:
+# - All names are Mindustry internal names (lowercase, hyphenated for blocks/units/items: silicon-smelter,
+#   phase-fabric; camelCase for Serpulo sector presets: groundZero, frozenForest...). Every achievement is case_insensitive.
+# - Matching a block/unit name is exact: patterns end with " \|", so "conveyor" does not match "titanium-conveyor".
+# - count: N counts matching lines. Counters are cumulative only if the tracker reads ludodex.log
+#   (last_log.txt is rewritten at every game launch).
+# - Numeric thresholds (wave >= 30, ...) use regexes matching any integer >= the threshold.
+# - Erekir sector ids (onset, aegis, origin) and Erekir block ids (beam-node, plasma-bore, cliff-crusher,
+#   core-bastion...) are written from the game's source; if one never unlocks, check the exact id in the log
+#   (grep "SECTOR CAPTURED" / "BLOCK BUILT") and adjust the pattern.
+# - hidden: true marks achievements whose name or description reveals a secret or an endgame sector.
+# - Capture/win events fire on the local game: in multiplayer, "BLOCK BUILT" counts every block built by your team.
+
+achievements:
+
+  # ======================================================================
+  # CAMPAIGN — sectors, planets, launches
+  # ======================================================================
+
+  - name: "Touchdown"
+    description: "Land on a campaign sector."
+    icon: "🛬"
+    match: 'SECTOR ENTERED:'
+    case_insensitive: true
+
+  - name: "Sector Hopper"
+    description: "Enter a campaign sector 10 times."
+    icon: "🪂"
+    match: 'SECTOR ENTERED:'
+    count: 10
+    case_insensitive: true
+
+  - name: "Foothold"
+    description: "Capture your first sector."
+    icon: "🚩"
+    match: 'SECTOR CAPTURED: .* \| initial=true'
+    count: 1
+    case_insensitive: true
+
+  - name: "Expanding Territory"
+    description: "Capture 3 sectors."
+    icon: "🗺️"
+    match: 'SECTOR CAPTURED: .* \| initial=true'
+    count: 3
+    case_insensitive: true
+
+  - name: "Regional Governor"
+    description: "Capture 5 sectors."
+    icon: "🏳️"
+    match: 'SECTOR CAPTURED: .* \| initial=true'
+    count: 5
+    case_insensitive: true
+
+  - name: "Planetary Administrator"
+    description: "Capture 10 sectors."
+    icon: "🌍"
+    match: 'SECTOR CAPTURED: .* \| initial=true'
+    count: 10
+    case_insensitive: true
+
+  - name: "Sector Sweeper"
+    description: "Capture 15 sectors."
+    icon: "🧹"
+    match: 'SECTOR CAPTURED: .* \| initial=true'
+    count: 15
+    case_insensitive: true
+
+  - name: "Galactic Overlord"
+    description: "Capture 25 sectors."
+    icon: "👑"
+    match: 'SECTOR CAPTURED: .* \| initial=true'
+    count: 25
+    case_insensitive: true
+
+  - name: "Serpulo Settler"
+    description: "Capture 8 sectors on Serpulo."
+    icon: "🟠"
+    match: 'SECTOR CAPTURED: .* \| planet=serpulo \| initial=true'
+    count: 8
+    case_insensitive: true
+
+  - name: "Serpulo Conqueror"
+    description: "Capture 16 sectors on Serpulo."
+    icon: "🔶"
+    match: 'SECTOR CAPTURED: .* \| planet=serpulo \| initial=true'
+    count: 16
+    case_insensitive: true
+
+  - name: "Erekir Pioneer"
+    description: "Capture a sector on Erekir."
+    icon: "🔷"
+    match: 'SECTOR CAPTURED: .* \| planet=erekir \|'
+    case_insensitive: true
+
+  - name: "Erekir Settler"
+    description: "Capture 8 sectors on Erekir."
+    icon: "🔵"
+    match: 'SECTOR CAPTURED: .* \| planet=erekir \| initial=true'
+    count: 8
+    case_insensitive: true
+
+  - name: "Two Worlds"
+    description: "Capture a sector on both Serpulo and Erekir."
+    icon: "🪐"
+    all:
+      - 'SECTOR CAPTURED: .* \| planet=serpulo \|'
+      - 'SECTOR CAPTURED: .* \| planet=erekir \|'
+    case_insensitive: true
+
+  - name: "Boots on the Ground"
+    description: "Capture Ground Zero."
+    icon: "🥾"
+    match: 'SECTOR CAPTURED: groundZero \|'
+    case_insensitive: true
+
+  - name: "Winter Is Coming"
+    description: "Capture Frozen Forest."
+    icon: "🌲"
+    match: 'SECTOR CAPTURED: frozenForest \|'
+    case_insensitive: true
+
+  - name: "Crater Maker"
+    description: "Capture The Craters."
+    icon: "🕳️"
+    match: 'SECTOR CAPTURED: craters \|'
+    case_insensitive: true
+
+  - name: "Shore Leave"
+    description: "Capture Ruinous Shores."
+    icon: "🏖️"
+    match: 'SECTOR CAPTURED: ruinousShores \|'
+    case_insensitive: true
+
+  - name: "Island Hopping"
+    description: "Capture Windswept Islands."
+    icon: "🏝️"
+    match: 'SECTOR CAPTURED: windsweptIslands \|'
+    case_insensitive: true
+
+  - name: "Mountain Climber"
+    description: "Capture Stained Mountains."
+    icon: "⛰️"
+    match: 'SECTOR CAPTURED: stainedMountains \|'
+    case_insensitive: true
+
+  - name: "Black Gold"
+    description: "Capture Tar Fields."
+    icon: "🛢️"
+    match: 'SECTOR CAPTURED: tarFields \|'
+    case_insensitive: true
+
+  - name: "Fungal Cleanup"
+    description: "Capture Fungal Pass."
+    icon: "🍄"
+    match: 'SECTOR CAPTURED: fungalPass \|'
+    case_insensitive: true
+
+  - name: "Extraction Complete"
+    description: "Capture Extraction Outpost."
+    icon: "⛏️"
+    match: 'SECTOR CAPTURED: extractionOutpost \|'
+    case_insensitive: true
+
+  - name: "Salt in the Wound"
+    description: "Capture Salt Flats."
+    icon: "🧂"
+    match: 'SECTOR CAPTURED: saltFlats \|'
+    case_insensitive: true
+
+  - name: "Overgrown"
+    description: "Capture Overgrowth."
+    icon: "🌿"
+    match: 'SECTOR CAPTURED: overgrowth \|'
+    case_insensitive: true
+
+  - name: "Biomass Pioneer"
+    description: "Capture Biomass Synthesis Facility."
+    icon: "🧬"
+    match: 'SECTOR CAPTURED: biomassFacility \|'
+    case_insensitive: true
+
+  - name: "Coastal Defense"
+    description: "Capture Coastline."
+    icon: "🌊"
+    match: 'SECTOR CAPTURED: coastline \|'
+    case_insensitive: true
+
+  - name: "Admiral of the Fleet"
+    description: "Capture Naval Fortress."
+    icon: "⚓"
+    match: 'SECTOR CAPTURED: navalFortress \|'
+    case_insensitive: true
+
+  - name: "Impact Site"
+    description: "Capture Impact 0078."
+    icon: "☄️"
+    match: 'SECTOR CAPTURED: impact0078 \|'
+    case_insensitive: true
+
+  - name: "Nuclear Option"
+    description: "Capture Nuclear Production Complex."
+    icon: "☢️"
+    match: 'SECTOR CAPTURED: nuclearComplex \|'
+    case_insensitive: true
+
+  - name: "Rift Survivor"
+    description: "Capture Desolate Rift."
+    icon: "🌋"
+    match: 'SECTOR CAPTURED: desolateRift \|'
+    case_insensitive: true
+
+  - name: "End of the Line"
+    description: "Capture Planetary Launch Terminal."
+    icon: "🚀"
+    match: 'SECTOR CAPTURED: planetaryTerminal \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Serpulo Cartographer"
+    description: "Capture every named sector on Serpulo."
+    icon: "📍"
+    all:
+      - 'SECTOR CAPTURED: groundZero \|'
+      - 'SECTOR CAPTURED: frozenForest \|'
+      - 'SECTOR CAPTURED: craters \|'
+      - 'SECTOR CAPTURED: ruinousShores \|'
+      - 'SECTOR CAPTURED: windsweptIslands \|'
+      - 'SECTOR CAPTURED: stainedMountains \|'
+      - 'SECTOR CAPTURED: tarFields \|'
+      - 'SECTOR CAPTURED: fungalPass \|'
+      - 'SECTOR CAPTURED: extractionOutpost \|'
+      - 'SECTOR CAPTURED: saltFlats \|'
+      - 'SECTOR CAPTURED: overgrowth \|'
+      - 'SECTOR CAPTURED: biomassFacility \|'
+      - 'SECTOR CAPTURED: coastline \|'
+      - 'SECTOR CAPTURED: navalFortress \|'
+      - 'SECTOR CAPTURED: impact0078 \|'
+      - 'SECTOR CAPTURED: nuclearComplex \|'
+      - 'SECTOR CAPTURED: desolateRift \|'
+      - 'SECTOR CAPTURED: planetaryTerminal \|'
+    case_insensitive: true
+
+  - name: "Onset of Something"
+    description: "Capture Onset."
+    icon: "🔹"
+    match: 'SECTOR CAPTURED: onset \|'
+    case_insensitive: true
+
+  - name: "Under the Aegis"
+    description: "Capture Aegis."
+    icon: "🛡️"
+    match: 'SECTOR CAPTURED: aegis \|'
+    case_insensitive: true
+
+  - name: "Back to the Origin"
+    description: "Capture Origin."
+    icon: "♾️"
+    match: 'SECTOR CAPTURED: origin \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Lost Cause"
+    description: "Lose a sector to the enemy."
+    icon: "💔"
+    match: 'SECTOR LOST:'
+    case_insensitive: true
+
+  - name: "Defeat Is Temporary"
+    description: "Lose a game."
+    icon: "🏴"
+    match: 'GAME OVER: defeat'
+    case_insensitive: true
+
+  - name: "Flawless Victory"
+    description: "Win a game."
+    icon: "🏆"
+    match: 'GAME OVER: victory'
+    case_insensitive: true
+
+  - name: "Winning Streak"
+    description: "Win 10 games."
+    icon: "🥇"
+    match: 'GAME OVER: victory'
+    count: 10
+    case_insensitive: true
+
+  - name: "Takeoff"
+    description: "Launch your core to another sector."
+    icon: "🚀"
+    match: 'SECTOR LAUNCH:'
+    case_insensitive: true
+
+  - name: "Frequent Flyer"
+    description: "Launch to another sector 10 times."
+    icon: "✈️"
+    match: 'SECTOR LAUNCH:'
+    count: 10
+    case_insensitive: true
+
+  - name: "Special Delivery"
+    description: "Launch resources to another sector."
+    icon: "📦"
+    match: 'ITEM LAUNCHED:'
+    case_insensitive: true
+
+  - name: "Cargo Pilot"
+    description: "Launch 25 resource shipments."
+    icon: "🚚"
+    match: 'ITEM LAUNCHED:'
+    count: 25
+    case_insensitive: true
+
+  - name: "Interplanetary"
+    description: "Use an interplanetary accelerator."
+    icon: "🌌"
+    match: 'GAME TRIGGER: acceleratorUse'
+    case_insensitive: true
+
+  # ======================================================================
+  # WAVES
+  # ======================================================================
+
+  - name: "Warming Up"
+    description: "Reach wave 5 in any game."
+    icon: "🔥"
+    match: 'WAVE REACHED: ([1-9]\d{1,}|[6-9]|5)\b \|'
+    case_insensitive: true
+
+  - name: "Double Digits"
+    description: "Reach wave 10 in any game."
+    icon: "🔟"
+    match: 'WAVE REACHED: ([1-9]\d{2,}|[2-9]\d|1[1-9]|10)\b \|'
+    case_insensitive: true
+
+  - name: "Holding the Line"
+    description: "Reach wave 15 in any game."
+    icon: "🧱"
+    match: 'WAVE REACHED: ([1-9]\d{2,}|[2-9]\d|1[6-9]|15)\b \|'
+    case_insensitive: true
+
+  - name: "Twenty Strong"
+    description: "Reach wave 20 in any game."
+    icon: "🛡️"
+    match: 'WAVE REACHED: ([1-9]\d{2,}|[3-9]\d|2[1-9]|20)\b \|'
+    case_insensitive: true
+
+  - name: "Quarter Century"
+    description: "Reach wave 25 in any game."
+    icon: "⏳"
+    match: 'WAVE REACHED: ([1-9]\d{2,}|[3-9]\d|2[6-9]|25)\b \|'
+    case_insensitive: true
+
+  - name: "Thirty Waves Deep"
+    description: "Reach wave 30 in any game."
+    icon: "🌊"
+    match: 'WAVE REACHED: ([1-9]\d{2,}|[4-9]\d|3[1-9]|30)\b \|'
+    case_insensitive: true
+
+  - name: "Four-Oh"
+    description: "Reach wave 40 in any game."
+    icon: "💪"
+    match: 'WAVE REACHED: ([1-9]\d{2,}|[5-9]\d|4[1-9]|40)\b \|'
+    case_insensitive: true
+
+  - name: "Fifty and Fighting"
+    description: "Reach wave 50 in any game."
+    icon: "⚔️"
+    match: 'WAVE REACHED: ([1-9]\d{2,}|[6-9]\d|5[1-9]|50)\b \|'
+    case_insensitive: true
+
+  - name: "Seventy-Five Reasons"
+    description: "Reach wave 75 in any game."
+    icon: "🏰"
+    match: 'WAVE REACHED: ([1-9]\d{2,}|[8-9]\d|7[6-9]|75)\b \|'
+    case_insensitive: true
+
+  - name: "Centurion"
+    description: "Reach wave 100 in any game."
+    icon: "💯"
+    match: 'WAVE REACHED: ([1-9]\d{3,}|[2-9]\d{2}|1[1-9]\d|10[1-9]|100)\b \|'
+    case_insensitive: true
+
+  - name: "Endless Siege"
+    description: "Reach wave 150 in any game."
+    icon: "♾️"
+    match: 'WAVE REACHED: ([1-9]\d{3,}|[2-9]\d{2}|1[6-9]\d|15[1-9]|150)\b \|'
+    case_insensitive: true
+
+  - name: "Wave Eternal"
+    description: "Reach wave 200 in any game."
+    icon: "🌀"
+    match: 'WAVE REACHED: ([1-9]\d{3,}|[3-9]\d{2}|2[1-9]\d|20[1-9]|200)\b \|'
+    case_insensitive: true
+
+  - name: "Outlast Ground Zero"
+    description: "Reach wave 15 on Ground Zero."
+    icon: "🥉"
+    match: 'WAVE REACHED: ([1-9]\d{2,}|[2-9]\d|1[6-9]|15)\b \| .* sector=groundZero\b'
+    case_insensitive: true
+
+  - name: "Frozen Resolve"
+    description: "Reach wave 30 on Frozen Forest."
+    icon: "🥶"
+    match: 'WAVE REACHED: ([1-9]\d{2,}|[4-9]\d|3[1-9]|30)\b \| .* sector=frozenForest\b'
+    case_insensitive: true
+
+  - name: "Craterside Stand"
+    description: "Reach wave 30 on The Craters."
+    icon: "🥈"
+    match: 'WAVE REACHED: ([1-9]\d{2,}|[4-9]\d|3[1-9]|30)\b \| .* sector=craters\b'
+    case_insensitive: true
+
+  - name: "Rift Veteran"
+    description: "Reach wave 30 on Desolate Rift."
+    icon: "🌪️"
+    match: 'WAVE REACHED: ([1-9]\d{2,}|[4-9]\d|3[1-9]|30)\b \| .* sector=desolateRift\b'
+    case_insensitive: true
+
+  # ======================================================================
+  # COMBAT
+  # ======================================================================
+
+  - name: "First Blood"
+    description: "Destroy an enemy unit."
+    icon: "🩸"
+    match: 'ENEMY DESTROYED:'
+    case_insensitive: true
+
+  - name: "Pest Control"
+    description: "Destroy 10 enemy units."
+    icon: "🪲"
+    match: 'ENEMY DESTROYED:'
+    count: 10
+    case_insensitive: true
+
+  - name: "Defender"
+    description: "Destroy 50 enemy units."
+    icon: "🛡️"
+    match: 'ENEMY DESTROYED:'
+    count: 50
+    case_insensitive: true
+
+  - name: "Exterminator"
+    description: "Destroy 100 enemy units."
+    icon: "💀"
+    match: 'ENEMY DESTROYED:'
+    count: 100
+    case_insensitive: true
+
+  - name: "Horde Breaker"
+    description: "Destroy 500 enemy units."
+    icon: "⚔️"
+    match: 'ENEMY DESTROYED:'
+    count: 500
+    case_insensitive: true
+
+  - name: "Thousand Kills"
+    description: "Destroy 1000 enemy units."
+    icon: "☠️"
+    match: 'ENEMY DESTROYED:'
+    count: 1000
+    case_insensitive: true
+
+  - name: "Annihilator"
+    description: "Destroy 5000 enemy units."
+    icon: "🔥"
+    match: 'ENEMY DESTROYED:'
+    count: 5000
+    case_insensitive: true
+
+  - name: "Genocide Machine"
+    description: "Destroy 10000 enemy units."
+    icon: "🌋"
+    match: 'ENEMY DESTROYED:'
+    count: 10000
+    case_insensitive: true
+
+  - name: "Sky Hunter"
+    description: "Destroy 100 flying enemy units."
+    icon: "🦅"
+    match: 'ENEMY DESTROYED: .* \| flying=true'
+    count: 100
+    case_insensitive: true
+
+  - name: "Ground Control"
+    description: "Destroy 100 ground or naval enemy units."
+    icon: "🪖"
+    match: 'ENEMY DESTROYED: .* \| flying=false'
+    count: 100
+    case_insensitive: true
+
+  - name: "Crawler Crusher"
+    description: "Destroy 100 crawlers."
+    icon: "💥"
+    match: 'ENEMY DESTROYED: crawler \|'
+    count: 100
+    case_insensitive: true
+
+  - name: "Boss Slayer"
+    description: "Destroy a boss."
+    icon: "👹"
+    match: 'ENEMY DESTROYED: .* \| boss=true'
+    case_insensitive: true
+
+  - name: "Boss Hunter"
+    description: "Destroy 10 bosses."
+    icon: "🐉"
+    match: 'ENEMY DESTROYED: .* \| boss=true'
+    count: 10
+    case_insensitive: true
+
+  - name: "Titan Down"
+    description: "Destroy a tier V enemy unit."
+    icon: "🗿"
+    match: 'ENEMY DESTROYED: (reign|corvus|toxopid|eclipse|oct|omura|navanax|conquer|collaris|disrupt) \|'
+    case_insensitive: true
+
+  - name: "Giant Killer"
+    description: "Destroy a Reign, Corvus, Toxopid and Eclipse."
+    icon: "🏔️"
+    all:
+      - 'ENEMY DESTROYED: reign \|'
+      - 'ENEMY DESTROYED: corvus \|'
+      - 'ENEMY DESTROYED: toxopid \|'
+      - 'ENEMY DESTROYED: eclipse \|'
+    case_insensitive: true
+
+  - name: "Core Cracker"
+    description: "Destroy an enemy core."
+    icon: "🎯"
+    match: 'CORE DESTROYED: .* ours=false'
+    case_insensitive: true
+
+  - name: "Base Wrecker"
+    description: "Destroy 5 enemy cores."
+    icon: "💣"
+    match: 'CORE DESTROYED: .* ours=false'
+    count: 5
+    case_insensitive: true
+
+  - name: "Demolition Crew"
+    description: "Destroy 100 enemy structures."
+    icon: "🧨"
+    match: 'BLOCK DESTROYED: .* ours=false'
+    count: 100
+    case_insensitive: true
+
+  - name: "Scorched Earth"
+    description: "Destroy 1000 enemy structures."
+    icon: "🌋"
+    match: 'BLOCK DESTROYED: .* ours=false'
+    count: 1000
+    case_insensitive: true
+
+  - name: "Under Siege"
+    description: "Lose 100 of your own structures."
+    icon: "🏚️"
+    match: 'BLOCK DESTROYED: .* ours=true'
+    count: 100
+    case_insensitive: true
+
+  - name: "Ruins Everywhere"
+    description: "Lose 1000 of your own structures."
+    icon: "🏗️"
+    match: 'BLOCK DESTROYED: .* ours=true'
+    count: 1000
+    case_insensitive: true
+
+  - name: "Casualties of War"
+    description: "Lose 50 units."
+    icon: "🪦"
+    match: 'UNIT LOST:'
+    count: 50
+    case_insensitive: true
+
+  - name: "Meat Grinder"
+    description: "Lose 500 units."
+    icon: "⚰️"
+    match: 'UNIT LOST:'
+    count: 500
+    case_insensitive: true
+
+  - name: "Respawn"
+    description: "Die as a player unit."
+    icon: "💫"
+    match: 'PLAYER DIED:'
+    case_insensitive: true
+
+  - name: "Tough Luck"
+    description: "Die 25 times."
+    icon: "☠️"
+    match: 'PLAYER DIED:'
+    count: 25
+    case_insensitive: true
+
+  - name: "Swimming Lessons"
+    description: "Watch one of your own units drown."
+    icon: "🏊"
+    match: 'UNIT DROWNED: .* ours=true'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Chernobyl"
+    description: "Let a thorium reactor overheat."
+    icon: "☢️"
+    match: 'GAME TRIGGER: thoriumReactorOverheat'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Reactor Down"
+    description: "Lose a thorium or impact reactor."
+    icon: "💥"
+    match: 'BLOCK DESTROYED: (thorium-reactor|impact-reactor) \| .* ours=true'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Rest in Pieces"
+    description: "Lose one of your own cores."
+    icon: "🪦"
+    match: 'CORE DESTROYED: .* ours=true'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Shield Break"
+    description: "Break a force projector."
+    icon: "🫧"
+    match: 'GAME TRIGGER: forceProjectorBreak'
+    case_insensitive: true
+    hidden: true
+
+  # ======================================================================
+  # UNITS — production and control
+  # ======================================================================
+
+  - name: "Unit Production"
+    description: "Produce a unit in factories."
+    icon: "🏭"
+    match: 'UNIT PRODUCED:'
+    case_insensitive: true
+
+  - name: "Small Army"
+    description: "Produce 10 units in factories."
+    icon: "🪖"
+    match: 'UNIT PRODUCED:'
+    count: 10
+    case_insensitive: true
+
+  - name: "Battalion"
+    description: "Produce 50 units in factories."
+    icon: "🎖️"
+    match: 'UNIT PRODUCED:'
+    count: 50
+    case_insensitive: true
+
+  - name: "Army Builder"
+    description: "Produce 100 units in factories."
+    icon: "⚔️"
+    match: 'UNIT PRODUCED:'
+    count: 100
+    case_insensitive: true
+
+  - name: "War Machine"
+    description: "Produce 500 units in factories."
+    icon: "🤖"
+    match: 'UNIT PRODUCED:'
+    count: 500
+    case_insensitive: true
+
+  - name: "Endless Legion"
+    description: "Produce 1000 units in factories."
+    icon: "♾️"
+    match: 'UNIT PRODUCED:'
+    count: 1000
+    case_insensitive: true
+
+  - name: "Foot Soldiers"
+    description: "Produce a tier I unit."
+    icon: "🪖"
+    match: 'UNIT PRODUCED: (dagger|nova|crawler|flare|mono|risso|retusa|stell|merui|elude) \|'
+    case_insensitive: true
+
+  - name: "Upgrade Path"
+    description: "Produce a tier II unit."
+    icon: "⬆️"
+    match: 'UNIT PRODUCED: (mace|pulsar|atrax|horizon|poly|minke|oxynoe|locus|cleroi|avert) \|'
+    case_insensitive: true
+
+  - name: "Heavy Armor"
+    description: "Produce a tier III unit."
+    icon: "🛡️"
+    match: 'UNIT PRODUCED: (fortress|quasar|spiroct|zenith|mega|bryde|cyerce|precept|anthicus|obviate) \|'
+    case_insensitive: true
+
+  - name: "Siege Engineers"
+    description: "Produce a tier IV unit."
+    icon: "🏗️"
+    match: 'UNIT PRODUCED: (scepter|vela|arkyid|antumbra|quad|sei|aegires|vanquish|tecta|quell) \|'
+    case_insensitive: true
+
+  - name: "The Big One"
+    description: "Produce a tier V unit."
+    icon: "👑"
+    match: 'UNIT PRODUCED: (reign|corvus|toxopid|eclipse|oct|omura|navanax|conquer|collaris|disrupt) \|'
+    case_insensitive: true
+
+  - name: "Ground Army"
+    description: "Produce every tier of the ground attack line (Dagger to Reign)."
+    icon: "🦾"
+    all:
+      - 'UNIT PRODUCED: dagger \|'
+      - 'UNIT PRODUCED: mace \|'
+      - 'UNIT PRODUCED: fortress \|'
+      - 'UNIT PRODUCED: scepter \|'
+      - 'UNIT PRODUCED: reign \|'
+    case_insensitive: true
+
+  - name: "Mech Support"
+    description: "Produce every tier of the support mech line (Nova to Corvus)."
+    icon: "🤖"
+    all:
+      - 'UNIT PRODUCED: nova \|'
+      - 'UNIT PRODUCED: pulsar \|'
+      - 'UNIT PRODUCED: quasar \|'
+      - 'UNIT PRODUCED: vela \|'
+      - 'UNIT PRODUCED: corvus \|'
+    case_insensitive: true
+
+  - name: "Legion of Legs"
+    description: "Produce every tier of the legged line (Crawler to Toxopid)."
+    icon: "🕷️"
+    all:
+      - 'UNIT PRODUCED: crawler \|'
+      - 'UNIT PRODUCED: atrax \|'
+      - 'UNIT PRODUCED: spiroct \|'
+      - 'UNIT PRODUCED: arkyid \|'
+      - 'UNIT PRODUCED: toxopid \|'
+    case_insensitive: true
+
+  - name: "Air Force"
+    description: "Produce every tier of the air attack line (Flare to Eclipse)."
+    icon: "🛩️"
+    all:
+      - 'UNIT PRODUCED: flare \|'
+      - 'UNIT PRODUCED: horizon \|'
+      - 'UNIT PRODUCED: zenith \|'
+      - 'UNIT PRODUCED: antumbra \|'
+      - 'UNIT PRODUCED: eclipse \|'
+    case_insensitive: true
+
+  - name: "Support Fleet"
+    description: "Produce every tier of the air support line (Mono to Oct)."
+    icon: "🚁"
+    all:
+      - 'UNIT PRODUCED: mono \|'
+      - 'UNIT PRODUCED: poly \|'
+      - 'UNIT PRODUCED: mega \|'
+      - 'UNIT PRODUCED: quad \|'
+      - 'UNIT PRODUCED: oct \|'
+    case_insensitive: true
+
+  - name: "Navy"
+    description: "Produce every tier of the naval attack line (Risso to Omura)."
+    icon: "🚢"
+    all:
+      - 'UNIT PRODUCED: risso \|'
+      - 'UNIT PRODUCED: minke \|'
+      - 'UNIT PRODUCED: bryde \|'
+      - 'UNIT PRODUCED: sei \|'
+      - 'UNIT PRODUCED: omura \|'
+    case_insensitive: true
+
+  - name: "Support Navy"
+    description: "Produce every tier of the naval support line (Retusa to Navanax)."
+    icon: "🛟"
+    all:
+      - 'UNIT PRODUCED: retusa \|'
+      - 'UNIT PRODUCED: oxynoe \|'
+      - 'UNIT PRODUCED: cyerce \|'
+      - 'UNIT PRODUCED: aegires \|'
+      - 'UNIT PRODUCED: navanax \|'
+    case_insensitive: true
+
+  - name: "Armored Column"
+    description: "Produce every tier of the Erekir tank line (Stell to Conquer)."
+    icon: "🛡️"
+    all:
+      - 'UNIT PRODUCED: stell \|'
+      - 'UNIT PRODUCED: locus \|'
+      - 'UNIT PRODUCED: precept \|'
+      - 'UNIT PRODUCED: vanquish \|'
+      - 'UNIT PRODUCED: conquer \|'
+    case_insensitive: true
+
+  - name: "Erekir Walkers"
+    description: "Produce every tier of the Erekir legged line (Merui to Collaris)."
+    icon: "🦿"
+    all:
+      - 'UNIT PRODUCED: merui \|'
+      - 'UNIT PRODUCED: cleroi \|'
+      - 'UNIT PRODUCED: anthicus \|'
+      - 'UNIT PRODUCED: tecta \|'
+      - 'UNIT PRODUCED: collaris \|'
+    case_insensitive: true
+
+  - name: "Erekir Air Wing"
+    description: "Produce every tier of the Erekir air line (Elude to Disrupt)."
+    icon: "🪽"
+    all:
+      - 'UNIT PRODUCED: elude \|'
+      - 'UNIT PRODUCED: avert \|'
+      - 'UNIT PRODUCED: obviate \|'
+      - 'UNIT PRODUCED: quell \|'
+      - 'UNIT PRODUCED: disrupt \|'
+    case_insensitive: true
+
+  - name: "Complete Roster"
+    description: "Produce every tier V unit of Serpulo."
+    icon: "🏅"
+    all:
+      - 'UNIT PRODUCED: reign \|'
+      - 'UNIT PRODUCED: corvus \|'
+      - 'UNIT PRODUCED: toxopid \|'
+      - 'UNIT PRODUCED: eclipse \|'
+      - 'UNIT PRODUCED: oct \|'
+      - 'UNIT PRODUCED: omura \|'
+      - 'UNIT PRODUCED: navanax \|'
+    case_insensitive: true
+
+  - name: "Take the Wheel"
+    description: "Take direct control of a combat or support unit."
+    icon: "🕹️"
+    match: 'PLAYER UNIT: (dagger|mace|fortress|scepter|reign|nova|pulsar|quasar|vela|corvus|crawler|atrax|spiroct|arkyid|toxopid|flare|horizon|zenith|antumbra|eclipse|mono|poly|mega|quad|oct|risso|minke|bryde|sei|omura|retusa|oxynoe|cyerce|aegires|navanax)\b'
+    case_insensitive: true
+
+  - name: "Core Upgrade"
+    description: "Pilot a Beta or Gamma core unit."
+    icon: "🛸"
+    match: 'PLAYER UNIT: (beta|gamma)\b'
+    case_insensitive: true
+
+  - name: "Heavy Metal"
+    description: "Pilot a Reign."
+    icon: "🦖"
+    match: 'PLAYER UNIT: reign\b'
+    case_insensitive: true
+
+  - name: "Sky Admiral"
+    description: "Pilot an Eclipse."
+    icon: "🌑"
+    match: 'PLAYER UNIT: eclipse\b'
+    case_insensitive: true
+
+  - name: "Captain at Sea"
+    description: "Pilot an Omura or Sei."
+    icon: "⚓"
+    match: 'PLAYER UNIT: (omura|sei)\b'
+    case_insensitive: true
+
+  # ======================================================================
+  # CONSTRUCTION — totals
+  # ======================================================================
+
+  - name: "First Block"
+    description: "Build a block."
+    icon: "🧱"
+    match: 'BLOCK BUILT:'
+    case_insensitive: true
+
+  - name: "Foundation Laid"
+    description: "Build 10 blocks."
+    icon: "🏗️"
+    match: 'BLOCK BUILT:'
+    count: 10
+    case_insensitive: true
+
+  - name: "Builder"
+    description: "Build 100 blocks."
+    icon: "🔨"
+    match: 'BLOCK BUILT:'
+    count: 100
+    case_insensitive: true
+
+  - name: "Contractor"
+    description: "Build 500 blocks."
+    icon: "🏘️"
+    match: 'BLOCK BUILT:'
+    count: 500
+    case_insensitive: true
+
+  - name: "Architect"
+    description: "Build 1000 blocks."
+    icon: "📐"
+    match: 'BLOCK BUILT:'
+    count: 1000
+    case_insensitive: true
+
+  - name: "Industrial Revolution"
+    description: "Build 5000 blocks."
+    icon: "🏭"
+    match: 'BLOCK BUILT:'
+    count: 5000
+    case_insensitive: true
+
+  - name: "Megastructure"
+    description: "Build 10000 blocks."
+    icon: "🌆"
+    match: 'BLOCK BUILT:'
+    count: 10000
+    case_insensitive: true
+
+  - name: "Sprawling Empire"
+    description: "Build 25000 blocks."
+    icon: "🌇"
+    match: 'BLOCK BUILT:'
+    count: 25000
+    case_insensitive: true
+
+  - name: "Reclaimer"
+    description: "Deconstruct 100 blocks."
+    icon: "♻️"
+    match: 'BLOCK DECONSTRUCTED:'
+    count: 100
+    case_insensitive: true
+
+  - name: "Scrap Yard"
+    description: "Deconstruct 1000 blocks."
+    icon: "🔧"
+    match: 'BLOCK DECONSTRUCTED:'
+    count: 1000
+    case_insensitive: true
+
+  - name: "Blueprint"
+    description: "Create a schematic."
+    icon: "📋"
+    match: 'SCHEMATIC CREATED:'
+    case_insensitive: true
+
+  - name: "Master Planner"
+    description: "Create 10 schematics."
+    icon: "🗂️"
+    match: 'SCHEMATIC CREATED:'
+    count: 10
+    case_insensitive: true
+
+  # ======================================================================
+  # CONSTRUCTION — logistics
+  # ======================================================================
+
+  - name: "Belt Up"
+    description: "Build 100 conveyors."
+    icon: "➡️"
+    match: 'BLOCK BUILT: conveyor \|'
+    count: 100
+    case_insensitive: true
+
+  - name: "Spaghetti Factory"
+    description: "Build 1000 conveyors."
+    icon: "🍝"
+    match: 'BLOCK BUILT: conveyor \|'
+    count: 1000
+    case_insensitive: true
+
+  - name: "Titanium Express"
+    description: "Build 100 titanium conveyors."
+    icon: "⏩"
+    match: 'BLOCK BUILT: titanium-conveyor \|'
+    count: 100
+    case_insensitive: true
+
+  - name: "Plastanium Rush"
+    description: "Build a plastanium conveyor."
+    icon: "🚄"
+    match: 'BLOCK BUILT: plastanium-conveyor \|'
+    case_insensitive: true
+
+  - name: "Armored Transport"
+    description: "Build an armored conveyor."
+    icon: "🛡️"
+    match: 'BLOCK BUILT: armored-conveyor \|'
+    case_insensitive: true
+
+  - name: "Over and Under"
+    description: "Build a bridge conveyor."
+    icon: "🌉"
+    match: 'BLOCK BUILT: bridge-conveyor \|'
+    case_insensitive: true
+
+  - name: "Sorting Hat"
+    description: "Build a sorter and an overflow gate."
+    icon: "🎩"
+    all:
+      - 'BLOCK BUILT: sorter \|'
+      - 'BLOCK BUILT: overflow-gate \|'
+    case_insensitive: true
+
+  - name: "Crossroads"
+    description: "Build a junction and a router."
+    icon: "🔀"
+    all:
+      - 'BLOCK BUILT: junction \|'
+      - 'BLOCK BUILT: router \|'
+    case_insensitive: true
+
+  - name: "Long-Distance Call"
+    description: "Build a mass driver."
+    icon: "🛰️"
+    match: 'BLOCK BUILT: mass-driver \|'
+    case_insensitive: true
+
+  - name: "Payload Handler"
+    description: "Build a payload conveyor."
+    icon: "📦"
+    match: 'BLOCK BUILT: payload-conveyor \|'
+    case_insensitive: true
+
+  - name: "Phase Shift"
+    description: "Build a phase conveyor."
+    icon: "🌀"
+    match: 'BLOCK BUILT: phase-conveyor \|'
+    case_insensitive: true
+
+  - name: "Plumber"
+    description: "Build 100 conduits."
+    icon: "🚰"
+    match: 'BLOCK BUILT: conduit \|'
+    count: 100
+    case_insensitive: true
+
+  - name: "Pressure Control"
+    description: "Build a pulse or plated conduit."
+    icon: "🔩"
+    match: 'BLOCK BUILT: (pulse-conduit|plated-conduit) \|'
+    case_insensitive: true
+
+  - name: "Tank Farm"
+    description: "Build a liquid tank."
+    icon: "🛢️"
+    match: 'BLOCK BUILT: liquid-tank \|'
+    case_insensitive: true
+
+  - name: "Pump It Up"
+    description: "Build a mechanical pump."
+    icon: "⛲"
+    match: 'BLOCK BUILT: mechanical-pump \|'
+    case_insensitive: true
+
+  - name: "Deep Pumping"
+    description: "Build a rotary or thermal pump."
+    icon: "🌊"
+    match: 'BLOCK BUILT: (rotary-pump|thermal-pump) \|'
+    case_insensitive: true
+
+  # ======================================================================
+  # CONSTRUCTION — extraction and production
+  # ======================================================================
+
+  - name: "Dig Dig Dig"
+    description: "Build a mechanical drill."
+    icon: "⛏️"
+    match: 'BLOCK BUILT: mechanical-drill \|'
+    case_insensitive: true
+
+  - name: "Pneumatic Power"
+    description: "Build a pneumatic drill."
+    icon: "🔩"
+    match: 'BLOCK BUILT: pneumatic-drill \|'
+    case_insensitive: true
+
+  - name: "Laser Mining"
+    description: "Build a laser drill."
+    icon: "🔦"
+    match: 'BLOCK BUILT: laser-drill \|'
+    case_insensitive: true
+
+  - name: "Blast Mining"
+    description: "Build a blast drill."
+    icon: "💥"
+    match: 'BLOCK BUILT: blast-drill \|'
+    case_insensitive: true
+
+  - name: "Drill Sergeant"
+    description: "Build 50 drills of any kind."
+    icon: "🕳️"
+    match: 'BLOCK BUILT: (mechanical-drill|pneumatic-drill|laser-drill|blast-drill) \|'
+    count: 50
+    case_insensitive: true
+
+  - name: "Strip Mine"
+    description: "Build 250 drills of any kind."
+    icon: "🏜️"
+    match: 'BLOCK BUILT: (mechanical-drill|pneumatic-drill|laser-drill|blast-drill) \|'
+    count: 250
+    case_insensitive: true
+
+  - name: "Water From Stone"
+    description: "Build a water extractor."
+    icon: "💧"
+    match: 'BLOCK BUILT: water-extractor \|'
+    case_insensitive: true
+
+  - name: "Green Thumb"
+    description: "Build a cultivator."
+    icon: "🌱"
+    match: 'BLOCK BUILT: cultivator \|'
+    case_insensitive: true
+
+  - name: "Oil Baron"
+    description: "Build an oil extractor."
+    icon: "🛢️"
+    match: 'BLOCK BUILT: oil-extractor \|'
+    case_insensitive: true
+
+  - name: "Graphite Age"
+    description: "Build a graphite press."
+    icon: "✏️"
+    match: 'BLOCK BUILT: graphite-press \|'
+    case_insensitive: true
+
+  - name: "Silicon Valley"
+    description: "Build a silicon smelter."
+    icon: "💾"
+    match: 'BLOCK BUILT: silicon-smelter \|'
+    case_insensitive: true
+
+  - name: "Glassblower"
+    description: "Build a kiln."
+    icon: "🪟"
+    match: 'BLOCK BUILT: kiln \|'
+    case_insensitive: true
+
+  - name: "Plastic Fantastic"
+    description: "Build a plastanium compressor."
+    icon: "🧪"
+    match: 'BLOCK BUILT: plastanium-compressor \|'
+    case_insensitive: true
+
+  - name: "Phase Weaver"
+    description: "Build a phase weaver."
+    icon: "🧵"
+    match: 'BLOCK BUILT: phase-weaver \|'
+    case_insensitive: true
+
+  - name: "Surge Forged"
+    description: "Build a surge smelter."
+    icon: "⚡"
+    match: 'BLOCK BUILT: surge-smelter \|'
+    case_insensitive: true
+
+  - name: "Mad Chemist"
+    description: "Build a pyratite mixer, a blast mixer and a cryofluid mixer."
+    icon: "⚗️"
+    all:
+      - 'BLOCK BUILT: pyratite-mixer \|'
+      - 'BLOCK BUILT: blast-mixer \|'
+      - 'BLOCK BUILT: cryofluid-mixer \|'
+    case_insensitive: true
+
+  - name: "Recycling Center"
+    description: "Build a separator and a disassembler."
+    icon: "♻️"
+    all:
+      - 'BLOCK BUILT: separator \|'
+      - 'BLOCK BUILT: disassembler \|'
+    case_insensitive: true
+
+  - name: "Upgrade the Press"
+    description: "Build a multi-press or a silicon crucible."
+    icon: "🏭"
+    match: 'BLOCK BUILT: (multi-press|silicon-crucible) \|'
+    case_insensitive: true
+
+  - name: "Spore Pressing"
+    description: "Build a spore press."
+    icon: "🍄"
+    match: 'BLOCK BUILT: spore-press \|'
+    case_insensitive: true
+
+  - name: "Factory Complex"
+    description: "Build 50 crafting blocks of any kind."
+    icon: "🏗️"
+    match: 'BLOCK BUILT: (graphite-press|multi-press|silicon-smelter|silicon-crucible|kiln|plastanium-compressor|phase-weaver|surge-smelter|cryofluid-mixer|pyratite-mixer|blast-mixer|melter|separator|disassembler|spore-press|pulverizer|coal-centrifuge) \|'
+    count: 50
+    case_insensitive: true
+
+  # ======================================================================
+  # CONSTRUCTION — power
+  # ======================================================================
+
+  - name: "Let There Be Light"
+    description: "Build a combustion generator."
+    icon: "💡"
+    match: 'BLOCK BUILT: combustion-generator \|'
+    case_insensitive: true
+
+  - name: "Steam Age"
+    description: "Build a steam generator."
+    icon: "♨️"
+    match: 'BLOCK BUILT: steam-generator \|'
+    case_insensitive: true
+
+  - name: "Geothermal"
+    description: "Build a thermal generator."
+    icon: "🌋"
+    match: 'BLOCK BUILT: thermal-generator \|'
+    case_insensitive: true
+
+  - name: "Differential Equation"
+    description: "Build a differential generator."
+    icon: "🧮"
+    match: 'BLOCK BUILT: differential-generator \|'
+    case_insensitive: true
+
+  - name: "Solar Power"
+    description: "Build a solar panel."
+    icon: "☀️"
+    match: 'BLOCK BUILT: (solar-panel|large-solar-panel) \|'
+    case_insensitive: true
+
+  - name: "Solar Farm"
+    description: "Build 50 solar panels."
+    icon: "🔆"
+    match: 'BLOCK BUILT: (solar-panel|large-solar-panel) \|'
+    count: 50
+    case_insensitive: true
+
+  - name: "Radioisotope"
+    description: "Build an RTG generator."
+    icon: "☢️"
+    match: 'BLOCK BUILT: rtg-generator \|'
+    case_insensitive: true
+
+  - name: "Atomic Age"
+    description: "Build a thorium reactor."
+    icon: "⚛️"
+    match: 'BLOCK BUILT: thorium-reactor \|'
+    case_insensitive: true
+
+  - name: "Impact Reactor"
+    description: "Build an impact reactor."
+    icon: "🌟"
+    match: 'BLOCK BUILT: impact-reactor \|'
+    case_insensitive: true
+
+  - name: "Power Plant"
+    description: "Build 25 power generators of any kind."
+    icon: "🏭"
+    match: 'BLOCK BUILT: (combustion-generator|steam-generator|thermal-generator|differential-generator|rtg-generator|solar-panel|large-solar-panel|thorium-reactor|impact-reactor) \|'
+    count: 25
+    case_insensitive: true
+
+  - name: "Stored Energy"
+    description: "Build a battery."
+    icon: "🔋"
+    match: 'BLOCK BUILT: (battery|battery-large) \|'
+    case_insensitive: true
+
+  - name: "Wired"
+    description: "Build 50 power nodes."
+    icon: "🔌"
+    match: 'BLOCK BUILT: (power-node|power-node-large|surge-tower) \|'
+    count: 50
+    case_insensitive: true
+
+  - name: "Long Wire"
+    description: "Build a surge tower."
+    icon: "🗼"
+    match: 'BLOCK BUILT: surge-tower \|'
+    case_insensitive: true
+
+  - name: "One Way Street"
+    description: "Build a diode."
+    icon: "➡️"
+    match: 'BLOCK BUILT: diode \|'
+    case_insensitive: true
+
+  # ======================================================================
+  # CONSTRUCTION — defense
+  # ======================================================================
+
+  - name: "Pea Shooter"
+    description: "Build a Duo."
+    icon: "🔫"
+    match: 'BLOCK BUILT: duo \|'
+    case_insensitive: true
+
+  - name: "Flak Attack"
+    description: "Build a Scatter."
+    icon: "🎆"
+    match: 'BLOCK BUILT: scatter \|'
+    case_insensitive: true
+
+  - name: "Hot Stuff"
+    description: "Build a Scorch."
+    icon: "🔥"
+    match: 'BLOCK BUILT: scorch \|'
+    case_insensitive: true
+
+  - name: "Artillery Support"
+    description: "Build a Hail."
+    icon: "💣"
+    match: 'BLOCK BUILT: hail \|'
+    case_insensitive: true
+
+  - name: "Splash Zone"
+    description: "Build a Wave."
+    icon: "🌊"
+    match: 'BLOCK BUILT: wave \|'
+    case_insensitive: true
+
+  - name: "Charged Up"
+    description: "Build a Lancer."
+    icon: "⚡"
+    match: 'BLOCK BUILT: lancer \|'
+    case_insensitive: true
+
+  - name: "Lightning Rod"
+    description: "Build an Arc."
+    icon: "🌩️"
+    match: 'BLOCK BUILT: arc \|'
+    case_insensitive: true
+
+  - name: "Tractor Beam"
+    description: "Build a Parallax."
+    icon: "🧲"
+    match: 'BLOCK BUILT: parallax \|'
+    case_insensitive: true
+
+  - name: "Missile Swarm"
+    description: "Build a Swarmer."
+    icon: "🚀"
+    match: 'BLOCK BUILT: swarmer \|'
+    case_insensitive: true
+
+  - name: "Salvo Time"
+    description: "Build a Salvo."
+    icon: "🔱"
+    match: 'BLOCK BUILT: salvo \|'
+    case_insensitive: true
+
+  - name: "Point Defense"
+    description: "Build a Segment."
+    icon: "🛡️"
+    match: 'BLOCK BUILT: segment \|'
+    case_insensitive: true
+
+  - name: "Tidal Force"
+    description: "Build a Tsunami."
+    icon: "🌀"
+    match: 'BLOCK BUILT: tsunami \|'
+    case_insensitive: true
+
+  - name: "Shotgun Surgery"
+    description: "Build a Fuse."
+    icon: "💢"
+    match: 'BLOCK BUILT: fuse \|'
+    case_insensitive: true
+
+  - name: "Artillery Barrage"
+    description: "Build a Ripple."
+    icon: "🎇"
+    match: 'BLOCK BUILT: ripple \|'
+    case_insensitive: true
+
+  - name: "Eye of the Storm"
+    description: "Build a Cyclone."
+    icon: "🌪️"
+    match: 'BLOCK BUILT: cyclone \|'
+    case_insensitive: true
+
+  - name: "Foreshadowing"
+    description: "Build a Foreshadow."
+    icon: "🔭"
+    match: 'BLOCK BUILT: foreshadow \|'
+    case_insensitive: true
+
+  - name: "Spectral Fire"
+    description: "Build a Spectre."
+    icon: "👻"
+    match: 'BLOCK BUILT: spectre \|'
+    case_insensitive: true
+
+  - name: "Meltdown"
+    description: "Build a Meltdown."
+    icon: "☄️"
+    match: 'BLOCK BUILT: meltdown \|'
+    case_insensitive: true
+
+  - name: "Arsenal"
+    description: "Build every Serpulo turret."
+    icon: "🏰"
+    all:
+      - 'BLOCK BUILT: duo \|'
+      - 'BLOCK BUILT: scatter \|'
+      - 'BLOCK BUILT: scorch \|'
+      - 'BLOCK BUILT: hail \|'
+      - 'BLOCK BUILT: wave \|'
+      - 'BLOCK BUILT: lancer \|'
+      - 'BLOCK BUILT: arc \|'
+      - 'BLOCK BUILT: parallax \|'
+      - 'BLOCK BUILT: swarmer \|'
+      - 'BLOCK BUILT: salvo \|'
+      - 'BLOCK BUILT: segment \|'
+      - 'BLOCK BUILT: tsunami \|'
+      - 'BLOCK BUILT: fuse \|'
+      - 'BLOCK BUILT: ripple \|'
+      - 'BLOCK BUILT: cyclone \|'
+      - 'BLOCK BUILT: foreshadow \|'
+      - 'BLOCK BUILT: spectre \|'
+      - 'BLOCK BUILT: meltdown \|'
+    case_insensitive: true
+
+  - name: "Gun Emplacement"
+    description: "Build 50 turrets of any kind."
+    icon: "🔫"
+    match: 'BLOCK BUILT: (duo|scatter|scorch|hail|wave|lancer|arc|parallax|swarmer|salvo|segment|tsunami|fuse|ripple|cyclone|foreshadow|spectre|meltdown) \|'
+    count: 50
+    case_insensitive: true
+
+  - name: "Fortress"
+    description: "Build 250 turrets of any kind."
+    icon: "🏯"
+    match: 'BLOCK BUILT: (duo|scatter|scorch|hail|wave|lancer|arc|parallax|swarmer|salvo|segment|tsunami|fuse|ripple|cyclone|foreshadow|spectre|meltdown) \|'
+    count: 250
+    case_insensitive: true
+
+  - name: "Wall Builder"
+    description: "Build 100 walls."
+    icon: "🧱"
+    match: 'BLOCK BUILT: (copper|titanium|plastanium|thorium|phase|surge)-wall(-large)? \|'
+    count: 100
+    case_insensitive: true
+
+  - name: "Great Wall"
+    description: "Build 1000 walls."
+    icon: "🏯"
+    match: 'BLOCK BUILT: (copper|titanium|plastanium|thorium|phase|surge)-wall(-large)? \|'
+    count: 1000
+    case_insensitive: true
+
+  - name: "Heavy Plating"
+    description: "Build a thorium or surge wall."
+    icon: "🛡️"
+    match: 'BLOCK BUILT: (thorium|surge)-wall(-large)? \|'
+    case_insensitive: true
+
+  - name: "Open Door"
+    description: "Build a door."
+    icon: "🚪"
+    match: 'BLOCK BUILT: (door|door-large) \|'
+    case_insensitive: true
+
+  - name: "Medic"
+    description: "Build a mender."
+    icon: "🩹"
+    match: 'BLOCK BUILT: mender \|'
+    case_insensitive: true
+
+  - name: "Field Hospital"
+    description: "Build a mend projector."
+    icon: "🏥"
+    match: 'BLOCK BUILT: mend-projector \|'
+    case_insensitive: true
+
+  - name: "Overdrive"
+    description: "Build an overdrive projector or dome."
+    icon: "⏫"
+    match: 'BLOCK BUILT: (overdrive-projector|overdrive-dome) \|'
+    case_insensitive: true
+
+  - name: "Force Field"
+    description: "Build a force projector."
+    icon: "🫧"
+    match: 'BLOCK BUILT: force-projector \|'
+    case_insensitive: true
+
+  - name: "Watch Your Step"
+    description: "Build a shock mine."
+    icon: "💥"
+    match: 'BLOCK BUILT: shock-mine \|'
+    case_insensitive: true
+
+  - name: "Repair Crew"
+    description: "Build a repair point or repair turret."
+    icon: "🔧"
+    match: 'BLOCK BUILT: (repair-point|repair-turret) \|'
+    case_insensitive: true
+
+  # ======================================================================
+  # CONSTRUCTION — units, storage and logic
+  # ======================================================================
+
+  - name: "Unit Factory"
+    description: "Build a ground, air or naval factory."
+    icon: "🏭"
+    match: 'BLOCK BUILT: (ground-factory|air-factory|naval-factory) \|'
+    case_insensitive: true
+
+  - name: "Tier Up"
+    description: "Build an additive reconstructor."
+    icon: "⬆️"
+    match: 'BLOCK BUILT: additive-reconstructor \|'
+    case_insensitive: true
+
+  - name: "Tier Up Again"
+    description: "Build a multiplicative reconstructor."
+    icon: "⏫"
+    match: 'BLOCK BUILT: multiplicative-reconstructor \|'
+    case_insensitive: true
+
+  - name: "Exponential Growth"
+    description: "Build an exponential reconstructor."
+    icon: "📈"
+    match: 'BLOCK BUILT: exponential-reconstructor \|'
+    case_insensitive: true
+
+  - name: "Tetrative Dreams"
+    description: "Build a tetrative reconstructor."
+    icon: "🌌"
+    match: 'BLOCK BUILT: tetrative-reconstructor \|'
+    case_insensitive: true
+
+  - name: "Core Foundation"
+    description: "Upgrade to a Foundation core."
+    icon: "🏛️"
+    match: 'BLOCK BUILT: core-foundation \|'
+    case_insensitive: true
+
+  - name: "Core Nucleus"
+    description: "Upgrade to a Nucleus core."
+    icon: "🧿"
+    match: 'BLOCK BUILT: core-nucleus \|'
+    case_insensitive: true
+
+  - name: "Secure Storage"
+    description: "Build a container."
+    icon: "📦"
+    match: 'BLOCK BUILT: container \|'
+    case_insensitive: true
+
+  - name: "Vault Door"
+    description: "Build a vault."
+    icon: "🏦"
+    match: 'BLOCK BUILT: vault \|'
+    case_insensitive: true
+
+  - name: "Unloader"
+    description: "Build an unloader."
+    icon: "📤"
+    match: 'BLOCK BUILT: unloader \|'
+    case_insensitive: true
+
+  - name: "Launch Pad"
+    description: "Build a launch pad."
+    icon: "🛰️"
+    match: 'BLOCK BUILT: (launch-pad|launch-pad-large) \|'
+    case_insensitive: true
+
+  - name: "Hello World"
+    description: "Build a micro processor."
+    icon: "💻"
+    match: 'BLOCK BUILT: micro-processor \|'
+    case_insensitive: true
+
+  - name: "Hacker"
+    description: "Build a hyper processor."
+    icon: "🖥️"
+    match: 'BLOCK BUILT: hyper-processor \|'
+    case_insensitive: true
+
+  - name: "Display Manager"
+    description: "Build a logic display."
+    icon: "📺"
+    match: 'BLOCK BUILT: (logic-display|large-logic-display) \|'
+    case_insensitive: true
+
+  - name: "Memory Lane"
+    description: "Build a memory cell or bank."
+    icon: "🧠"
+    match: 'BLOCK BUILT: (memory-cell|memory-bank) \|'
+    case_insensitive: true
+
+  - name: "Automation Engineer"
+    description: "Build 10 processors."
+    icon: "🤖"
+    match: 'BLOCK BUILT: (micro-processor|logic-processor|hyper-processor) \|'
+    count: 10
+    case_insensitive: true
+
+  - name: "Lights On"
+    description: "Build an illuminator."
+    icon: "🔆"
+    match: 'BLOCK BUILT: illuminator \|'
+    case_insensitive: true
+
+  # ======================================================================
+  # CONSTRUCTION — Erekir
+  # ======================================================================
+
+  - name: "Breach Loaded"
+    description: "Build a Breach turret."
+    icon: "🔫"
+    match: 'BLOCK BUILT: breach \|'
+    case_insensitive: true
+
+  - name: "Diffusion"
+    description: "Build a Diffuse turret."
+    icon: "🌫️"
+    match: 'BLOCK BUILT: diffuse \|'
+    case_insensitive: true
+
+  - name: "Sublimation"
+    description: "Build a Sublimate turret."
+    icon: "🔥"
+    match: 'BLOCK BUILT: sublimate \|'
+    case_insensitive: true
+
+  - name: "Titan Cannon"
+    description: "Build a Titan turret."
+    icon: "🛡️"
+    match: 'BLOCK BUILT: titan \|'
+    case_insensitive: true
+
+  - name: "Dispersed Fire"
+    description: "Build a Disperse turret."
+    icon: "🎆"
+    match: 'BLOCK BUILT: disperse \|'
+    case_insensitive: true
+
+  - name: "Affliction"
+    description: "Build an Afflict turret."
+    icon: "⚡"
+    match: 'BLOCK BUILT: afflict \|'
+    case_insensitive: true
+
+  - name: "Lustrous Beam"
+    description: "Build a Lustre turret."
+    icon: "✨"
+    match: 'BLOCK BUILT: lustre \|'
+    case_insensitive: true
+
+  - name: "Scathing Remarks"
+    description: "Build a Scathe turret."
+    icon: "🚀"
+    match: 'BLOCK BUILT: scathe \|'
+    case_insensitive: true
+
+  - name: "Smite"
+    description: "Build a Smite turret."
+    icon: "🌩️"
+    match: 'BLOCK BUILT: smite \|'
+    case_insensitive: true
+
+  - name: "Malign Influence"
+    description: "Build a Malign turret."
+    icon: "👁️"
+    match: 'BLOCK BUILT: malign \|'
+    case_insensitive: true
+
+  - name: "Erekir Arsenal"
+    description: "Build every Erekir turret."
+    icon: "🏰"
+    all:
+      - 'BLOCK BUILT: breach \|'
+      - 'BLOCK BUILT: diffuse \|'
+      - 'BLOCK BUILT: sublimate \|'
+      - 'BLOCK BUILT: titan \|'
+      - 'BLOCK BUILT: disperse \|'
+      - 'BLOCK BUILT: afflict \|'
+      - 'BLOCK BUILT: lustre \|'
+      - 'BLOCK BUILT: scathe \|'
+      - 'BLOCK BUILT: smite \|'
+      - 'BLOCK BUILT: malign \|'
+    case_insensitive: true
+
+  - name: "Beam Me Up"
+    description: "Build a beam node."
+    icon: "🔷"
+    match: 'BLOCK BUILT: (beam-node|beam-tower) \|'
+    case_insensitive: true
+
+  - name: "Plasma Drilling"
+    description: "Build a plasma bore."
+    icon: "🕳️"
+    match: 'BLOCK BUILT: (plasma-bore|large-plasma-bore) \|'
+    case_insensitive: true
+
+  - name: "Cliff Notes"
+    description: "Build a cliff crusher."
+    icon: "🪨"
+    match: 'BLOCK BUILT: cliff-crusher \|'
+    case_insensitive: true
+
+  - name: "Impact Drilling"
+    description: "Build an impact drill or an eruption drill."
+    icon: "💥"
+    match: 'BLOCK BUILT: (impact-drill|eruption-drill) \|'
+    case_insensitive: true
+
+  - name: "Bastion"
+    description: "Upgrade to a Bastion core."
+    icon: "🏰"
+    match: 'BLOCK BUILT: core-bastion \|'
+    case_insensitive: true
+
+  - name: "Citadel"
+    description: "Upgrade to a Citadel core."
+    icon: "🏯"
+    match: 'BLOCK BUILT: core-citadel \|'
+    case_insensitive: true
+
+  - name: "Acropolis"
+    description: "Upgrade to an Acropolis core."
+    icon: "🏛️"
+    match: 'BLOCK BUILT: core-acropolis \|'
+    case_insensitive: true
+
+  - name: "Fabricator"
+    description: "Build a tank, ship or mech fabricator."
+    icon: "🏭"
+    match: 'BLOCK BUILT: (tank-fabricator|ship-fabricator|mech-fabricator) \|'
+    case_insensitive: true
+
+  - name: "Neoplasia"
+    description: "Build a neoplasia reactor."
+    icon: "🧫"
+    match: 'BLOCK BUILT: neoplasia-reactor \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Flux Reactor"
+    description: "Build a flux reactor."
+    icon: "⚛️"
+    match: 'BLOCK BUILT: flux-reactor \|'
+    case_insensitive: true
+    hidden: true
+
+  # ======================================================================
+  # RESEARCH AND RESOURCES
+  # ======================================================================
+
+  - name: "Eureka"
+    description: "Research a tech tree node."
+    icon: "💡"
+    match: 'RESEARCH COMPLETE:'
+    case_insensitive: true
+
+  - name: "Lab Assistant"
+    description: "Research 10 tech tree nodes."
+    icon: "🧪"
+    match: 'RESEARCH COMPLETE:'
+    count: 10
+    case_insensitive: true
+
+  - name: "Researcher"
+    description: "Research 25 tech tree nodes."
+    icon: "🔬"
+    match: 'RESEARCH COMPLETE:'
+    count: 25
+    case_insensitive: true
+
+  - name: "Scientist"
+    description: "Research 50 tech tree nodes."
+    icon: "🧬"
+    match: 'RESEARCH COMPLETE:'
+    count: 50
+    case_insensitive: true
+
+  - name: "Professor"
+    description: "Research 100 tech tree nodes."
+    icon: "🎓"
+    match: 'RESEARCH COMPLETE:'
+    count: 100
+    case_insensitive: true
+
+  - name: "Tech Tree Climber"
+    description: "Research 150 tech tree nodes."
+    icon: "🌳"
+    match: 'RESEARCH COMPLETE:'
+    count: 150
+    case_insensitive: true
+
+  - name: "Nobel Laureate"
+    description: "Research 200 tech tree nodes."
+    icon: "🏅"
+    match: 'RESEARCH COMPLETE:'
+    count: 200
+    case_insensitive: true
+
+  - name: "Nuclear Physicist"
+    description: "Research the thorium reactor."
+    icon: "☢️"
+    match: 'RESEARCH COMPLETE: thorium-reactor \|'
+    case_insensitive: true
+
+  - name: "Impact Theory"
+    description: "Research the impact reactor."
+    icon: "🌟"
+    match: 'RESEARCH COMPLETE: impact-reactor \|'
+    case_insensitive: true
+
+  - name: "Spectral Research"
+    description: "Research the Spectre."
+    icon: "👻"
+    match: 'RESEARCH COMPLETE: spectre \|'
+    case_insensitive: true
+
+  - name: "Meltdown Blueprint"
+    description: "Research the Meltdown."
+    icon: "☄️"
+    match: 'RESEARCH COMPLETE: meltdown \|'
+    case_insensitive: true
+
+  - name: "Foresight"
+    description: "Research the Foreshadow."
+    icon: "🔭"
+    match: 'RESEARCH COMPLETE: foreshadow \|'
+    case_insensitive: true
+
+  - name: "Surge Science"
+    description: "Research surge alloy."
+    icon: "⚡"
+    match: 'RESEARCH COMPLETE: surge-alloy \|'
+    case_insensitive: true
+
+  - name: "Phase Theory"
+    description: "Research phase fabric."
+    icon: "🌀"
+    match: 'RESEARCH COMPLETE: phase-fabric \|'
+    case_insensitive: true
+
+  - name: "Plastanium Research"
+    description: "Research plastanium."
+    icon: "🧪"
+    match: 'RESEARCH COMPLETE: plastanium \|'
+    case_insensitive: true
+
+  - name: "Dreadnought Blueprints"
+    description: "Research a tier V unit."
+    icon: "🗿"
+    match: 'RESEARCH COMPLETE: (reign|corvus|toxopid|eclipse|oct|omura|navanax|conquer|collaris|disrupt) \|'
+    case_insensitive: true
+
+  - name: "Erekir Researcher"
+    description: "Research 15 Erekir nodes."
+    icon: "🔷"
+    match: 'RESEARCH COMPLETE: (breach|diffuse|sublimate|titan|disperse|afflict|lustre|scathe|smite|malign|beam-node|beam-tower|plasma-bore|large-plasma-bore|cliff-crusher|impact-drill|eruption-drill|core-bastion|core-citadel|core-acropolis|tank-fabricator|ship-fabricator|mech-fabricator|tank-refabricator|ship-refabricator|mech-refabricator|stell|locus|precept|vanquish|conquer|merui|cleroi|anthicus|tecta|collaris|elude|avert|obviate|quell|disrupt) \|'
+    count: 15
+    case_insensitive: true
+
+  - name: "Material Collector"
+    description: "Discover 10 resources."
+    icon: "🎒"
+    match: 'RESOURCE UNLOCKED:'
+    count: 10
+    case_insensitive: true
+
+  - name: "Alchemist"
+    description: "Discover 20 resources."
+    icon: "⚗️"
+    match: 'RESOURCE UNLOCKED:'
+    count: 20
+    case_insensitive: true
+
+  - name: "Raw Materials"
+    description: "Discover copper, lead, sand, coal and scrap."
+    icon: "⛏️"
+    all:
+      - 'RESOURCE UNLOCKED: copper \|'
+      - 'RESOURCE UNLOCKED: lead \|'
+      - 'RESOURCE UNLOCKED: sand \|'
+      - 'RESOURCE UNLOCKED: coal \|'
+      - 'RESOURCE UNLOCKED: scrap \|'
+    case_insensitive: true
+
+  - name: "Heavy Metals"
+    description: "Discover titanium and thorium."
+    icon: "☢️"
+    all:
+      - 'RESOURCE UNLOCKED: titanium \|'
+      - 'RESOURCE UNLOCKED: thorium \|'
+    case_insensitive: true
+
+  - name: "Exotic Matter"
+    description: "Discover plastanium, phase fabric and surge alloy."
+    icon: "💎"
+    all:
+      - 'RESOURCE UNLOCKED: plastanium \|'
+      - 'RESOURCE UNLOCKED: phase-fabric \|'
+      - 'RESOURCE UNLOCKED: surge-alloy \|'
+    case_insensitive: true
+
+  - name: "Volatile Compounds"
+    description: "Discover pyratite and blast compound."
+    icon: "💥"
+    all:
+      - 'RESOURCE UNLOCKED: pyratite \|'
+      - 'RESOURCE UNLOCKED: blast-compound \|'
+    case_insensitive: true
+
+  - name: "Liquid Assets"
+    description: "Discover water, slag, oil and cryofluid."
+    icon: "💧"
+    all:
+      - 'RESOURCE UNLOCKED: water \|'
+      - 'RESOURCE UNLOCKED: slag \|'
+      - 'RESOURCE UNLOCKED: oil \|'
+      - 'RESOURCE UNLOCKED: cryofluid \|'
+    case_insensitive: true
+
+  - name: "Stocked Up"
+    description: "Hold 1000 of a single resource in your core."
+    icon: "📦"
+    match: 'ITEM MILESTONE: [\w-]+ \| amount=1000\b'
+    case_insensitive: true
+
+  - name: "Core Full"
+    description: "Hold 4000 of a single resource in your core."
+    icon: "🏦"
+    match: 'ITEM MILESTONE: [\w-]+ \| amount=4000\b'
+    case_insensitive: true
+
+  - name: "Overflowing"
+    description: "Hold 9000 of a single resource in your core."
+    icon: "🏰"
+    match: 'ITEM MILESTONE: [\w-]+ \| amount=9000\b'
+    case_insensitive: true
+
+  - name: "Maximum Capacity"
+    description: "Hold 13000 of a single resource in your core."
+    icon: "🌋"
+    match: 'ITEM MILESTONE: [\w-]+ \| amount=13000\b'
+    case_insensitive: true
+
+  - name: "Copper Hoarder"
+    description: "Fill your core to 4000 copper."
+    icon: "🟠"
+    match: 'ITEM MILESTONE: copper \| amount=4000\b'
+    case_insensitive: true
+
+  - name: "Silicon Surplus"
+    description: "Hold 4000 silicon in your core."
+    icon: "💾"
+    match: 'ITEM MILESTONE: silicon \| amount=4000\b'
+    case_insensitive: true
+
+  - name: "Thorium Stockpile"
+    description: "Hold 1000 thorium in your core."
+    icon: "☢️"
+    match: 'ITEM MILESTONE: thorium \| amount=1000\b'
+    case_insensitive: true
+
+  - name: "Plastanium Stockpile"
+    description: "Hold 1000 plastanium in your core."
+    icon: "🧪"
+    match: 'ITEM MILESTONE: plastanium \| amount=1000\b'
+    case_insensitive: true
+
+  - name: "Phase Stockpile"
+    description: "Hold 1000 phase fabric in your core."
+    icon: "🌀"
+    match: 'ITEM MILESTONE: phase-fabric \| amount=1000\b'
+    case_insensitive: true
+
+  - name: "Surge Stockpile"
+    description: "Hold 1000 surge alloy in your core."
+    icon: "⚡"
+    match: 'ITEM MILESTONE: surge-alloy \| amount=1000\b'
+    case_insensitive: true
+
+  - name: "Spore Farmer"
+    description: "Hold 1000 spore pods in your core."
+    icon: "🍄"
+    match: 'ITEM MILESTONE: spore-pod \| amount=1000\b'
+    case_insensitive: true
