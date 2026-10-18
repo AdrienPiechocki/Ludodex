@@ -1,0 +1,485 @@
+# Pseudoregalia achievements for Ludodex ("Achievements" module).
+#
+# To use with the "LudodexLogger" UE4SS mod for Pseudoregalia (LudodexLogger-Pseudoregalia.zip,
+# Mods/LudodexLogger/Scripts/main.lua). The mod appends one line per state change to ludodex.log
+# (next to UE4SS.log, in pseudoregalia/Binaries/Win64/). Each pattern is a free-search regular
+# expression, applied line by line. Format of the lines produced by the mod:
+#   UPGRADE ACQUIRED: <id>              powerup flags on the pawn (obtained*? lowercased):
+#                                        attack, slide, map, airkick, powerboost, plunge,
+#                                        chargeattack, wallride, light, projectile, slidejump;
+#                                        also polled, but granted by no pickup: guard, jump, sprint
+#   ZONE ENTERED: <map>                 map package names: ZONE_Dungeon, ZONE_LowerCastle,
+#                                        Zone_Upper, Zone_Library, Zone_Theatre, ZONE_Exterior,
+#                                        Zone_Caves, Zone_Tower, Zone_PrincessChambers
+#   ATTIRE UNLOCKED: <id>               entries of save.unlockedOutfits (Base is the starting
+#                                        outfit and never emits; trial outfits are outfitPro,
+#                                        outfitFaith, outfitShoujo, outfitSweater, outfitClassy,
+#                                        outfitKnight, outfitJam, outfitPast)
+#   KEY ACQUIRED: type=major|small | n=<count>/<5|7>
+#   HEALTH PIECE: n=<count>/16
+#   TIME TRIAL COMPLETE: <map> | rank=bronze|silver|gold|done
+#   BOSS DEFEATED: <map>                a sealed-arena encounter deactivated after a kill
+#   ENDING REACHED: x1
+#   PLAYER DIED: x1
+#   LUDODEX LOGGER READY: hooked=<n> | missing=<events absent from your game version>
+#
+# Notes:
+# - Upgrade ids are the pawn's obtained*? booleans, observed in game dumps. The game-side
+#   names are confirmed by the wiki ("Internal Name" fields) and the Archipelago mod's item
+#   table: attack=Dream Breaker, powerBoost=Indignation, airKick=Sun Greaves, slide=Slide,
+#   SlideJump=Solar Wind, plunge=Sunsetter, chargeAttack=Strikebreak, wallRide=Cling Gem,
+#   Light=Ascendant Light, projectile=Soul Cutter. guard/jump/sprint are polled but no
+#   pickup grants them: no achievement watches those (they would never fire).
+# - Zone ids are the map package names, taken from the pak's file index and mapped to area
+#   names by the Archipelago mod: ZONE_Dungeon=Dilapidated Dungeon, ZONE_LowerCastle=Castle
+#   Sansa, Zone_Upper=Sansa Keep, ZONE_Exterior=Empty Bailey, Zone_Caves=The Underbelly,
+#   Zone_Library=Listless Library, Zone_Theatre=Twilight Theatre, Zone_Tower=Tower Remains,
+#   Zone_PrincessChambers=the Princess's chambers (endgame).
+# - Only the first observed value emits a line (transitions only): a trial's rank is the
+#   rank of its first completion, and improving it later stays silent — the silver/gold
+#   milestones unlock only if some trial was first completed at that rank.
+# - Provisional families (line format implemented and unit-tested, never seen in a real
+#   session yet — the first real playthrough will confirm them): trials, outfits, health
+#   pieces, Solar Wind (slidejump probe), the Princess fight and the ending.
+# - Aspects and Mementos were dropped (re-scope): no readable collection source exists in
+#   the game's data, so no achievement is built on them.
+# - count: N counts matching lines. Only "PLAYER DIED" uses it (tracker contract).
+# - hidden: true marks achievements whose name or description reveals a secret or an ending.
+
+achievements:
+
+  # ======================================================================
+  # ABILITIES — the ten powerups, the map, and the full move set
+  # ======================================================================
+
+  - name: "Dream Breaker"
+    description: "Find the Dream Breaker in the Dilapidated Dungeon."
+    icon: "🗡️"
+    match: 'UPGRADE ACQUIRED: attack\b'
+    case_insensitive: true
+
+  - name: "Slide"
+    description: "Learn to Slide."
+    icon: "🛝"
+    match: 'UPGRADE ACQUIRED: slide\b'
+    case_insensitive: true
+
+  - name: "Indignation"
+    description: "Find the Indignation powerup in Castle Sansa."
+    icon: "💢"
+    match: 'UPGRADE ACQUIRED: powerboost\b'
+    case_insensitive: true
+
+  - name: "Sun Greaves"
+    description: "Find the Sun Greaves in the Listless Library. Kick off walls mid-air."
+    icon: "🌞"
+    match: 'UPGRADE ACQUIRED: airkick\b'
+    case_insensitive: true
+
+  - name: "Solar Wind"
+    description: "Find the Solar Wind in Empty Bailey. Jump while sliding."
+    icon: "🌬️"
+    match: 'UPGRADE ACQUIRED: slidejump\b'
+    case_insensitive: true
+
+  - name: "Sunsetter"
+    description: "Find the Sunsetter. Plunge from the sky."
+    icon: "🌇"
+    match: 'UPGRADE ACQUIRED: plunge\b'
+    case_insensitive: true
+
+  - name: "Strikebreak"
+    description: "Find the Strikebreak. Shatter green barriers."
+    icon: "💥"
+    match: 'UPGRADE ACQUIRED: chargeattack\b'
+    case_insensitive: true
+
+  - name: "Cling Gem"
+    description: "Find the Cling Gem in the Tower Remains. Ride the walls."
+    icon: "💎"
+    match: 'UPGRADE ACQUIRED: wallride\b'
+    case_insensitive: true
+
+  - name: "Ascendant Light"
+    description: "Find the Ascendant Light in the Underbelly. Light the dark, bounce on hits."
+    icon: "💡"
+    match: 'UPGRADE ACQUIRED: light\b'
+    case_insensitive: true
+
+  - name: "Soul Cutter"
+    description: "Find the Soul Cutter in the Twilight Theatre. Fire a charged disc."
+    icon: "🌀"
+    match: 'UPGRADE ACQUIRED: projectile\b'
+    case_insensitive: true
+
+  - name: "Map"
+    description: "Get your bearings."
+    icon: "🗺️"
+    match: 'UPGRADE ACQUIRED: map\b'
+    case_insensitive: true
+
+  - name: "Full Move Set"
+    description: "Collect all ten powerups."
+    icon: "🏅"
+    all:
+      - 'UPGRADE ACQUIRED: attack\b'
+      - 'UPGRADE ACQUIRED: slide\b'
+      - 'UPGRADE ACQUIRED: powerboost\b'
+      - 'UPGRADE ACQUIRED: airkick\b'
+      - 'UPGRADE ACQUIRED: slidejump\b'
+      - 'UPGRADE ACQUIRED: plunge\b'
+      - 'UPGRADE ACQUIRED: chargeattack\b'
+      - 'UPGRADE ACQUIRED: wallride\b'
+      - 'UPGRADE ACQUIRED: light\b'
+      - 'UPGRADE ACQUIRED: projectile\b'
+    case_insensitive: true
+
+  # ======================================================================
+  # ZONES — one per map, plus first steps and the full tour
+  # ======================================================================
+
+  - name: "First Steps"
+    description: "Set foot in Castle Sansa."
+    icon: "👣"
+    match: 'ZONE ENTERED:'
+    case_insensitive: true
+
+  - name: "Dilapidated Dungeon"
+    description: "Enter the Dilapidated Dungeon."
+    icon: "🏰"
+    match: 'ZONE ENTERED: ZONE_Dungeon\b'
+    case_insensitive: true
+
+  - name: "Castle Sansa"
+    description: "Enter Castle Sansa."
+    icon: "🏯"
+    match: 'ZONE ENTERED: ZONE_LowerCastle\b'
+    case_insensitive: true
+
+  - name: "Sansa Keep"
+    description: "Enter the Sansa Keep."
+    icon: "🗼"
+    match: 'ZONE ENTERED: Zone_Upper\b'
+    case_insensitive: true
+
+  - name: "Empty Bailey"
+    description: "Enter the Empty Bailey."
+    icon: "🚧"
+    match: 'ZONE ENTERED: ZONE_Exterior\b'
+    case_insensitive: true
+
+  - name: "The Underbelly"
+    description: "Enter the Underbelly."
+    icon: "🕳️"
+    match: 'ZONE ENTERED: Zone_Caves\b'
+    case_insensitive: true
+
+  - name: "Listless Library"
+    description: "Enter the Listless Library."
+    icon: "📚"
+    match: 'ZONE ENTERED: Zone_Library\b'
+    case_insensitive: true
+
+  - name: "Twilight Theatre"
+    description: "Enter the Twilight Theatre."
+    icon: "🎭"
+    match: 'ZONE ENTERED: Zone_Theatre\b'
+    case_insensitive: true
+
+  - name: "Tower Remains"
+    description: "Enter the Tower Remains."
+    icon: "🏗️"
+    match: 'ZONE ENTERED: Zone_Tower\b'
+    case_insensitive: true
+
+  - name: "Distorted Memory"
+    description: "Enter the Distorted Memory."
+    icon: "🫥"
+    match: 'ZONE ENTERED: Zone_PrincessChambers\b'
+    case_insensitive: true
+
+  - name: "Realm Walker"
+    description: "Set foot in every area of the realm."
+    icon: "🧭"
+    all:
+      - 'ZONE ENTERED: ZONE_Dungeon\b'
+      - 'ZONE ENTERED: ZONE_LowerCastle\b'
+      - 'ZONE ENTERED: Zone_Upper\b'
+      - 'ZONE ENTERED: ZONE_Exterior\b'
+      - 'ZONE ENTERED: Zone_Caves\b'
+      - 'ZONE ENTERED: Zone_Library\b'
+      - 'ZONE ENTERED: Zone_Theatre\b'
+      - 'ZONE ENTERED: Zone_Tower\b'
+      - 'ZONE ENTERED: Zone_PrincessChambers\b'
+    case_insensitive: true
+
+  # ======================================================================
+  # BOSSES & ENDING
+  # ======================================================================
+
+  - name: "Strong Eyes"
+    description: "Defeat the boss of the Dilapidated Dungeon."
+    icon: "👁️"
+    match: 'BOSS DEFEATED: ZONE_Dungeon\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "The Princess"
+    description: "Defeat the Princess in her chambers."
+    icon: "👑"
+    match: 'BOSS DEFEATED: Zone_PrincessChambers\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Free the Soul"
+    description: "Free the weary soul of Castle Sansa."
+    icon: "🕊️"
+    match: 'ENDING REACHED'
+    case_insensitive: true
+    hidden: true
+
+  # ======================================================================
+  # SECRETS — keys and health pieces
+  # ======================================================================
+
+  - name: "A Key"
+    description: "Find your first small key."
+    icon: "🗝️"
+    match: 'KEY ACQUIRED: type=small\b'
+    case_insensitive: true
+
+  - name: "Key Ring"
+    description: "Find all 7 small keys."
+    icon: "🔑"
+    match: 'KEY ACQUIRED: type=small \| n=7/7'
+    case_insensitive: true
+
+  - name: "Skeleton Key"
+    description: "Find your first major key."
+    icon: "🦴"
+    match: 'KEY ACQUIRED: type=major\b'
+    case_insensitive: true
+
+  - name: "Five of a Kind"
+    description: "Find all 5 major keys."
+    icon: "🚪"
+    match: 'KEY ACQUIRED: type=major \| n=5/5'
+    case_insensitive: true
+
+  - name: "Pip Collector"
+    description: "Find your first health-up piece."
+    icon: "💛"
+    match: 'HEALTH PIECE'
+    case_insensitive: true
+
+  - name: "Heart of Gold"
+    description: "Collect all 16 health-up pieces."
+    icon: "💖"
+    match: 'HEALTH PIECE: n=16/16'
+    case_insensitive: true
+
+  # ======================================================================
+  # ATTIRE — first outfit and the eight time-trial outfits
+  # ======================================================================
+
+  - name: "Fresh Threads"
+    description: "Unlock an outfit."
+    icon: "👗"
+    match: 'ATTIRE UNLOCKED'
+    case_insensitive: true
+
+  - name: "Wardrobe"
+    description: "Unlock all eight time-trial outfits."
+    icon: "🧥"
+    all:
+      - 'ATTIRE UNLOCKED: outfitPro\b'
+      - 'ATTIRE UNLOCKED: outfitFaith\b'
+      - 'ATTIRE UNLOCKED: outfitShoujo\b'
+      - 'ATTIRE UNLOCKED: outfitSweater\b'
+      - 'ATTIRE UNLOCKED: outfitClassy\b'
+      - 'ATTIRE UNLOCKED: outfitKnight\b'
+      - 'ATTIRE UNLOCKED: outfitJam\b'
+      - 'ATTIRE UNLOCKED: outfitPast\b'
+    case_insensitive: true
+
+  # ======================================================================
+  # TIME TRIALS — one crystal per area, ranks on first completion
+  # ======================================================================
+
+  - name: "Against the Clock"
+    description: "Complete your first time trial."
+    icon: "⏱️"
+    match: 'TIME TRIAL COMPLETE:'
+    case_insensitive: true
+
+  - name: "Dilapidated Dungeon Trial"
+    description: "Complete the Dilapidated Dungeon time trial."
+    icon: "🥉"
+    match: 'TIME TRIAL COMPLETE: ZONE_Dungeon \|'
+    case_insensitive: true
+
+  - name: "Castle Sansa Trial"
+    description: "Complete the Castle Sansa time trial."
+    icon: "🥉"
+    match: 'TIME TRIAL COMPLETE: ZONE_LowerCastle \|'
+    case_insensitive: true
+
+  - name: "Sansa Keep Trial"
+    description: "Complete the Sansa Keep time trial."
+    icon: "🥉"
+    match: 'TIME TRIAL COMPLETE: Zone_Upper \|'
+    case_insensitive: true
+
+  - name: "Empty Bailey Trial"
+    description: "Complete the Empty Bailey time trial."
+    icon: "🥉"
+    match: 'TIME TRIAL COMPLETE: ZONE_Exterior \|'
+    case_insensitive: true
+
+  - name: "The Underbelly Trial"
+    description: "Complete the Underbelly time trial."
+    icon: "🥉"
+    match: 'TIME TRIAL COMPLETE: Zone_Caves \|'
+    case_insensitive: true
+
+  - name: "Listless Library Trial"
+    description: "Complete the Listless Library time trial."
+    icon: "🥉"
+    match: 'TIME TRIAL COMPLETE: Zone_Library \|'
+    case_insensitive: true
+
+  - name: "Twilight Theatre Trial"
+    description: "Complete the Twilight Theatre time trial."
+    icon: "🥉"
+    match: 'TIME TRIAL COMPLETE: Zone_Theatre \|'
+    case_insensitive: true
+
+  - name: "Tower Remains Trial"
+    description: "Complete the Tower Remains time trial."
+    icon: "🥉"
+    match: 'TIME TRIAL COMPLETE: Zone_Tower \|'
+    case_insensitive: true
+
+  - name: "Time Lord"
+    description: "Complete every time trial."
+    icon: "⌛"
+    all:
+      - 'TIME TRIAL COMPLETE: ZONE_Dungeon \|'
+      - 'TIME TRIAL COMPLETE: ZONE_LowerCastle \|'
+      - 'TIME TRIAL COMPLETE: Zone_Upper \|'
+      - 'TIME TRIAL COMPLETE: ZONE_Exterior \|'
+      - 'TIME TRIAL COMPLETE: Zone_Caves \|'
+      - 'TIME TRIAL COMPLETE: Zone_Library \|'
+      - 'TIME TRIAL COMPLETE: Zone_Theatre \|'
+      - 'TIME TRIAL COMPLETE: Zone_Tower \|'
+    case_insensitive: true
+
+  - name: "Silver Streak"
+    description: "Finish a time trial with a silver medal."
+    icon: "🥈"
+    match: 'rank=silver'
+    case_insensitive: true
+
+  - name: "Golden Girl"
+    description: "Finish a time trial with a gold medal."
+    icon: "🥇"
+    match: 'rank=gold'
+    case_insensitive: true
+
+  # ======================================================================
+  # DEATHS
+  # ======================================================================
+
+  - name: "First Fall"
+    description: "Die for the first time."
+    icon: "💫"
+    match: 'PLAYER DIED'
+    case_insensitive: true
+
+  - name: "Masochist"
+    description: "Die 25 times."
+    icon: "☠️"
+    match: 'PLAYER DIED'
+    count: 25
+    case_insensitive: true
+
+  # ======================================================================
+  # 100% — story completion and the master collection
+  # ======================================================================
+
+  - name: "Castle Cleansed"
+    description: "Get every powerup, visit every area, defeat both bosses and free the soul."
+    icon: "🌠"
+    all:
+      - 'UPGRADE ACQUIRED: attack\b'
+      - 'UPGRADE ACQUIRED: slide\b'
+      - 'UPGRADE ACQUIRED: powerboost\b'
+      - 'UPGRADE ACQUIRED: airkick\b'
+      - 'UPGRADE ACQUIRED: slidejump\b'
+      - 'UPGRADE ACQUIRED: plunge\b'
+      - 'UPGRADE ACQUIRED: chargeattack\b'
+      - 'UPGRADE ACQUIRED: wallride\b'
+      - 'UPGRADE ACQUIRED: light\b'
+      - 'UPGRADE ACQUIRED: projectile\b'
+      - 'ZONE ENTERED: ZONE_Dungeon\b'
+      - 'ZONE ENTERED: ZONE_LowerCastle\b'
+      - 'ZONE ENTERED: Zone_Upper\b'
+      - 'ZONE ENTERED: Zone_Exterior\b'
+      - 'ZONE ENTERED: Zone_Caves\b'
+      - 'ZONE ENTERED: Zone_Library\b'
+      - 'ZONE ENTERED: Zone_Theatre\b'
+      - 'ZONE ENTERED: Zone_Tower\b'
+      - 'ZONE ENTERED: Zone_PrincessChambers\b'
+      - 'BOSS DEFEATED: ZONE_Dungeon\b'
+      - 'BOSS DEFEATED: Zone_PrincessChambers\b'
+      - 'ENDING REACHED'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Pseudoregalia Master"
+    description: "Complete everything: every powerup, area, boss, key, health piece, outfit and time trial."
+    icon: "👑"
+    all:
+      - 'UPGRADE ACQUIRED: attack\b'
+      - 'UPGRADE ACQUIRED: slide\b'
+      - 'UPGRADE ACQUIRED: powerboost\b'
+      - 'UPGRADE ACQUIRED: airkick\b'
+      - 'UPGRADE ACQUIRED: slidejump\b'
+      - 'UPGRADE ACQUIRED: plunge\b'
+      - 'UPGRADE ACQUIRED: chargeattack\b'
+      - 'UPGRADE ACQUIRED: wallride\b'
+      - 'UPGRADE ACQUIRED: light\b'
+      - 'UPGRADE ACQUIRED: projectile\b'
+      - 'UPGRADE ACQUIRED: map\b'
+      - 'ZONE ENTERED: ZONE_Dungeon\b'
+      - 'ZONE ENTERED: ZONE_LowerCastle\b'
+      - 'ZONE ENTERED: Zone_Upper\b'
+      - 'ZONE ENTERED: Zone_Exterior\b'
+      - 'ZONE ENTERED: Zone_Caves\b'
+      - 'ZONE ENTERED: Zone_Library\b'
+      - 'ZONE ENTERED: Zone_Theatre\b'
+      - 'ZONE ENTERED: Zone_Tower\b'
+      - 'ZONE ENTERED: Zone_PrincessChambers\b'
+      - 'BOSS DEFEATED: ZONE_Dungeon\b'
+      - 'BOSS DEFEATED: Zone_PrincessChambers\b'
+      - 'ENDING REACHED'
+      - 'KEY ACQUIRED: type=small \| n=7/7'
+      - 'KEY ACQUIRED: type=major \| n=5/5'
+      - 'HEALTH PIECE: n=16/16'
+      - 'ATTIRE UNLOCKED: outfitPro\b'
+      - 'ATTIRE UNLOCKED: outfitFaith\b'
+      - 'ATTIRE UNLOCKED: outfitShoujo\b'
+      - 'ATTIRE UNLOCKED: outfitSweater\b'
+      - 'ATTIRE UNLOCKED: outfitClassy\b'
+      - 'ATTIRE UNLOCKED: outfitKnight\b'
+      - 'ATTIRE UNLOCKED: outfitJam\b'
+      - 'ATTIRE UNLOCKED: outfitPast\b'
+      - 'TIME TRIAL COMPLETE: ZONE_Dungeon \|'
+      - 'TIME TRIAL COMPLETE: ZONE_LowerCastle \|'
+      - 'TIME TRIAL COMPLETE: Zone_Upper \|'
+      - 'TIME TRIAL COMPLETE: ZONE_Exterior \|'
+      - 'TIME TRIAL COMPLETE: Zone_Caves \|'
+      - 'TIME TRIAL COMPLETE: Zone_Library \|'
+      - 'TIME TRIAL COMPLETE: Zone_Theatre \|'
+      - 'TIME TRIAL COMPLETE: Zone_Tower \|'
+    case_insensitive: true

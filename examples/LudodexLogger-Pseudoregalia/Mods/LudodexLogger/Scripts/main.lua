@@ -258,11 +258,15 @@ end
 -- Pouvoirs : les bools obtained*? du pawn (13 au dump, dont certains sont
 -- peut-être des défauts de départ — la baseline du 1er tick les avale, seule
 -- une apparition est émise ; arbitrage sur fixture en Task 5).
+-- obtainedSlideJump? ajouté hors dump : wiki (Internal Name "SlideJump" pour
+-- Solar Wind) + mod Archipelago (~solar → SlideJump) ; prop absente au dump →
+-- si elle n'existe pas côté pawn, la sonde est simplement muette.
 local OBTAINED_UPGRADES = {
   "obtainedAttack?", "obtainedAirKick?", "obtainedChargeAttack?",
   "obtainedGuard?", "obtainedJump?", "obtainedLight?", "obtainedMap?",
   "obtainedPlunge?", "obtainedPowerBoost?", "obtainedProjectile?",
-  "obtainedSlide?", "obtainedSprint?", "obtainedWallRide?",
+  "obtainedSlide?", "obtainedSlideJump?", "obtainedSprint?",
+  "obtainedWallRide?",
 }
 
 local RANK_BY_TIER = { [1] = "bronze", [2] = "silver", [3] = "gold" }
