@@ -12,11 +12,14 @@
 #   GAME ACHIEVEMENT: <id> | <displayName> | progress=x/y | type=n | fn=mainGamemode_C:addAchievementPopup
 # Partial progress is logged as "GAME ACHIEVEMENT PROGRESS:" and never matches here. Mirror achievements match
 # the internal id (primary) or the English displayName (fallback); keep the game in English for the fallback.
+# A few rows share their title with another row (two "Object in the woods", two "Halloween begin"): those are
+# told apart by their internal id alone, and carry an explicit "id" (Ludodex ids must stay unique).
 # DAY REACHED / POINTS MILESTONE come from saveSlot.Day and saveSlot.Points (polled every 5 s).
 # Encounter achievements still match fragments of Blueprint class names and need TRACK_SPAWNS = true.
 #
 # All matching is case-insensitive. hidden: true marks spoiler-heavy achievements (secrets, endings, rituals).
-# Sources for the in-game list: the Voices of the Void wiki (Guides/Achievements).
+# Sources for the in-game list: the game's own list_achievements DataTable (88 rows — titles and descriptions
+# read from the cooked pak), cross-checked against the Voices of the Void wiki (Guides/Achievements).
 
 achievements:
 
@@ -28,20 +31,6 @@ achievements:
     description: "Load into the game for the first time."
     icon: "📡"
     match: 'WORLD LOADED:'
-    case_insensitive: true
-
-  - name: "Regular Operator"
-    description: "Load into the game 10 times."
-    icon: "🎧"
-    match: 'WORLD LOADED:'
-    count: 10
-    case_insensitive: true
-
-  - name: "Night Shift Veteran"
-    description: "Load into the game 50 times."
-    icon: "🌙"
-    match: 'WORLD LOADED:'
-    count: 50
     case_insensitive: true
 
   - name: "First Night"
@@ -223,16 +212,26 @@ achievements:
   # IN-GAME ACHIEVEMENTS (mirror) — needs the Blueprint hook found by the logger
   # ======================================================================
 
-  - name: "Complete the tutorial"
+  # "First launch" is missing from the wiki; the demo, pre-alpha and "Launch tutorial level"
+  # rows are version-gated: only older builds of the game still grant them.
+
+  - name: "First launch"
+    description: "In-game achievement: Launch the game for the first time."
+    icon: "🎮"
+    match: 'GAME ACHIEVEMENT: (Launch \||[^|]*\| [^|]*First[ _.,!?-]*launch)'
+    case_insensitive: true
+
+  - name: "Complete 09 the tutorial"
     description: "In-game achievement: Reach the end of Layer 1 of the tutorial."
     icon: "🎓"
-    match: 'GAME ACHIEVEMENT: (tutorial \||[^|]*\| [^|]*tutorial)'
+    match: 'GAME ACHIEVEMENT: (tutorial09 \||[^|]*\| [^|]*Complete[ _.,!?-]*09[ _.,!?-]*the[ _.,!?-]*tutorial)'
     case_insensitive: true
 
   - name: "Alpha player"
     description: "In-game achievement: Launch the alpha for the first time."
     icon: "🚀"
-    match: 'GAME ACHIEVEMENT: [^|]*\| [^|]*Alpha[ _.,!?-]*player'
+    # The lookbehind keeps "Pre-alpha player" (id prealpha) from unlocking this one.
+    match: 'GAME ACHIEVEMENT: (alphaStart \||[^|]*\| [^|]*(?<![a-z-])Alpha[ _.,!?-]*player)'
     case_insensitive: true
 
   - name: "Sandbox unlocked"
@@ -244,7 +243,8 @@ achievements:
   - name: "Alpha completed"
     description: "In-game achievement: Reach day 48 of story mode."
     icon: "🏁"
-    match: 'GAME ACHIEVEMENT: (alphaFinish \||[^|]*\| [^|]*Alpha[ _.,!?-]*completed)'
+    # The lookbehind keeps "Pre-alpha completed" (id prealphaFinish) from unlocking this one.
+    match: 'GAME ACHIEVEMENT: (alphaFinish \||[^|]*\| [^|]*(?<![a-z-])Alpha[ _.,!?-]*completed)'
     case_insensitive: true
 
   - name: "7 hours"
@@ -281,7 +281,7 @@ achievements:
   - name: "Sandbox ariral"
     description: "In-game achievement: Feed a Nuclear Argemia plush with 69 shrimp packs."
     icon: "☢️"
-    match: 'GAME ACHIEVEMENT: [^|]*\| [^|]*Sandbox[ _.,!?-]*ariral'
+    match: 'GAME ACHIEVEMENT: (secretArir \||[^|]*\| [^|]*Sandbox[ _.,!?-]*ariral)'
     case_insensitive: true
     hidden: true
 
@@ -335,6 +335,12 @@ achievements:
     match: 'GAME ACHIEVEMENT: (char \||[^|]*\| [^|]*Charcoal[ _.,!?-]*fish)'
     case_insensitive: true
 
+  - name: "Fisherman"
+    description: "In-game achievement: Catch all items."
+    icon: "🎣"
+    match: 'GAME ACHIEVEMENT: (fisherman \||[^|]*\| [^|]*Fisherman)'
+    case_insensitive: true
+
   - name: "Suboptimal"
     description: "In-game achievement: Cook a fish alive."
     icon: "🔥"
@@ -350,7 +356,14 @@ achievements:
   - name: "WOO!"
     description: "In-game achievement: Kick a drive into a slot."
     icon: "💾"
-    match: 'GAME ACHIEVEMENT: (driveKick \||[^|]*\| [^|]*WOO)'
+    # \b around WOO: "Object in the woods" would otherwise match it too.
+    match: 'GAME ACHIEVEMENT: (driveKick \||[^|]*\| [^|]*\bWOO\b)'
+    case_insensitive: true
+
+  - name: "Super dunk"
+    description: "In-game achievement: no in-game description."
+    icon: "🏀"
+    match: 'GAME ACHIEVEMENT: (dunk \||[^|]*\| [^|]*Super[ _.,!?-]*dunk)'
     case_insensitive: true
 
   - name: "Oven repair"
@@ -384,6 +397,12 @@ achievements:
     description: "In-game achievement: Stay awake for 7 in-game days in a row."
     icon: "😵"
     match: 'GAME ACHIEVEMENT: (insomniac \||[^|]*\| [^|]*Insomniac)'
+    case_insensitive: true
+
+  - name: "The wild one"
+    description: "In-game achievement: Survive outside of the base for an entire in-game day."
+    icon: "🌲"
+    match: 'GAME ACHIEVEMENT: (wildone \||[^|]*\| [^|]*The[ _.,!?-]*wild[ _.,!?-]*one)'
     case_insensitive: true
 
   - name: "The Snusk Lord"
@@ -421,7 +440,7 @@ achievements:
   - name: "Gift of the Red Crown"
     description: "In-game achievement: Summon the lamb."
     icon: "🩸"
-    match: 'GAME ACHIEVEMENT: [^|]*\| [^|]*Gift[ _.,!?-]*of[ _.,!?-]*the[ _.,!?-]*Red[ _.,!?-]*Crown'
+    match: 'GAME ACHIEVEMENT: (lambert \||[^|]*\| [^|]*Gift[ _.,!?-]*of[ _.,!?-]*the[ _.,!?-]*Red[ _.,!?-]*Crown)'
     case_insensitive: true
     hidden: true
 
@@ -474,10 +493,20 @@ achievements:
     match: 'GAME ACHIEVEMENT: (backflip \||[^|]*\| [^|]*ATV[ _.,!?-]*backflip)'
     case_insensitive: true
 
+  # The game has two achievements with this exact title; only their internal id tells them apart.
   - name: "Object in the woods"
+    id: object-in-the-woods-white
     description: "In-game achievement: Find the strange white object."
     icon: "🧺"
-    match: 'GAME ACHIEVEMENT: [^|]*\| [^|]*Object[ _.,!?-]*in[ _.,!?-]*the[ _.,!?-]*woods'
+    match: 'GAME ACHIEVEMENT: arirShip \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Object in the woods"
+    id: object-in-the-woods-brass
+    description: "In-game achievement: Find the strange brass object."
+    icon: "⚙️"
+    match: 'GAME ACHIEVEMENT: rozShip \|'
     case_insensitive: true
     hidden: true
 
@@ -498,19 +527,25 @@ achievements:
   - name: "Fossilhound"
     description: "In-game achievement: Die to a fossilhound."
     icon: "🦴"
-    match: 'GAME ACHIEVEMENT: [^|]*\| [^|]*Fossilhound'
+    match: 'GAME ACHIEVEMENT: (deadFossil \||[^|]*\| [^|]*Fossilhound)'
     case_insensitive: true
 
   - name: "Revenge"
     description: "In-game achievement: Destroy a fossilhound."
     icon: "⚔️"
-    match: 'GAME ACHIEVEMENT: [^|]*\| [^|]*Revenge'
+    match: 'GAME ACHIEVEMENT: (ripFossil \||[^|]*\| [^|]*Revenge)'
     case_insensitive: true
 
   - name: "Bright death"
     description: "In-game achievement: Die to a yellow wisp."
     icon: "💛"
     match: 'GAME ACHIEVEMENT: (kwispDeath \||[^|]*\| [^|]*Bright[ _.,!?-]*death)'
+    case_insensitive: true
+
+  - name: "Icarus"
+    description: "In-game achievement: Get 100 fall damage."
+    icon: "🪂"
+    match: 'GAME ACHIEVEMENT: (instaDeath \||[^|]*\| [^|]*Icarus)'
     case_insensitive: true
 
   - name: "Miracle"
@@ -621,22 +656,43 @@ achievements:
     case_insensitive: true
     hidden: true
 
+  - name: "Easter Begin"
+    description: "In-game achievement: Launch the game during the Easter event."
+    icon: "🐣"
+    match: 'GAME ACHIEVEMENT: (easterBegin \||[^|]*\| [^|]*Easter[ _.,!?-]*Begin)'
+    case_insensitive: true
+
   - name: "Easter Complete"
     description: "In-game achievement: Help the Easter Bunny collect all 12 eggs."
     icon: "🥚"
     match: 'GAME ACHIEVEMENT: (easterComplete \||[^|]*\| [^|]*Easter[ _.,!?-]*Complete)'
     case_insensitive: true
 
-  - name: "Halloween begins"
-    description: "In-game achievement: Launch the game during Halloween, or start a Halloween save."
+  # The game has two achievements with this exact title; only their internal id tells them apart.
+  - name: "Halloween begin"
+    id: halloween-begin-launch
+    description: "In-game achievement: Launch the game during the Halloween event."
     icon: "🎃"
-    match: 'GAME ACHIEVEMENT: [^|]*\| [^|]*halloween[ _-]*begin'
+    match: 'GAME ACHIEVEMENT: halloween13st \|'
+    case_insensitive: true
+
+  - name: "Halloween begin"
+    id: halloween-begin-participate
+    description: "In-game achievement: Participate in the Halloween event."
+    icon: "👻"
+    match: 'GAME ACHIEVEMENT: halloween_e \|'
     case_insensitive: true
 
   - name: "Halloween Part 1"
     description: "In-game achievement: Collect all 13 pumpkins."
     icon: "🕯️"
     match: 'GAME ACHIEVEMENT: (halloween13_pt1 \||[^|]*\| [^|]*Halloween[ _.,!?-]*Part[ _.,!?-]*1)'
+    case_insensitive: true
+
+  - name: "Halloween complete"
+    description: "In-game achievement: Collect all 13 pumpkins in the Halloween mode."
+    icon: "🌕"
+    match: 'GAME ACHIEVEMENT: (halloween13 \||[^|]*\| [^|]*Halloween[ _.,!?-]*complete)'
     case_insensitive: true
 
   - name: "THE HORSE"
@@ -662,187 +718,6 @@ achievements:
     description: "In-game achievement: Please Krampus with a jar of alcohol."
     icon: "🍶"
     match: 'GAME ACHIEVEMENT: (krampus \||[^|]*\| [^|]*Krampus)'
-    case_insensitive: true
-    hidden: true
-
-  # ----------------------------------------------------------------------
-  # IN-GAME ACHIEVEMENTS found in the game's own table (list_achievements) whose
-  # title is not identified yet. Matched on the internal id only; rename them once
-  # the real title shows up in ludodex.log (field after the id).
-  # ----------------------------------------------------------------------
-
-  - name: "In-game achievement: Launch"
-    description: "In-game achievement with internal id Launch (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: Launch \|'
-    case_insensitive: true
-    hidden: true
-
-  - name: "In-game achievement: demo030"
-    description: "In-game achievement with internal id demo030 (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: demo030 \|'
-    case_insensitive: true
-    hidden: true
-
-  - name: "In-game achievement: demoFinish030"
-    description: "In-game achievement with internal id demoFinish030 (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: demoFinish030 \|'
-    case_insensitive: true
-    hidden: true
-
-  - name: "In-game achievement: counter"
-    description: "In-game achievement with internal id counter (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: counter \|'
-    case_insensitive: true
-    hidden: true
-
-  - name: "In-game achievement: rozShip"
-    description: "In-game achievement with internal id rozShip (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: rozShip \|'
-    case_insensitive: true
-    hidden: true
-
-  - name: "In-game achievement: arirShip"
-    description: "In-game achievement with internal id arirShip (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: arirShip \|'
-    case_insensitive: true
-    hidden: true
-
-  - name: "In-game achievement: halloween_e"
-    description: "In-game achievement with internal id halloween_e (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: halloween_e \|'
-    case_insensitive: true
-    hidden: true
-
-  - name: "In-game achievement: halloween_c"
-    description: "In-game achievement with internal id halloween_c (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: halloween_c \|'
-    case_insensitive: true
-    hidden: true
-
-  - name: "In-game achievement: secretArir"
-    description: "In-game achievement with internal id secretArir (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: secretArir \|'
-    case_insensitive: true
-    hidden: true
-
-  - name: "In-game achievement: prealpha"
-    description: "In-game achievement with internal id prealpha (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: prealpha \|'
-    case_insensitive: true
-    hidden: true
-
-  - name: "In-game achievement: prealphaFinish"
-    description: "In-game achievement with internal id prealphaFinish (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: prealphaFinish \|'
-    case_insensitive: true
-    hidden: true
-
-  - name: "In-game achievement: instaDeath"
-    description: "In-game achievement with internal id instaDeath (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: instaDeath \|'
-    case_insensitive: true
-    hidden: true
-
-  - name: "In-game achievement: dunk"
-    description: "In-game achievement with internal id dunk (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: dunk \|'
-    case_insensitive: true
-    hidden: true
-
-  - name: "In-game achievement: lambert"
-    description: "In-game achievement with internal id lambert (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: lambert \|'
-    case_insensitive: true
-    hidden: true
-
-  - name: "In-game achievement: wildone"
-    description: "In-game achievement with internal id wildone (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: wildone \|'
-    case_insensitive: true
-    hidden: true
-
-  - name: "In-game achievement: deadFossil"
-    description: "In-game achievement with internal id deadFossil (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: deadFossil \|'
-    case_insensitive: true
-    hidden: true
-
-  - name: "In-game achievement: ripFossil"
-    description: "In-game achievement with internal id ripFossil (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: ripFossil \|'
-    case_insensitive: true
-    hidden: true
-
-  - name: "In-game achievement: fisherman"
-    description: "In-game achievement with internal id fisherman (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: fisherman \|'
-    case_insensitive: true
-    hidden: true
-
-  - name: "In-game achievement: halloween13"
-    description: "In-game achievement with internal id halloween13 (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: halloween13 \|'
-    case_insensitive: true
-    hidden: true
-
-  - name: "In-game achievement: halloween13st"
-    description: "In-game achievement with internal id halloween13st (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: halloween13st \|'
-    case_insensitive: true
-    hidden: true
-
-  - name: "In-game achievement: bronzedog"
-    description: "In-game achievement with internal id bronzedog (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: bronzedog \|'
-    case_insensitive: true
-    hidden: true
-
-  - name: "In-game achievement: 12piece"
-    description: "In-game achievement with internal id 12piece (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: 12piece \|'
-    case_insensitive: true
-    hidden: true
-
-  - name: "In-game achievement: tutorial09"
-    description: "In-game achievement with internal id tutorial09 (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: tutorial09 \|'
-    case_insensitive: true
-    hidden: true
-
-  - name: "In-game achievement: alphaStart"
-    description: "In-game achievement with internal id alphaStart (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: alphaStart \|'
-    case_insensitive: true
-    hidden: true
-
-  - name: "In-game achievement: easterBegin"
-    description: "In-game achievement with internal id easterBegin (title not identified yet)."
-    icon: "🎖️"
-    match: 'GAME ACHIEVEMENT: easterBegin \|'
     case_insensitive: true
     hidden: true
 
