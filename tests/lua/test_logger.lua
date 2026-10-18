@@ -57,27 +57,23 @@ eq("reset sauvegarde",
    D({ keys_major = 5, upgrades = { sun_greaves = true } },
      { keys_major = 0, upgrades = {} }), {})
 
--- 4. aspect 1 → 2 (total par type depuis ASPECT_TOTALS : clear_mind = 3)
-eq("aspect", D({ aspects = { clear_mind = 1 } }, { aspects = { clear_mind = 2 } }),
-   { "ASPECT ACQUIRED: clear_mind | n=2/3" })
-
--- 5. clés et fragments de vie (compteurs absolus, ordre : clés puis fragments)
+-- 4. clés et fragments de vie (compteurs absolus, ordre : clés puis fragments)
 eq("cles et fragments",
    D({ keys_major = 2, health_pieces = 6 }, { keys_major = 3, health_pieces = 7 }),
    { "KEY ACQUIRED: type=major | n=3/5", "HEALTH PIECE: n=7/16" })
 
--- 6. Time Trial : premier rang observé émet ; améliorer le rang n'émet rien
+-- 5. Time Trial : premier rang observé émet ; améliorer le rang n'émet rien
 eq("trial", D({}, { trials = { dungeon = "bronze" } }),
    { "TIME TRIAL COMPLETE: dungeon | rank=bronze" })
 eq("trial rang amélioré", D({ trials = { dungeon = "bronze" } },
                             { trials = { dungeon = "gold" } }), {})
 
--- 7. mort, fin de jeu, memento
+-- 6. mort, fin de jeu (arbitrage Task 3 : memento/aspects abandonnés — plus
+--    d'émetteur, plus d'assertion)
 eq("mort", D({ died = 1 }, { died = 2 }), { "PLAYER DIED: x1" })
 eq("fin", D({ ending = false }, { ending = true }), { "ENDING REACHED: x1" })
-eq("memento", D({ memento = false }, { memento = true }), { "MEMENTO FOUND: x1" })
 
--- 8. cible absente ce tick (objet non chargé) : jamais traitée comme vidée
+-- 7. cible absente ce tick (objet non chargé) : jamais traitée comme vidée
 eq("cible absente", D({ upgrades = { sun_greaves = true } }, {}), {})
 eq("cible absente (curr)", D({}, { upgrades = nil }), {})
 
@@ -87,9 +83,9 @@ eq("cible absente (curr)", D({}, { upgrades = nil }), {})
 -- que la ligne READY (puis l'éventuelle zone, jamais un instantané d'inventaire).
 local function etat_complet()
   return {
-    upgrades = { dream_breaker = true }, aspects = { clear_mind = 1 },
+    upgrades = { dream_breaker = true },
     attire = { basic_vest = true }, zone = "dungeon",
-    keys_major = 3, keys_small = 2, health_pieces = 4, memento = true,
+    keys_major = 3, keys_small = 2, health_pieces = 4,
     trials = { dungeon = "gold" }, bosses = {}, died = 2, ending = false,
   }
 end
@@ -115,7 +111,7 @@ end
 local log, lignes = nouveau_logger(function() return etat_complet() end)
 log.tick()
 eq("glue premier tick", lignes,
-   { "LUDODEX LOGGER READY: hooked=12 | missing=none", "ZONE ENTERED: dungeon" })
+   { "LUDODEX LOGGER READY: hooked=10 | missing=none", "ZONE ENTERED: dungeon" })
 
 -- 10. tick sans cibles (jeu pas encore chargé) : aucune ligne
 log, lignes = nouveau_logger(function() return nil end)
@@ -193,7 +189,7 @@ log, lignes = nouveau_logger(function()
 end)
 for _ = 1, 6 do log.tick() end
 eq("merge : dégradation sans ré-émision", lignes,
-   { "LUDODEX LOGGER READY: hooked=3 | missing=aspects,attire,keys_small,health_pieces,memento,trials,bosses,died,ending",
+   { "LUDODEX LOGGER READY: hooked=3 | missing=attire,keys_small,health_pieces,trials,bosses,died,ending",
      "ZONE ENTERED: dungeon", "UPGRADE ACQUIRED: sun_greaves" })
 
 if fails > 0 then

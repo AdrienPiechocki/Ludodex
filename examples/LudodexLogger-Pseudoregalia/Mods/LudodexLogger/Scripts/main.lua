@@ -6,21 +6,26 @@
 -- d'instantané d'état), compteurs en valeurs absolues, jamais de ligne non
 -- ASCII. Le glue UE4SS (plus bas) ne fait que collecter l'état et appeler
 -- diff_events(); tout le cœur est pur, testé par tests/lua/test_logger.lua.
+--
+-- Arbitrage des events (Task 3, règle d'acceptation du plan) :
+--   · Provisoires — source collectée et prouvée lisible au dump, bascule
+--     attendue au fil d'une vraie partie (jamais de farm de validation) :
+--     HEALTH PIECE (hpPieces), ATTIRE UNLOCKED (unlockedOutfits),
+--     TIME TRIAL COMPLETE (bestTime/medalTier), ENDING REACHED
+--     (completedSave?). Leur format reste à confirmer sur la première
+--     occurrence réelle.
+--   · Abandonnés — aucune source lisible (re-scope acté) : ASPECT ACQUIRED,
+--     MEMENTO FOUND — émetteurs retirés, READY ne les compte plus.
+--     BOSS DEFEATED était le troisième « missing » : hook production validé
+--     le 2026-10-18 (encounter activate → deactivate = victoire exclusive).
 
 -- Totaux utilisés dans les lignes « n=<count>/<total> » (wiki du jeu).
-local ASPECT_TOTALS = { clear_mind = 3, good_graces = 2, empathy = 2 }  -- défaut : 1
 local KEY_TOTALS = { major = 5, small = 7 }
 local HEALTH_PIECE_TOTAL = 16
-
-local function aspect_total(id)
-  return ASPECT_TOTALS[id] or 1
-end
 
 -- ---------- helpers de formatage (une fonction par type de ligne) ----------
 
 local function fmt_upgrade(id)       return "UPGRADE ACQUIRED: " .. id end
-local function fmt_aspect(id, n)     return ("ASPECT ACQUIRED: %s | n=%d/%d")
-                                               :format(id, n, aspect_total(id)) end
 local function fmt_attire(id)        return "ATTIRE UNLOCKED: " .. id end
 local function fmt_zone(id)          return "ZONE ENTERED: " .. id end
 local function fmt_key(kind, n)      return ("KEY ACQUIRED: type=%s | n=%d/%d")
@@ -44,8 +49,8 @@ end
 --
 -- Forme d'état (champs tous optionnels ; un champ nil vise « cible absente ce
 -- tick » et n'émet JAMAIS, surtout pas « inventaire vidé ») :
---   { upgrades={id=true}, aspects={id=count}, attire={id=true}, zone="id",
---     keys_major=0, keys_small=0, health_pieces=0, memento=false,
+--   { upgrades={id=true}, attire={id=true}, zone="id",
+--     keys_major=0, keys_small=0, health_pieces=0,
 --     trials={zone="bronze|silver|gold|done"}, bosses={id=true}, died=0,
 --     ending=false }
 -- Règles : émission sur augmentation uniquement (les baisses sont un reset de
@@ -68,15 +73,6 @@ local function diff_events(prev, curr)
   diff_set("upgrades", fmt_upgrade)
   diff_set("attire", fmt_attire)
 
-  -- aspects : compteur par type, augmentation seulement
-  if curr.aspects ~= nil then
-    local seen = prev.aspects or {}
-    for _, id in ipairs(sorted_keys(curr.aspects)) do
-      local n, before = curr.aspects[id], seen[id] or 0
-      if n > before then add(fmt_aspect(id, n)) end
-    end
-  end
-
   -- zone : tout changement est un évènement (y compris la première entrée)
   if curr.zone ~= nil and curr.zone ~= prev.zone then
     add(fmt_zone(curr.zone))
@@ -92,10 +88,6 @@ local function diff_events(prev, curr)
   diff_counter("keys_small", function(n) return fmt_key("small", n) end)
   diff_counter("health_pieces", fmt_health)
   diff_counter("died", function() return "PLAYER DIED: x1" end)
-
-  if curr.memento ~= nil and curr.memento and not prev.memento then
-    add("MEMENTO FOUND: x1")
-  end
 
   -- Time Trials : premier rang observé gagne
   if curr.trials ~= nil then
@@ -122,8 +114,8 @@ local M = { diff_events = diff_events }
 --
 -- deps.collect() -> état courant ou nil (aucune cible lisible ce tick) ;
 -- deps.append(line) écrit une ligne. Champs du schéma d'état, pour le READY.
-local STATE_FIELDS = { "upgrades", "aspects", "attire", "zone", "keys_major",
-                       "keys_small", "health_pieces", "memento", "trials",
+local STATE_FIELDS = { "upgrades", "attire", "zone", "keys_major",
+                       "keys_small", "health_pieces", "trials",
                        "bosses", "died", "ending" }
 
 local function ready_line(curr)
@@ -162,12 +154,6 @@ function M.new_logger(deps)
         out[f] = u
       end
     end
-    if out.aspects ~= nil then
-      local m = {}
-      for k, n in pairs(old.aspects or {}) do m[k] = n end
-      for k, n in pairs(out.aspects) do m[k] = math.max(m[k] or 0, n) end
-      out.aspects = m
-    end
     if out.trials ~= nil then
       local t = {}
       for k, r in pairs(out.trials) do t[k] = r end
@@ -179,7 +165,7 @@ function M.new_logger(deps)
     for _, f in ipairs({ "keys_major", "keys_small", "health_pieces", "died" }) do
       if out[f] ~= nil then out[f] = math.max(old[f] or 0, out[f]) end
     end
-    for _, f in ipairs({ "ending", "memento" }) do
+    for _, f in ipairs({ "ending" }) do
       if out[f] ~= nil then out[f] = (old[f] == true) or out[f] end
     end
     return out
@@ -702,8 +688,8 @@ local function dump_props(obj, label)
 end
 
 -- Mots-clés de l'état de jeu qu'on cherche (classes encore inconnues).
-local DUMP_KEYWORDS = { "save", "zone", "upgrade", "trial", "memento",
-                        "encounter", "attire", "aspect", "boss", "ending", "mv_" }
+local DUMP_KEYWORDS = { "save", "zone", "upgrade", "trial",
+                        "encounter", "attire", "boss", "ending", "mv_" }
 
 local function dump_class_matches(full)
   local low = full:lower()

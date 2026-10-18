@@ -57,6 +57,9 @@ cover/
 
 # Django stuff:
 *.log
+# ... mais les fixtures de test du logger sont de vrais extraits de log à
+# versionner (tests/fixtures/ consommé par la suite pytest)
+!tests/fixtures/*.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
