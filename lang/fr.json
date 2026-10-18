@@ -449,6 +449,5 @@
   "Open {name}": "Ouvrir {name}",
   "Couldn't open the launcher": "Impossible d'ouvrir le lanceur",
   "! couldn't open the launcher: {e}": "! impossible d'ouvrir le lanceur : {e}",
-  "! no Lutris installer for this game": "! aucun installateur Lutris pour ce jeu sur lutris.net",
-  "In-game overlay": "Overlay in-game"
+  "! no Lutris installer for this game": "! aucun installateur Lutris pour ce jeu sur lutris.net"
 }

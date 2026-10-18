@@ -5,9 +5,9 @@ import json, os, pathlib, re, shutil, sqlite3, subprocess, threading, time
 import urllib.error, urllib.request
 from urllib.parse import quote
 
-from i18n import get_lang, tr
-from . import overlay, platform
-from .db import LUTRIS_DBS, ITCH_DBS, _ro, get_setting
+from i18n import tr
+from . import platform
+from .db import LUTRIS_DBS, ITCH_DBS, _ro
 from .platform import uri_command, split_command, join_command
 from .steam import steam_appid_of, champ_acf
 
@@ -154,8 +154,6 @@ def close_open_sessions(con, now=None):
         if minutes >= PROGRESS_MIN_MINUTES:
             con.execute("UPDATE games SET status='en_cours' "
                         "WHERE id=? AND status IN ('backlog','pause')", (r["game_id"],))
-    if rows:
-        overlay.arreter_overlay()  # l'overlay vit le temps de la session : il meurt avec elle
     con.commit()
     return len(rows)
 
@@ -170,12 +168,6 @@ def close_session(con, sid, now=None):
     row = con.execute("SELECT game_id, started FROM sessions WHERE id=? AND ended=0", (sid,)).fetchone()
     if not row:
         return False
-    # Tué ICI, au point de passage unique de la fin de session : le bouton
-    # « Terminer la session » contournait le wrapper `on_exit` et laissait
-    # l'overlay vivre (bug du 2026-10-18). Un kill n'a lieu que lorsque NOUS
-    # clôturons : une session déjà close ne doit pas tuer l'overlay du jeu
-    # en cours (lancement suivant, fermeture d'app).
-    overlay.arreter_overlay()
     minutes = max(0, (now - row["started"]) // 60)
     con.execute("UPDATE sessions SET ended=?, minutes=? WHERE id=?", (now, minutes, sid))
     if minutes >= PROGRESS_MIN_MINUTES:
@@ -388,20 +380,6 @@ def launch(con, g, on_exit=None):
         env, argv = split_env(cmd)
         if not argv:
             raise ValueError(tr("empty command"))
-        # Un argv contenant "://" est un PASSE-PLAT (xdg-open) : le jeu sera
-        # lancé par son client (itch, Steam, Heroic) — le shim de libération
-        # de souris n'a rien à y faire, et injecté dans le client il empêche
-        # même son démarrage (le client itch Electron ne démarre plus avec un
-        # LD_PRELOAD étranger ; test A/B du 2026-10-18 : sans hook le client
-        # s'ouvre en 2 s, avec hook rien ne se passe).
-        uri = any("://" in a for a in argv)
-        # Overlay actif : le jeu reçoit le hook de libération de souris
-        # (LD_PRELOAD, façon Steam) — préparé avant le spawn du jeu.
-        if (on_exit is not None and not uri
-                and get_setting(con, "overlay", "1") == "1"):
-            shim = overlay.preparer_hook(env=env)
-            if shim is not None:
-                argv = overlay.command_avec_hook(argv, shim)
         proc = subprocess.Popen(platform.host_argv(argv, env), cwd=cwd,
                                 env={**os.environ, **env} if env else None,
                                 start_new_session=True)
@@ -414,19 +392,11 @@ def launch(con, g, on_exit=None):
     cur = con.execute("INSERT OR IGNORE INTO sessions (game_id, started, ended, minutes) VALUES (?, ?, 0, 0)",
                       (g["id"], now))
     con.commit()
-    # Sans suivi de session (CLI : `on_exit=None`), l'overlay serait tué par
-    # atexit à la sortie du processus — il ne démarre pas du tout. Son arrêt
-    # est désormais porté par `close_session`/`close_open_sessions` (le point
-    # de passage unique de toute fin de session), pas par un wrapper ici.
-    # `langue` : celle de Ludodex (réglage utilisateur, sinon système) —
-    # sans --lang, l'overlay ne verrait que les variables POSIX du processus.
-    if on_exit is not None and get_setting(con, "overlay", "1") == "1":
-        overlay.lancer_overlay(str(g["name"]), langue=get_lang())
     if on_exit is not None and cur.rowcount:  # INSERT ignoré = rien d'ouvert à suivre
         # Un argv contenant "://" est remis à xdg-open : le processus tenu n'est que
         # le passe-plat, qui rend la main en ms. Pour un jeu connu (Heroic), on suit
         # alors le JEU lui-même (motifs /proc) — c'est cette clôture qui manquait.
-        # (`uri` est déjà calculé plus haut, avant l'injection du hook.)
+        uri = any("://" in a for a in argv)
         try:
             motifs = motifs_jeu(g) if uri else []
         except (OSError, ValueError):   # fichiers Heroic illisibles : l'ancien repli vaut mieux qu'un plantage

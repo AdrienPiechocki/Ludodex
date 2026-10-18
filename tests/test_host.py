@@ -56,14 +56,13 @@ def _con_jeu():
 
 def _popen_capture(monkeypatch, cap):
     def fake(argv, **kw):
-        cap.setdefault("argv", argv)  # 1er Popen = le jeu (le 2e = l'overlay de session)
+        cap["argv"] = argv
         return object()
     monkeypatch.setattr(L.subprocess, "Popen", fake)
 
 
 def test_launch_dans_flatpak_passe_par_l_hote(monkeypatch):
     monkeypatch.setattr(platform, "in_flatpak", lambda env=None: True)
-    monkeypatch.setattr(L.overlay, "preparer_hook", lambda env=None: None)  # shim absent : argv intact
     cap = {}
     _popen_capture(monkeypatch, cap)
     con = _con_jeu()
@@ -74,73 +73,12 @@ def test_launch_dans_flatpak_passe_par_l_hote(monkeypatch):
 
 
 def test_launch_hors_flatpak_sans_changement(monkeypatch):
-    monkeypatch.setattr(L.overlay, "preparer_hook", lambda env=None: None)  # shim absent : argv intact
     cap = {}
     _popen_capture(monkeypatch, cap)
     con = _con_jeu()
     g = dict(con.execute("SELECT * FROM games").fetchone())
     assert L.launch(con, g) is True
     assert cap["argv"] == ["xdg-open", "https://example.org"]
-
-
-def test_launch_sans_suivi_de_session_ne_lance_pas_l_overlay(monkeypatch):
-    """CLI (`launch` sans `on_exit`) : sans suivi de session, l'overlay serait
-    tué par atexit à la sortie du processus quelques secondes plus tard —
-    il ne démarre pas (relecture : le pire serait un dialogue KDE qui
-    apparaît puis meurt dessous)."""
-    appels = []
-
-    def fake(argv, **kw):
-        appels.append(list(argv))
-        return object()
-
-    monkeypatch.setattr(L.subprocess, "Popen", fake)
-    con = _con_jeu()
-    g = dict(con.execute("SELECT * FROM games").fetchone())
-    assert L.launch(con, g) is True
-    assert appels == [["xdg-open", "https://example.org"]]  # seul le jeu
-
-
-def test_launch_injecte_le_hook_souris(monkeypatch):
-    """Lancement DIRECT : le jeu reçoit LD_PRELOAD=libludodex-hook.so — sans
-    lui, la capture souris des FPS ne serait jamais relâchée (spike du
-    2026-10-17).
-
-    Un passe-plat `://` (xdg-open) ne reçoit JAMAIS le shim : il tuerait le
-    lancement du client (itch/Steam — preuve A/B du 2026-10-18), le jeu étant
-    enchaîné par le client et non par Ludodex. Voir test_launch.py."""
-    monkeypatch.setattr(L.overlay, "preparer_hook",
-                        lambda env=None: "/x/libludodex-hook.so")
-    appels = []
-
-    def fake(argv, **kw):
-        appels.append(list(argv))
-        return object()
-
-    monkeypatch.setattr(L.subprocess, "Popen", fake)
-    con = _con_jeu()
-    con.execute("UPDATE games SET ext_id='/opt/jeu/bin/jeu --plein-ecran' "
-                "WHERE id=(SELECT MIN(id) FROM games)")  # binaire direct
-    con.commit()
-    g = dict(con.execute("SELECT * FROM games").fetchone())
-    assert L.launch(con, g, on_exit=lambda _sid: None) is True  # session = overlay
-    assert appels[0][:2] == ["env", "LD_PRELOAD=/x/libludodex-hook.so"]
-    assert appels[0][2] == "/opt/jeu/bin/jeu"  # le binaire suit, enveloppé
-    assert "://" not in " ".join(appels[0])  # jamais un passe-plat URI
-
-
-def test_launch_passe_plat_uri_ne_recoit_pas_le_hook(monkeypatch):
-    """Passe-plat `://` (xdg-open) : le shim l'empêcherait même de démarrer
-    le client (itch/Steam) — preuve A/B du 2026-10-18. Le cas itch réel
-    (`launch_command`) est verrouillé dans test_launch.py."""
-    monkeypatch.setattr(L.overlay, "preparer_hook",
-                        lambda env=None: "/x/libludodex-hook.so")
-    cap = {}
-    _popen_capture(monkeypatch, cap)
-    con = _con_jeu()  # fixture = xdg-open https://example.org (URI)
-    g = dict(con.execute("SELECT * FROM games").fetchone())
-    assert L.launch(con, g, on_exit=lambda _sid: None) is True
-    assert cap["argv"] == ["xdg-open", "https://example.org"]  # intact, sans env
 
 
 def test_detached_dans_flatpak_passe_par_l_hote(monkeypatch):

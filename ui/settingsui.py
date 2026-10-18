@@ -59,17 +59,6 @@ class SettingsMixin:
         lang_group.add(lang_row)
         page.add(lang_group)
 
-        # Overlay in-game : addon flatpak séparé, démarré à chaque lancement
-        # de jeu (absent → le jeu se lance simplement, sans alerte). À OFF,
-        # aucun LD_PRELOAD n'est injecté dans le jeu — c'est la parade aux
-        # anti-cheats. L'overlay libère toujours la souris en s'ouvrant.
-        ov_group = Adw.PreferencesGroup()
-        ov_row = Adw.SwitchRow(title=tr("In-game overlay"),
-                               active=P.get_setting(self.con, "overlay", "1") == "1")
-        ov_row.connect("notify::active", self._on_overlay_toggle)
-        ov_group.add(ov_row)
-        page.add(ov_group)
-
         imp_group = Adw.PreferencesGroup(
             title=tr("Platforms to import"),
             description=tr("Uncheck a platform to hide its games everywhere; nothing is deleted."))
@@ -283,15 +272,6 @@ class SettingsMixin:
             return
         P.save_lang(self.con, code)
         GLib.idle_add(self._rebuild)
-
-    def _on_overlay_toggle(self, row, _ps):
-        """Réglage « Overlay in-game » : prochains lancements seulement."""
-        # `get_active()` et non l'attribut `active` : la propriété n'est pas
-        # exposée en introspection Python sur Adw.SwitchRow — lire `row.active`
-        # lève une AttributeError avalée par PyGObject et le réglage n'était
-        # JAMAIS écrit (bug du 2026-10-18 : les interrupteurs revenaient au
-        # défaut ; mécanisme verrouillé par tests/test_settingsui.py).
-        P.set_setting(self.con, "overlay", "1" if row.get_active() else "0")
 
     def _on_module(self, sw, _p, name):
         P.set_setting(self.con, f"module_{name}", "1" if sw.get_active() else "0")
