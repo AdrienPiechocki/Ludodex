@@ -1,0 +1,1041 @@
+# Voices of the Void achievements for Ludodex ("Achievements" module).
+#
+# Meant for the "Ludodex Logger" UE4SS mod (LudodexLogger/Scripts/main.lua). Log lines are written to UE4SS.log
+# and appended to %LOCALAPPDATA%\VotV\ludodex.log (under Proton: inside the game's Wine prefix). Line formats:
+#   WORLD LOADED: x1                          DAY REACHED: N                       POINTS MILESTONE: N
+#   GAME ACHIEVEMENT: <args> | fn=<Class>:<function>      GAME ADVANCEMENT: <args> | fn=<Class>:<function>
+#   ACTOR SPAWNED: <BlueprintClass_C>         LUDODEX LOGGER LOADED / READY: hooks=N | functions=N
+#
+# Calibrated against the game's own list_achievements DataTable (88 internal ids) and the real
+# addAchievementPopup call (Data struct: name, displayName, desc, progress, progressTarget, award).
+# Achievement lines look like:
+#   GAME ACHIEVEMENT: <id> | <displayName> | progress=x/y | type=n | fn=mainGamemode_C:addAchievementPopup
+# Partial progress is logged as "GAME ACHIEVEMENT PROGRESS:" and never matches here. Mirror achievements match
+# the internal id (primary) or the English displayName (fallback); keep the game in English for the fallback.
+# DAY REACHED / POINTS MILESTONE come from saveSlot.Day and saveSlot.Points (polled every 5 s).
+# Encounter achievements still match fragments of Blueprint class names and need TRACK_SPAWNS = true.
+#
+# All matching is case-insensitive. hidden: true marks spoiler-heavy achievements (secrets, endings, rituals).
+# Sources for the in-game list: the Voices of the Void wiki (Guides/Achievements).
+
+achievements:
+
+  # ======================================================================
+  # PROGRESS — sessions, days, points
+  # ======================================================================
+
+  - name: "Signal Received"
+    description: "Load into the game for the first time."
+    icon: "📡"
+    match: 'WORLD LOADED:'
+    case_insensitive: true
+
+  - name: "Regular Operator"
+    description: "Load into the game 10 times."
+    icon: "🎧"
+    match: 'WORLD LOADED:'
+    count: 10
+    case_insensitive: true
+
+  - name: "Night Shift Veteran"
+    description: "Load into the game 50 times."
+    icon: "🌙"
+    match: 'WORLD LOADED:'
+    count: 50
+    case_insensitive: true
+
+  - name: "First Night"
+    description: "Reach day 2 on a save."
+    icon: "🌃"
+    match: 'DAY REACHED: ([1-9]\d{1,}|[3-9]|2)\b$'
+    case_insensitive: true
+
+  - name: "Settling In"
+    description: "Reach day 3 on a save."
+    icon: "🛖"
+    match: 'DAY REACHED: ([1-9]\d{1,}|[4-9]|3)\b$'
+    case_insensitive: true
+
+  - name: "A Full Week"
+    description: "Reach day 7 on a save."
+    icon: "📅"
+    match: 'DAY REACHED: ([1-9]\d{1,}|[8-9]|7)\b$'
+    case_insensitive: true
+
+  - name: "Fortnight at the Observatory"
+    description: "Reach day 14 on a save."
+    icon: "🗓️"
+    match: 'DAY REACHED: ([1-9]\d{2,}|[2-9]\d|1[5-9]|14)\b$'
+    case_insensitive: true
+
+  - name: "Three Weeks of Static"
+    description: "Reach day 21 on a save."
+    icon: "📻"
+    match: 'DAY REACHED: ([1-9]\d{2,}|[3-9]\d|2[2-9]|21)\b$'
+    case_insensitive: true
+
+  - name: "A Month of Signals"
+    description: "Reach day 31 on a save."
+    icon: "🌕"
+    match: 'DAY REACHED: ([1-9]\d{2,}|[4-9]\d|3[2-9]|31)\b$'
+    case_insensitive: true
+
+  - name: "Alpha Survivor"
+    description: "Reach day 48 on a save."
+    icon: "🏁"
+    match: 'DAY REACHED: ([1-9]\d{2,}|[5-9]\d|49|48)\b$'
+    case_insensitive: true
+
+  - name: "Two Months Deep"
+    description: "Reach day 60 on a save."
+    icon: "⏳"
+    match: 'DAY REACHED: ([1-9]\d{2,}|[7-9]\d|6[1-9]|60)\b$'
+    case_insensitive: true
+
+  - name: "Centennial Operator"
+    description: "Reach day 100 on a save."
+    icon: "💯"
+    match: 'DAY REACHED: ([1-9]\d{3,}|[2-9]\d{2}|1[1-9]\d|10[1-9]|100)\b$'
+    case_insensitive: true
+
+  - name: "Long Haul"
+    description: "Reach day 150 on a save."
+    icon: "🛰️"
+    match: 'DAY REACHED: ([1-9]\d{3,}|[2-9]\d{2}|1[6-9]\d|15[1-9]|150)\b$'
+    case_insensitive: true
+
+  - name: "Two Hundred Days"
+    description: "Reach day 200 on a save."
+    icon: "♾️"
+    match: 'DAY REACHED: ([1-9]\d{3,}|[3-9]\d{2}|2[1-9]\d|20[1-9]|200)\b$'
+    case_insensitive: true
+
+  - name: "A Year in the Void"
+    description: "Reach day 365 on a save."
+    icon: "🌌"
+    match: 'DAY REACHED: ([1-9]\d{3,}|[4-9]\d{2}|3[7-9]\d|36[6-9]|365)\b$'
+    case_insensitive: true
+
+  - name: "Petty Cash"
+    description: "Hold 100 points at once."
+    icon: "🪙"
+    match: 'POINTS MILESTONE: 100$'
+    case_insensitive: true
+
+  - name: "Pocket Money"
+    description: "Hold 500 points at once."
+    icon: "💵"
+    match: 'POINTS MILESTONE: 500$'
+    case_insensitive: true
+
+  - name: "Four Digits"
+    description: "Hold 1000 points at once."
+    icon: "💰"
+    match: 'POINTS MILESTONE: 1000$'
+    case_insensitive: true
+
+  - name: "Comfortable"
+    description: "Hold 5000 points at once."
+    icon: "🏦"
+    match: 'POINTS MILESTONE: 5000$'
+    case_insensitive: true
+
+  - name: "Five Figures"
+    description: "Hold 10000 points at once."
+    icon: "💎"
+    match: 'POINTS MILESTONE: 10000$'
+    case_insensitive: true
+
+  - name: "Signal Tycoon"
+    description: "Hold 50000 points at once."
+    icon: "🏆"
+    match: 'POINTS MILESTONE: 50000$'
+    case_insensitive: true
+
+  - name: "Void Millionaire"
+    description: "Hold 100000 points at once."
+    icon: "👑"
+    match: 'POINTS MILESTONE: 100000$'
+    case_insensitive: true
+
+  - name: "Badge Collector"
+    description: "Unlock 1 in-game achievement."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT:'
+    case_insensitive: true
+
+  - name: "Getting the Hang of It"
+    description: "Unlock 5 in-game achievements."
+    icon: "🏅"
+    match: 'GAME ACHIEVEMENT:'
+    count: 5
+    case_insensitive: true
+
+  - name: "Overachiever"
+    description: "Unlock 10 in-game achievements."
+    icon: "🥇"
+    match: 'GAME ACHIEVEMENT:'
+    count: 10
+    case_insensitive: true
+
+  - name: "Completionist in Training"
+    description: "Unlock 25 in-game achievements."
+    icon: "📜"
+    match: 'GAME ACHIEVEMENT:'
+    count: 25
+    case_insensitive: true
+
+  - name: "Trophy Cabinet"
+    description: "Unlock 40 in-game achievements."
+    icon: "🏆"
+    match: 'GAME ACHIEVEMENT:'
+    count: 40
+    case_insensitive: true
+
+  - name: "Nearly Everything"
+    description: "Unlock 60 in-game achievements."
+    icon: "🌟"
+    match: 'GAME ACHIEVEMENT:'
+    count: 60
+    case_insensitive: true
+
+  - name: "Per-Save Progress"
+    description: "Unlock 1 in-game advancement."
+    icon: "📋"
+    match: 'GAME ADVANCEMENT:'
+    case_insensitive: true
+
+  - name: "Advancing"
+    description: "Unlock 5 in-game advancements."
+    icon: "📈"
+    match: 'GAME ADVANCEMENT:'
+    count: 5
+    case_insensitive: true
+
+  - name: "All Advancements"
+    description: "Unlock 13 in-game advancements."
+    icon: "🧾"
+    match: 'GAME ADVANCEMENT:'
+    count: 13
+    case_insensitive: true
+
+  # ======================================================================
+  # IN-GAME ACHIEVEMENTS (mirror) — needs the Blueprint hook found by the logger
+  # ======================================================================
+
+  - name: "Complete the tutorial"
+    description: "In-game achievement: Reach the end of Layer 1 of the tutorial."
+    icon: "🎓"
+    match: 'GAME ACHIEVEMENT: (tutorial \||[^|]*\| [^|]*tutorial)'
+    case_insensitive: true
+
+  - name: "Alpha player"
+    description: "In-game achievement: Launch the alpha for the first time."
+    icon: "🚀"
+    match: 'GAME ACHIEVEMENT: [^|]*\| [^|]*Alpha[ _.,!?-]*player'
+    case_insensitive: true
+
+  - name: "Sandbox unlocked"
+    description: "In-game achievement: Reach day 31 of story mode."
+    icon: "🏖️"
+    match: 'GAME ACHIEVEMENT: (sandbox \||[^|]*\| [^|]*Sandbox[ _.,!?-]*unlocked)'
+    case_insensitive: true
+
+  - name: "Alpha completed"
+    description: "In-game achievement: Reach day 48 of story mode."
+    icon: "🏁"
+    match: 'GAME ACHIEVEMENT: (alphaFinish \||[^|]*\| [^|]*Alpha[ _.,!?-]*completed)'
+    case_insensitive: true
+
+  - name: "7 hours"
+    description: "In-game achievement: Find the Jolly plushie in the tutorial."
+    icon: "🧸"
+    match: 'GAME ACHIEVEMENT: (jolly \||[^|]*\| [^|]*7[ _-]*hours?)'
+    case_insensitive: true
+
+  - name: "Upgrade"
+    description: "In-game achievement: Assemble your first Kerfur Omega."
+    icon: "🤖"
+    match: 'GAME ACHIEVEMENT: (kerfurO \||[^|]*\| [^|]*Upgrade)'
+    case_insensitive: true
+
+  - name: "Maid"
+    description: "In-game achievement: Find the Kerfur-Omega maid outfit."
+    icon: "👗"
+    match: 'GAME ACHIEVEMENT: (maid \||[^|]*\| [^|]*Maid)'
+    case_insensitive: true
+
+  - name: "Yoink"
+    description: "In-game achievement: Get the Rozital capsule thrown by Igetis."
+    icon: "🪂"
+    match: 'GAME ACHIEVEMENT: (capsule \||[^|]*\| [^|]*Yoink)'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Feed argemia"
+    description: "In-game achievement: Feed Argemia with 100 shrimp packs."
+    icon: "🦐"
+    match: 'GAME ACHIEVEMENT: (argemFeed \||[^|]*\| [^|]*Feed[ _.,!?-]*argemia)'
+    case_insensitive: true
+
+  - name: "Sandbox ariral"
+    description: "In-game achievement: Feed a Nuclear Argemia plush with 69 shrimp packs."
+    icon: "☢️"
+    match: 'GAME ACHIEVEMENT: [^|]*\| [^|]*Sandbox[ _.,!?-]*ariral'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Maxwell"
+    description: "In-game achievement: Find Maxwell."
+    icon: "🐈"
+    match: 'GAME ACHIEVEMENT: (maxwell \||[^|]*\| [^|]*Maxwell)'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Argemwell"
+    description: "In-game achievement: Find Argemwell."
+    icon: "🐈‍⬛"
+    match: 'GAME ACHIEVEMENT: (argemwell \||[^|]*\| [^|]*Argemwell)'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Super Gnarpy"
+    description: "In-game achievement: Kick Gnarpy 1000 times."
+    icon: "🦶"
+    match: 'GAME ACHIEVEMENT: (gnarpy \||[^|]*\| [^|]*Super[ _.,!?-]*Gnarpy)'
+    case_insensitive: true
+
+  - name: "Super burger finder"
+    description: "In-game achievement: Find all 21 chicken burgers."
+    icon: "🍔"
+    match: 'GAME ACHIEVEMENT: (burgerFinder \||[^|]*\| [^|]*Super[ _.,!?-]*burger[ _.,!?-]*finder)'
+    case_insensitive: true
+
+  - name: "Jackpot"
+    description: "In-game achievement: Open a fully loaded MRE."
+    icon: "🎰"
+    match: 'GAME ACHIEVEMENT: (jackpot \||[^|]*\| [^|]*Jackpot)'
+    case_insensitive: true
+
+  - name: "Ripped off"
+    description: "In-game achievement: Open an MRE with exactly one cracker."
+    icon: "🍘"
+    match: 'GAME ACHIEVEMENT: (rippedOff \||[^|]*\| [^|]*Ripped[ _.,!?-]*off)'
+    case_insensitive: true
+
+  - name: "Robbed"
+    description: "In-game achievement: Open an empty MRE."
+    icon: "🫙"
+    match: 'GAME ACHIEVEMENT: (robbed \||[^|]*\| [^|]*Robbed)'
+    case_insensitive: true
+
+  - name: "Charcoal fish"
+    description: "In-game achievement: Catch the Charborg fish."
+    icon: "🐟"
+    match: 'GAME ACHIEVEMENT: (char \||[^|]*\| [^|]*Charcoal[ _.,!?-]*fish)'
+    case_insensitive: true
+
+  - name: "Suboptimal"
+    description: "In-game achievement: Cook a fish alive."
+    icon: "🔥"
+    match: 'GAME ACHIEVEMENT: (cooklivefish \||[^|]*\| [^|]*Suboptimal)'
+    case_insensitive: true
+
+  - name: "Treasure hunter"
+    description: "In-game achievement: Dig up every treasure."
+    icon: "⛏️"
+    match: 'GAME ACHIEVEMENT: (treasureHunter \||[^|]*\| [^|]*Treasure[ _.,!?-]*hunter)'
+    case_insensitive: true
+
+  - name: "WOO!"
+    description: "In-game achievement: Kick a drive into a slot."
+    icon: "💾"
+    match: 'GAME ACHIEVEMENT: (driveKick \||[^|]*\| [^|]*WOO)'
+    case_insensitive: true
+
+  - name: "Oven repair"
+    description: "In-game achievement: Fix the oven."
+    icon: "🔧"
+    match: 'GAME ACHIEVEMENT: (ovenfix \||[^|]*\| [^|]*Oven[ _.,!?-]*repair)'
+    case_insensitive: true
+
+  - name: "Deer eater"
+    description: "In-game achievement: Eat a deer corpse."
+    icon: "🦌"
+    match: 'GAME ACHIEVEMENT: (deerEater \||[^|]*\| [^|]*Deer[ _.,!?-]*eater)'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Welcome to earth"
+    description: "In-game achievement: Leave a gift at the treehouse."
+    icon: "🌳"
+    match: 'GAME ACHIEVEMENT: (wearth \||[^|]*\| [^|]*Welcome[ _.,!?-]*to[ _.,!?-]*earth)'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Return to sender"
+    description: "In-game achievement: Bounce the warning obelisk back with a trampoline."
+    icon: "🛸"
+    match: 'GAME ACHIEVEMENT: (back2send \||[^|]*\| [^|]*Return[ _.,!?-]*to[ _.,!?-]*sender)'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Insomniac"
+    description: "In-game achievement: Stay awake for 7 in-game days in a row."
+    icon: "😵"
+    match: 'GAME ACHIEVEMENT: (insomniac \||[^|]*\| [^|]*Insomniac)'
+    case_insensitive: true
+
+  - name: "The Snusk Lord"
+    description: "In-game achievement: Eat the entire Snusk Loaf."
+    icon: "🍞"
+    match: 'GAME ACHIEVEMENT: (snusklord \||[^|]*\| [^|]*The[ _.,!?-]*Snusk[ _.,!?-]*Lord)'
+    case_insensitive: true
+
+  - name: "Five. Hundred. Cigarettes."
+    description: "In-game achievement: Smoke 500 cigarettes."
+    icon: "🚬"
+    match: 'GAME ACHIEVEMENT: (500cigs \||[^|]*\| [^|]*Five[ _.,!?-]*Hundred[ _.,!?-]*Cigarettes)'
+    case_insensitive: true
+
+  - name: "The Sky is Falling!"
+    description: "In-game achievement: Get hit by the cloaking panel."
+    icon: "🪟"
+    match: 'GAME ACHIEVEMENT: (fallingSky \||[^|]*\| [^|]*The[ _.,!?-]*Sky[ _.,!?-]*is[ _.,!?-]*Falling)'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Accepted"
+    description: "In-game achievement: Take the vaccine from them."
+    icon: "💉"
+    match: 'GAME ACHIEVEMENT: (vaccine \||[^|]*\| [^|]*Accepted)'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Green Fire Begone"
+    description: "In-game achievement: Put out the green fire."
+    icon: "🧯"
+    match: 'GAME ACHIEVEMENT: (greenfiregone \||[^|]*\| [^|]*Green[ _.,!?-]*Fire[ _.,!?-]*Begone)'
+    case_insensitive: true
+
+  - name: "Gift of the Red Crown"
+    description: "In-game achievement: Summon the lamb."
+    icon: "🩸"
+    match: 'GAME ACHIEVEMENT: [^|]*\| [^|]*Gift[ _.,!?-]*of[ _.,!?-]*the[ _.,!?-]*Red[ _.,!?-]*Crown'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Portal"
+    description: "In-game achievement: Open the portal."
+    icon: "🌀"
+    match: 'GAME ACHIEVEMENT: (hellportal \||[^|]*\| [^|]*Portal)'
+    case_insensitive: true
+    hidden: true
+
+  - name: "ATV Airtime I"
+    description: "In-game achievement: Stay airborne on the ATV for 1 second."
+    icon: "🏍️"
+    match: 'GAME ACHIEVEMENT: (atvair_1 \||[^|]*\| [^|]*atv[ _-]*airtime[ _-]*(i|1)\b)'
+    case_insensitive: true
+
+  - name: "ATV Airtime II"
+    description: "In-game achievement: Stay airborne on the ATV for 3 seconds."
+    icon: "🏍️"
+    match: 'GAME ACHIEVEMENT: (atvair_2 \||[^|]*\| [^|]*atv[ _-]*airtime[ _-]*(ii|2)\b)'
+    case_insensitive: true
+
+  - name: "ATV Airtime III"
+    description: "In-game achievement: Stay airborne on the ATV for 5 seconds."
+    icon: "🏍️"
+    match: 'GAME ACHIEVEMENT: (atvair_3 \||[^|]*\| [^|]*atv[ _-]*airtime[ _-]*(iii|3)\b)'
+    case_insensitive: true
+
+  - name: "ATV Airtime IV"
+    description: "In-game achievement: Stay airborne on the ATV for 10 seconds."
+    icon: "🏍️"
+    match: 'GAME ACHIEVEMENT: (atvair_4 \||[^|]*\| [^|]*atv[ _-]*airtime[ _-]*(iv|4)\b)'
+    case_insensitive: true
+
+  - name: "ATV stunts"
+    description: "In-game achievement: Complete 100 ATV stunts."
+    icon: "🤸"
+    match: 'GAME ACHIEVEMENT: (atvStunts \||[^|]*\| [^|]*ATV[ _.,!?-]*stunts)'
+    case_insensitive: true
+
+  - name: "ATV frontflip"
+    description: "In-game achievement: Complete 100 ATV frontflips."
+    icon: "🔄"
+    match: 'GAME ACHIEVEMENT: (frontflip \||[^|]*\| [^|]*ATV[ _.,!?-]*frontflip)'
+    case_insensitive: true
+
+  - name: "ATV backflip"
+    description: "In-game achievement: Complete 100 ATV backflips."
+    icon: "🔁"
+    match: 'GAME ACHIEVEMENT: (backflip \||[^|]*\| [^|]*ATV[ _.,!?-]*backflip)'
+    case_insensitive: true
+
+  - name: "Object in the woods"
+    description: "In-game achievement: Find the strange white object."
+    icon: "🧺"
+    match: 'GAME ACHIEVEMENT: [^|]*\| [^|]*Object[ _.,!?-]*in[ _.,!?-]*the[ _.,!?-]*woods'
+    case_insensitive: true
+    hidden: true
+
+  - name: "The hole"
+    description: "In-game achievement: Find the weird hole in the ground."
+    icon: "🕳️"
+    match: 'GAME ACHIEVEMENT: (hole \||[^|]*\| [^|]*The[ _.,!?-]*hole)'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Where do you think youre going?"
+    description: "In-game achievement: Find the breach in the fence."
+    icon: "🚧"
+    match: 'GAME ACHIEVEMENT: (where \||[^|]*\| [^|]*where[ _-]*do[ _-]*you[ _-]*think)'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Fossilhound"
+    description: "In-game achievement: Die to a fossilhound."
+    icon: "🦴"
+    match: 'GAME ACHIEVEMENT: [^|]*\| [^|]*Fossilhound'
+    case_insensitive: true
+
+  - name: "Revenge"
+    description: "In-game achievement: Destroy a fossilhound."
+    icon: "⚔️"
+    match: 'GAME ACHIEVEMENT: [^|]*\| [^|]*Revenge'
+    case_insensitive: true
+
+  - name: "Bright death"
+    description: "In-game achievement: Die to a yellow wisp."
+    icon: "💛"
+    match: 'GAME ACHIEVEMENT: (kwispDeath \||[^|]*\| [^|]*Bright[ _.,!?-]*death)'
+    case_insensitive: true
+
+  - name: "Miracle"
+    description: "In-game achievement: Get saved by Big Piramid from a Killer Wisp."
+    icon: "🔺"
+    match: 'GAME ACHIEVEMENT: (piramidMiracle \||[^|]*\| [^|]*Miracle)'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Unleashed"
+    description: "In-game achievement: Burn or microwave a deer skull."
+    icon: "💀"
+    match: 'GAME ACHIEVEMENT: (microSkull \||[^|]*\| [^|]*Unleashed)'
+    case_insensitive: true
+    hidden: true
+
+  - name: "SHES ALIVE"
+    description: "In-game achievement: Bring Erie to life."
+    icon: "🧌"
+    match: 'GAME ACHIEVEMENT: (liveErie \||[^|]*\| [^|]*SHES[ _.,!?-]*ALIVE)'
+    case_insensitive: true
+
+  - name: "Cave sleeper"
+    description: "In-game achievement: Fall asleep in the cave."
+    icon: "🛌"
+    match: 'GAME ACHIEVEMENT: (cavesleep \||[^|]*\| [^|]*Cave[ _.,!?-]*sleeper)'
+    case_insensitive: true
+
+  - name: "Abandoned Kerfur"
+    description: "In-game achievement: Defeat an abandoned Kerfur."
+    icon: "🪓"
+    match: 'GAME ACHIEVEMENT: (murderfur \||[^|]*\| [^|]*Abandoned[ _.,!?-]*Kerfur)'
+    case_insensitive: true
+
+  - name: "No Damage"
+    description: "In-game achievement: Defeat an abandoned Kerfur without taking damage."
+    icon: "🛡️"
+    match: 'GAME ACHIEVEMENT: (murderfurNoDmg \||[^|]*\| [^|]*No[ _.,!?-]*Damage)'
+    case_insensitive: true
+
+  - name: "The Thingy"
+    description: "In-game achievement: Summon and defeat the Erie miniboss."
+    icon: "👹"
+    match: 'GAME ACHIEVEMENT: (erieboss \||[^|]*\| [^|]*The[ _.,!?-]*Thingy)'
+    case_insensitive: true
+
+  - name: "Rufus no more"
+    description: "In-game achievement: Defeat Rufus."
+    icon: "🦆"
+    match: 'GAME ACHIEVEMENT: (killRuf \||[^|]*\| [^|]*Rufus[ _.,!?-]*no[ _.,!?-]*more)'
+    case_insensitive: true
+
+  - name: "Thiccfus no more"
+    description: "In-game achievement: Defeat Thiccfus."
+    icon: "🐖"
+    match: 'GAME ACHIEVEMENT: (killThic \||[^|]*\| [^|]*Thiccfus[ _.,!?-]*no[ _.,!?-]*more)'
+    case_insensitive: true
+
+  - name: "Drowned"
+    description: "In-game achievement: Drown."
+    icon: "🌊"
+    match: 'GAME ACHIEVEMENT: (drown \||[^|]*\| [^|]*Drowned)'
+    case_insensitive: true
+
+  - name: "Nightmare"
+    description: "In-game achievement: Get locked inside the cremator."
+    icon: "⚰️"
+    match: 'GAME ACHIEVEMENT: (cremator \||[^|]*\| [^|]*Nightmare)'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Big brain"
+    description: "In-game achievement: Put a fork in an electrical socket."
+    icon: "🍴"
+    match: 'GAME ACHIEVEMENT: (efork \||[^|]*\| [^|]*Big[ _.,!?-]*brain)'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Mannequin dream"
+    description: "In-game achievement: Survive 120 seconds in the Mannequin dream."
+    icon: "🧍"
+    match: 'GAME ACHIEVEMENT: (dream_mann \||[^|]*\| [^|]*Mannequin[ _.,!?-]*dream)'
+    case_insensitive: true
+
+  - name: "Burger dream"
+    description: "In-game achievement: Collect all 10 burgers in the Burger dream."
+    icon: "🍟"
+    match: 'GAME ACHIEVEMENT: (dream_burger \||[^|]*\| [^|]*Burger[ _.,!?-]*dream)'
+    case_insensitive: true
+
+  - name: "Bad Sun"
+    description: "In-game achievement: Hide from the bad light."
+    icon: "☀️"
+    match: 'GAME ACHIEVEMENT: (badSun \||[^|]*\| [^|]*Bad[ _.,!?-]*Sun)'
+    case_insensitive: true
+
+  - name: "You have seen everything"
+    description: "In-game achievement: Die to the sunlight during Bad Sun."
+    icon: "🌞"
+    match: 'GAME ACHIEVEMENT: (badSun_0 \||[^|]*\| [^|]*You[ _.,!?-]*have[ _.,!?-]*seen[ _.,!?-]*everything)'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Worst ending"
+    description: "In-game achievement: Let the Evil reach Earth."
+    icon: "💀"
+    match: 'GAME ACHIEVEMENT: (ending_evil \||[^|]*\| [^|]*Worst[ _.,!?-]*ending)'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Easter Complete"
+    description: "In-game achievement: Help the Easter Bunny collect all 12 eggs."
+    icon: "🥚"
+    match: 'GAME ACHIEVEMENT: (easterComplete \||[^|]*\| [^|]*Easter[ _.,!?-]*Complete)'
+    case_insensitive: true
+
+  - name: "Halloween begins"
+    description: "In-game achievement: Launch the game during Halloween, or start a Halloween save."
+    icon: "🎃"
+    match: 'GAME ACHIEVEMENT: [^|]*\| [^|]*halloween[ _-]*begin'
+    case_insensitive: true
+
+  - name: "Halloween Part 1"
+    description: "In-game achievement: Collect all 13 pumpkins."
+    icon: "🕯️"
+    match: 'GAME ACHIEVEMENT: (halloween13_pt1 \||[^|]*\| [^|]*Halloween[ _.,!?-]*Part[ _.,!?-]*1)'
+    case_insensitive: true
+
+  - name: "THE HORSE"
+    description: "In-game achievement: Complete the Halloween zombie horde."
+    icon: "🐴"
+    match: 'GAME ACHIEVEMENT: (horde \||[^|]*\| [^|]*THE[ _.,!?-]*HORSE)'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Christmas begin"
+    description: "In-game achievement: Launch the game during the Christmas event."
+    icon: "🎄"
+    match: 'GAME ACHIEVEMENT: (christmas \||[^|]*\| [^|]*Christmas[ _.,!?-]*begin)'
+    case_insensitive: true
+
+  - name: "Snowman"
+    description: "In-game achievement: Complete the snowman."
+    icon: "⛄"
+    match: 'GAME ACHIEVEMENT: (snowman \||[^|]*\| [^|]*Snowman)'
+    case_insensitive: true
+
+  - name: "Krampus"
+    description: "In-game achievement: Please Krampus with a jar of alcohol."
+    icon: "🍶"
+    match: 'GAME ACHIEVEMENT: (krampus \||[^|]*\| [^|]*Krampus)'
+    case_insensitive: true
+    hidden: true
+
+  # ----------------------------------------------------------------------
+  # IN-GAME ACHIEVEMENTS found in the game's own table (list_achievements) whose
+  # title is not identified yet. Matched on the internal id only; rename them once
+  # the real title shows up in ludodex.log (field after the id).
+  # ----------------------------------------------------------------------
+
+  - name: "In-game achievement: Launch"
+    description: "In-game achievement with internal id Launch (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: Launch \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "In-game achievement: demo030"
+    description: "In-game achievement with internal id demo030 (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: demo030 \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "In-game achievement: demoFinish030"
+    description: "In-game achievement with internal id demoFinish030 (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: demoFinish030 \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "In-game achievement: counter"
+    description: "In-game achievement with internal id counter (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: counter \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "In-game achievement: rozShip"
+    description: "In-game achievement with internal id rozShip (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: rozShip \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "In-game achievement: arirShip"
+    description: "In-game achievement with internal id arirShip (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: arirShip \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "In-game achievement: halloween_e"
+    description: "In-game achievement with internal id halloween_e (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: halloween_e \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "In-game achievement: halloween_c"
+    description: "In-game achievement with internal id halloween_c (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: halloween_c \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "In-game achievement: secretArir"
+    description: "In-game achievement with internal id secretArir (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: secretArir \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "In-game achievement: prealpha"
+    description: "In-game achievement with internal id prealpha (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: prealpha \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "In-game achievement: prealphaFinish"
+    description: "In-game achievement with internal id prealphaFinish (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: prealphaFinish \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "In-game achievement: instaDeath"
+    description: "In-game achievement with internal id instaDeath (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: instaDeath \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "In-game achievement: dunk"
+    description: "In-game achievement with internal id dunk (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: dunk \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "In-game achievement: lambert"
+    description: "In-game achievement with internal id lambert (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: lambert \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "In-game achievement: wildone"
+    description: "In-game achievement with internal id wildone (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: wildone \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "In-game achievement: deadFossil"
+    description: "In-game achievement with internal id deadFossil (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: deadFossil \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "In-game achievement: ripFossil"
+    description: "In-game achievement with internal id ripFossil (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: ripFossil \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "In-game achievement: fisherman"
+    description: "In-game achievement with internal id fisherman (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: fisherman \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "In-game achievement: halloween13"
+    description: "In-game achievement with internal id halloween13 (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: halloween13 \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "In-game achievement: halloween13st"
+    description: "In-game achievement with internal id halloween13st (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: halloween13st \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "In-game achievement: bronzedog"
+    description: "In-game achievement with internal id bronzedog (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: bronzedog \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "In-game achievement: 12piece"
+    description: "In-game achievement with internal id 12piece (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: 12piece \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "In-game achievement: tutorial09"
+    description: "In-game achievement with internal id tutorial09 (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: tutorial09 \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "In-game achievement: alphaStart"
+    description: "In-game achievement with internal id alphaStart (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: alphaStart \|'
+    case_insensitive: true
+    hidden: true
+
+  - name: "In-game achievement: easterBegin"
+    description: "In-game achievement with internal id easterBegin (title not identified yet)."
+    icon: "🎖️"
+    match: 'GAME ACHIEVEMENT: easterBegin \|'
+    case_insensitive: true
+    hidden: true
+
+  # ======================================================================
+  # IN-GAME ADVANCEMENTS (mirror, per save)
+  # ======================================================================
+
+  - name: "Advancement: Burger?"
+    description: "In-game advancement: Find all chicken burgers on a save."
+    icon: "🍔"
+    match: 'GAME ADVANCEMENT: .*Burger'
+    case_insensitive: true
+
+  - name: "Advancement: Argemia plush"
+    description: "In-game advancement: Find all Argemia plushies."
+    icon: "🧸"
+    match: 'GAME ADVANCEMENT: .*argemia[ _-]*plush'
+    case_insensitive: true
+
+  - name: "Advancement: Funguy"
+    description: "In-game advancement: Pick up 1000 mushrooms."
+    icon: "🍄"
+    match: 'GAME ADVANCEMENT: .*Funguy'
+    case_insensitive: true
+
+  - name: "Advancement: Chipper"
+    description: "In-game advancement: Throw 1000 items into the woodchipper."
+    icon: "🪚"
+    match: 'GAME ADVANCEMENT: .*Chipper'
+    case_insensitive: true
+
+  - name: "Advancement: Roach eater"
+    description: "In-game advancement: Eat 1000 roaches."
+    icon: "🪳"
+    match: 'GAME ADVANCEMENT: .*Roach[ _.,!?-]*eater'
+    case_insensitive: true
+
+  - name: "Advancement: Piramid"
+    description: "In-game advancement: Witness Piramid."
+    icon: "🔺"
+    match: 'GAME ADVANCEMENT: .*Piramid'
+    case_insensitive: true
+
+  - name: "Advancement: Buy Kerfur"
+    description: "In-game advancement: Buy Kerfur."
+    icon: "🤖"
+    match: 'GAME ADVANCEMENT: .*Buy[ _.,!?-]*Kerfur'
+    case_insensitive: true
+
+  - name: "Advancement: Clean toilet"
+    description: "In-game advancement: Clean the toilet."
+    icon: "🚽"
+    match: 'GAME ADVANCEMENT: .*Clean[ _.,!?-]*toilet'
+    case_insensitive: true
+
+  - name: "Advancement: Clean sink"
+    description: "In-game advancement: Clean the sink."
+    icon: "🚰"
+    match: 'GAME ADVANCEMENT: .*Clean[ _.,!?-]*sink'
+    case_insensitive: true
+
+  - name: "Advancement: Clean shower"
+    description: "In-game advancement: Clean the shower."
+    icon: "🚿"
+    match: 'GAME ADVANCEMENT: .*Clean[ _.,!?-]*shower'
+    case_insensitive: true
+
+  - name: "Advancement: Pizza baker"
+    description: "In-game advancement: Bake a pizza."
+    icon: "🍕"
+    match: 'GAME ADVANCEMENT: .*Pizza[ _.,!?-]*baker'
+    case_insensitive: true
+
+  - name: "Advancement: Bread baker"
+    description: "In-game advancement: Bake a bread."
+    icon: "🍞"
+    match: 'GAME ADVANCEMENT: .*Bread[ _.,!?-]*baker'
+    case_insensitive: true
+
+  - name: "Advancement: Cookie baker"
+    description: "In-game advancement: Bake a tray of cookies."
+    icon: "🍪"
+    match: 'GAME ADVANCEMENT: .*Cookie[ _.,!?-]*baker'
+    case_insensitive: true
+
+  # ======================================================================
+  # ENCOUNTERS — actors spawning in your world (fuzzy class-name match)
+  # ======================================================================
+
+  - name: "Meet Kerfur"
+    description: "A Kerfur unit shows up in your world."
+    icon: "🐱"
+    match: 'ACTOR SPAWNED: (?!prop_)\w*kerfu[rs]'
+    case_insensitive: true
+
+  - name: "Omega Class"
+    description: "A Kerfur-Omega is active in your world."
+    icon: "🦾"
+    match: 'ACTOR SPAWNED: \w*kerfu[rs]\w*(omega|_?o)\w*_C|\w*omega\w*_C'
+    case_insensitive: true
+
+  - name: "Rust and Rage"
+    description: "Encounter an abandoned Kerfur."
+    icon: "🪫"
+    match: 'ACTOR SPAWNED: \w*abandon\w*'
+    case_insensitive: true
+
+  - name: "Flesh and Wires"
+    description: "Encounter a Skerfuro."
+    icon: "🩻"
+    match: 'ACTOR SPAWNED: \w*skerfu\w*'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Wisp Sighting"
+    description: "Encounter a wisp."
+    icon: "💡"
+    match: 'ACTOR SPAWNED: \w*wisp\w*'
+    case_insensitive: true
+
+  - name: "Bone Hound"
+    description: "Encounter a fossilhound."
+    icon: "🦴"
+    match: 'ACTOR SPAWNED: \w*fossil\w*'
+    case_insensitive: true
+
+  - name: "Giant Visitor"
+    description: "Piramid arrives."
+    icon: "🔺"
+    match: 'ACTOR SPAWNED: \w*(piramid|pyramid)\w*'
+    case_insensitive: true
+
+  - name: "Shadow in the Corner"
+    description: "Encounter a shadow figura."
+    icon: "👤"
+    match: 'ACTOR SPAWNED: \w*(shadowfig|figura)\w*'
+    case_insensitive: true
+
+  - name: "Undead"
+    description: "Encounter a zombie."
+    icon: "🧟"
+    match: 'ACTOR SPAWNED: \w*zombie\w*'
+    case_insensitive: true
+
+  - name: "Deer Crossing"
+    description: "A deer appears."
+    icon: "🦌"
+    match: 'ACTOR SPAWNED: \w*deer\w*'
+    case_insensitive: true
+
+  - name: "Rozital Contact"
+    description: "Encounter a Rozital."
+    icon: "👽"
+    match: 'ACTOR SPAWNED: \w*(rozital|igetis)\w*'
+    case_insensitive: true
+
+  - name: "Angry Erie"
+    description: "Encounter Angry Erie."
+    icon: "😡"
+    match: 'ACTOR SPAWNED: \w*(angry\w*erie|erie\w*angry)\w*'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Rufus Arrives"
+    description: "Summon Rufus."
+    icon: "🦆"
+    match: 'ACTOR SPAWNED: \w*rufus\w*'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Krampus Visits"
+    description: "Krampus shows up."
+    icon: "😈"
+    match: 'ACTOR SPAWNED: \w*krampus\w*'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Walker in the Fog"
+    description: "Encounter the Walker."
+    icon: "🚶"
+    match: 'ACTOR SPAWNED: \w*walker\w*'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Lambert"
+    description: "The lamb is summoned."
+    icon: "🐑"
+    match: 'ACTOR SPAWNED: \w*lambert\w*'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Green Flame"
+    description: "The green fire appears."
+    icon: "💚"
+    match: 'ACTOR SPAWNED: \w*green\w*(fire|flame)\w*'
+    case_insensitive: true
