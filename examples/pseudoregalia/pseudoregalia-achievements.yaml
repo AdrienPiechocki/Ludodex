@@ -139,7 +139,7 @@ achievements:
   # ======================================================================
 
   - name: "First Steps"
-    description: "Set foot in Castle Sansa."
+    description: "Set foot in the Dream World."
     icon: "👣"
     match: 'ZONE ENTERED:'
     case_insensitive: true
