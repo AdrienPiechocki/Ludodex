@@ -36,7 +36,7 @@ Launch the picked game directly, or launch from the library.
 - each achievement tests the **log lines** with regular expressions: `match` (one pattern), `any` (at least one), or `all` (every pattern), with an optional `count` (e.g. "defeat 50 bandits");
 - `hidden: true` marks an achievement as secret: its name, description and icon stay masked until it is unlocked;
 - the log is read **incrementally** (each line is counted once); a truncated or rewritten log is detected and re-scanned from the start;
-- per-game panel with progress (`x/N`) and unlock dates — the counter under the title always shows **all three sources combined** (YAML-tracked, RetroAchievements *and* Steam), in the same place; a ready-to-adapt example lives in `examples/openmw-achievements.yaml` along with the logger mod for OpenMW in `examples/LudodexLogger-OpenMW.zip`;
+- per-game panel with progress (`x/N`) and unlock dates — the counter under the title always shows **all three sources combined** (YAML-tracked, RetroAchievements *and* Steam), in the same place; a ready-to-adapt example lives in `examples/openmw/openmw-achievements.yaml` along with the logger mod for OpenMW in `examples/openmw/LudodexLogger-OpenMW.zip`;
 - the achievements of a game can be **filtered** (all / unlocked / locked, plus an accent-insensitive search over titles and descriptions) and **sorted** (original order, A→Z, Z→A, unlocked first, locked first); the settings persist across games;
 - a single **refresh** button re-reads the log *and* syncs that game with RetroAchievements (when it is linked) and Steam (when it comes from Steam) — no separate buttons;
 - **auto-refresh**: every 5 seconds the app checks the log file of each tracked game, and re-reads it automatically when it changes — so the achievements update on their own **while you play**; one final re-read happens when the writing stops (the game just closed), and a toast announces any newly unlocked achievements. The same signal also **re-syncs RetroAchievements** for a linked game and **Steam** for a Steam game, and a single toast covers the unlocks of all three sources. Each kind of game is watched through its own file, updated while you play — same principle, no process inspection: a YAML-tracked game through its log, a RetroArch game through its per-game runtime file (`…/playlists/logs/<core>/<game>.lrtl`), a Steam game through `steamapps/appmanifest_<appid>.acf`, where Steam writes `LastPlayed`. Nothing runs when no game is writing: the check is a single `stat()` per watched game.
@@ -130,7 +130,7 @@ python3 picker.py import
 python3 picker.py pick -t 30 -m calm -c "To finish"
 python3 picker.py stats
 python3 picker.py note "Hollow Knight" "- [x] beat the final boss"
-python3 picker.py tracker attach "OpenMW" examples/openmw-achievements.yaml ~/.local/share/openmw/openmw.log
+python3 picker.py tracker attach "OpenMW" examples/openmw/openmw-achievements.yaml ~/.local/share/openmw/openmw.log
 python3 picker.py tracker status "OpenMW"
 ```
 
@@ -155,7 +155,8 @@ core/         logic: db, platform, sources, importers, steam, tags, covers,
 ui/           GTK4 interface: main, theme, pickview, library, retrospec,
               notes, markdown, achievements, settingsui
 lang/         translations (en = base, fr)
-examples/     sample files (e.g. openmw-achievements.yaml)
+examples/     sample files, one folder per game (e.g. openmw/openmw-achievements.yaml
+              with the matching LudodexLogger mod)
 share/        application logo: master PNG, hicolor sizes
 local.ludodex.desktop  Linux launcher (installed to ~/.local/share/applications)
 build.sh      standalone PyInstaller build (ludodex.spec)

@@ -1,0 +1,255 @@
+# Dusklight achievements for Ludodex ("Achievements" module).
+#
+# Matches the keys present in achievements.json only when unlocked is true.
+
+achievements:
+
+  - name: "A Big Heart"
+    description: "Collect heart containers and maximize your health."
+    icon: "❤️"
+    match: '"a_big_heart":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "All Bottles"
+    description: "Collect all empty bottles available in the game."
+    icon: "🍾"
+    match: '"all_bottles":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "All Fish"
+    description: "Catch every type of fish."
+    icon: "🐟"
+    match: '"all_fish":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "All Hidden Skills"
+    description: "Learn all hidden sword skills."
+    icon: "⚔️"
+    match: '"all_hidden_skills":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "All Letters"
+    description: "Collect all letters."
+    icon: "✉️"
+    match: '"all_letters":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "All Poes"
+    description: "Find and collect all Poe souls."
+    icon: "👻"
+    match: '"all_poes":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Back in Time"
+    description: "Trigger a time-travel or flashback event."
+    icon: "⏳"
+    match: '"back_in_time":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Bullseye"
+    description: "Hit a target with the bow from 100 meters away."
+    icon: "🎯"
+    match: '"bow_100m_hit":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Canoe Perfect"
+    description: "Complete a canoe mini-game perfectly."
+    icon: "🛶"
+    match: '"canoe_perfect":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Cave of Ordeals"
+    description: "Conquer the Cave of Ordeals."
+    icon: "🕳️"
+    match: '"cave_of_ordeals":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Heartless Ordeal"
+    description: "Complete the Cave of Ordeals without losing hearts."
+    icon: "🛡️"
+    match: '"cave_of_ordeals_heartless":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Completionist"
+    description: "Achieve 100% completion in the game."
+    icon: "🌟"
+    match: '"completionist":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Cucco Control"
+    description: "Take control of a cucco and soar through the air."
+    icon: "🐔"
+    match: '"cucco_control":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Dark Hammer One-Hit"
+    description: "Defeat a dark opponent or boss with a single hammer strike."
+    icon: "🔨"
+    match: '"dark_hammer_one_hit":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Earliest Master Sword"
+    description: "Obtain the Master Sword as early as possible."
+    icon: "🗡️"
+    match: '"earliest_master_sword":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Early City"
+    description: "Gain access to the city ahead of schedule."
+    icon: "🏙️"
+    match: '"early_city":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Early Hidden Village"
+    description: "Reach the Hidden Village prematurely."
+    icon: "🏚️"
+    match: '"early_hidden_village":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Early Kakariko"
+    description: "Arrive in Kakariko Village early."
+    icon: "🏡"
+    match: '"early_kakariko":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Early Master Sword"
+    description: "Pull the Master Sword ahead of the intended path."
+    icon: "✨"
+    match: '"early_master_sword":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Email Me"
+    description: "Trigger a special communication or secret message."
+    icon: "📧"
+    match: '"email_me":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Fishing Rod Ganondorf"
+    description: "Use the fishing rod on Ganondorf."
+    icon: "🎣"
+    match: '"fishing_rod_ganondorf":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "No Boomerang"
+    description: "Clear the Forest Temple without using the boomerang."
+    icon: "🌲"
+    match: '"forest_temple_no_boomerang":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Friendly Fire"
+    description: "Damage an ally or friendly character."
+    icon: "🔥"
+    match: '"friendly_fire":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Ganondorf 3-Hit"
+    description: "Defeat Ganondorf in 3 hits."
+    icon: "⚡"
+    match: '"ganondorf_3hit":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Goat Herder (18s)"
+    description: "Herds all goats into the barn in under 18 seconds."
+    icon: "🐐"
+    match: '"goat_18s":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Goat Herder (20s)"
+    description: "Herds all goats into the barn in under 20 seconds."
+    icon: "🐐"
+    match: '"goat_20s":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Goat Herder (30s)"
+    description: "Herds all goats into the barn in under 30 seconds."
+    icon: "🐐"
+    match: '"goat_30s":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Heavy Hitter"
+    description: "Deal massive damage with a heavy attack."
+    icon: "💥"
+    match: '"heavy_hitter":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Hero of Twilight"
+    description: "Complete the main quest and save the land."
+    icon: "👑"
+    match: '"hero_of_twilight":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Hylian Loach"
+    description: "Catch the legendary Hylian Loach."
+    icon: "🐟"
+    match: '"hylian_loach":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Lakebed Before Lanayru"
+    description: "Reach the Lakebed Temple before Lanayru's province is fully unlocked."
+    icon: "💧"
+    match: '"lakebed_before_lanayru":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Long Jump Attack"
+    description: "Execute a successful long jump attack."
+    icon: "🏃"
+    match: '"long_jump_attack":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Flawless Clear"
+    description: "Clear a major section without a single death."
+    icon: "🛡️"
+    match: '"no_deaths_clear":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "No Fish Suit"
+    description: "Progress without wearing the special water suit."
+    icon: "🚫"
+    match: '"no_fish_suit":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Null Item"
+    description: "Encounter or obtain a null/glitched item."
+    icon: "❓"
+    match: '"null_item":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Plumm Max"
+    description: "Achieve the maximum score in Plumm's minigame."
+    icon: "🦅"
+    match: '"plumm_max":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Princess of Bugs"
+    description: "Collect all golden bugs for Agitha."
+    icon: "🐛"
+    match: '"princess_of_bugs":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Rollgoal (Level 8)"
+    description: "Complete level 8 of the Rollgoal minigame."
+    icon: "⚽"
+    match: '"rollgoal_8":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Rollgoal Master"
+    description: "Complete all levels of Rollgoal."
+    icon: "🏆"
+    match: '"rollgoal_all":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Triple Rollstab"
+    description: "Perform a triple rollstab combo."
+    icon: "🗡️"
+    match: '"rollstab_triple":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Snowboarder (70s)"
+    description: "Complete the snowboarding descent in under 70 seconds."
+    icon: "🏂"
+    match: '"snowboard_70s":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Speedrun (12 Hours)"
+    description: "Finish the game in under 12 hours."
+    icon: "⏱️"
+    match: '"speedrun_12h":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Speedrun (4 Hours)"
+    description: "Finish the game in under 4 hours."
+    icon: "⚡"
+    match: '"speedrun_4h":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Speedrun (8 Hours)"
+    description: "Finish the game in under 8 hours."
+    icon: "⏱️"
+    match: '"speedrun_8h":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Stallord Skip"
+    description: "Bypass or skip parts of the Stallord boss fight."
+    icon: "🦴"
+    match: '"stallord_skip":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Star 2 Under 30s"
+    description: "Complete star challenge 2 in under 30 seconds."
+    icon: "⭐"
+    match: '"star_2_under_30s":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Star 2 Under 40s"
+    description: "Complete star challenge 2 in under 40 seconds."
+    icon: "⭐"
+    match: '"star_2_under_40s":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Steal from Trill"
+    description: "Steal an item from Trill's shop."
+    icon: "🦝"
+    match: '"steal_from_trill":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Three Heart Clear"
+    description: "Finish the entire game with only three hearts."
+    icon: "💔"
+    match: '"three_heart_clear":\\s*\\{[^}]*"unlocked":\\s*true'
+
+  - name: "Untouchable"
+    description: "Defeat a boss without taking any damage."
+    icon: "✨"
+    match: '"untouchable":\\s*\\{[^}]*"unlocked":\\s*true'

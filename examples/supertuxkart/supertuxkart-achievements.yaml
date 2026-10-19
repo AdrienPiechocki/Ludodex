@@ -1,0 +1,291 @@
+# SuperTuxKart achievements for Ludodex ("Achievements" module).
+#
+# The "log" to attach is STK's players.xml itself
+# (Flatpak: ~/.var/app/net.supertuxkart.SuperTuxKart/config/supertuxkart/config*/players.xml).
+# Each pattern is tested against the lines of the XML, for example:
+#   <achievement id="4" achieved="true"/>
+#   <abyss solved="easy" best_while_slower="false"/>        (story mode)
+#   <track_stats ident="abyss" sta="2" fin="2" won="1" fin_rev="0" .../>
+#
+# Rules to follow (the game REWRITES the file, it is not append-only):
+# - single-pattern `match` entries only, no `count`: they are idempotent. An `all`,
+#   an `any` or a `count` > 1 would count the same lines again on every re-read and
+#   unlock too early;
+# - everything must fit on ONE line: no totals across tracks ("win 25 races"), no
+#   "every track".
+# - players.xml is only rewritten when the game saves.
+# - Ids 1..12 are the game's built-in achievements (data/achievements.xml); the XML
+#   only stores achieved="true|false", so there is no x/N progress for them.
+
+achievements:
+
+
+  # ======================================================================
+  # STK BUILT-IN ACHIEVEMENTS (ids 1..12 de data/achievements.xml)
+  # ======================================================================
+
+  - name: "Christoffel Columbus"
+    description: "Play every official track at least once."
+    icon: "🧭"
+    match: '<achievement id="1" achieved="true"'
+
+  - name: "Strike!"
+    description: "Hit 10 karts with a bowling-ball."
+    icon: "🎳"
+    match: '<achievement id="2" achieved="true"'
+
+  - name: "Arch Enemy"
+    description: "Hit the same kart at least 5 times in one race."
+    icon: "😈"
+    match: '<achievement id="3" achieved="true"'
+
+  - name: "Marathoner"
+    description: "Finish a race with at least twice the track's default lap number."
+    icon: "🏃"
+    match: '<achievement id="4" achieved="true"'
+
+  - name: "Skid-row"
+    description: "Skid 5 times in a single lap."
+    icon: "🛞"
+    match: '<achievement id="5" achieved="true"'
+
+  - name: "Gold driver"
+    description: "Win against at least 3 AIs in normal race, time-trial, and follow the leader."
+    icon: "🏎️"
+    match: '<achievement id="6" achieved="true"'
+
+  - name: "Powerup Love"
+    description: "Use 10 or more powerups in a race."
+    icon: "🎁"
+    match: '<achievement id="7" achieved="true"'
+
+  - name: "Unstoppable"
+    description: "Win 5 single races in a row against at least 3 AIs. Beware, restarting a race counts as a loss."
+    icon: "⚡"
+    match: '<achievement id="8" achieved="true"'
+
+  - name: "Banana Lover"
+    description: "Collect at least 5 bananas in one race."
+    icon: "🍌"
+    match: '<achievement id="9" achieved="true"'
+
+  - name: "It's secret"
+    description: "Really ... a secret."
+    icon: "🤫"
+    match: '<achievement id="10" achieved="true"'
+    hidden: true
+
+  - name: "Mosquito Hunter"
+    description: "Take your opponents for mosquitos! With the swatter, squash them at least 5 times in a race."
+    icon: "🦟"
+    match: '<achievement id="11" achieved="true"'
+
+  - name: "Beyond Luck"
+    description: "Win 10 single races in a row in Expert or SuperTux against at least 5 AIs. Beware, restarting a race counts as a loss."
+    icon: "🍀"
+    match: '<achievement id="12" achieved="true"'
+
+  # ======================================================================
+  # RACES
+  # ======================================================================
+
+  - name: "Ready, Set, Go"
+    description: "Start a race."
+    icon: "🚦"
+    match: '<track_stats .* sta="[1-9]'
+
+  - name: "Checkered Flag"
+    description: "Finish a race."
+    icon: "🏁"
+    match: '<track_stats .* fin="[1-9]'
+
+  - name: "Winner"
+    description: "Win a race."
+    icon: "🥇"
+    match: '<track_stats .* won="[1-9]'
+
+  - name: "Repeat Winner"
+    description: "Win twice on the same track."
+    icon: "🔁"
+    match: '<track_stats .* won="([2-9]|[1-9][0-9]+)"'
+
+  - name: "Track Master"
+    description: "Win five times on the same track."
+    icon: "🏆"
+    match: '<track_stats .* won="([5-9]|[1-9][0-9]+)"'
+
+  - name: "Other Way Around"
+    description: "Finish a race in reverse."
+    icon: "🔄"
+    match: '<track_stats .* fin_rev="[1-9]'
+
+  - name: "Abyss Champion"
+    description: "Win a race on Abyss."
+    icon: "🥇"
+    match: '<track_stats ident="abyss" .* won="[1-9]'
+
+  - name: "Black Forest Champion"
+    description: "Win a race on Black Forest."
+    icon: "🥇"
+    match: '<track_stats ident="black_forest" .* won="[1-9]'
+
+  - name: "Candela City Champion"
+    description: "Win a race on Candela City."
+    icon: "🥇"
+    match: '<track_stats ident="candela_city" .* won="[1-9]'
+
+  - name: "Cocoa Temple Champion"
+    description: "Win a race on Cocoa Temple."
+    icon: "🥇"
+    match: '<track_stats ident="cocoa_temple" .* won="[1-9]'
+
+  - name: "Cornfield Crossing Champion"
+    description: "Win a race on Cornfield Crossing."
+    icon: "🥇"
+    match: '<track_stats ident="cornfield_crossing" .* won="[1-9]'
+
+  - name: "Fort Magma Champion"
+    description: "Win a race on Fort Magma."
+    icon: "🥇"
+    match: '<track_stats ident="fortmagma" .* won="[1-9]'
+
+  - name: "Gran Paradiso Island Champion"
+    description: "Win a race on Gran Paradiso Island."
+    icon: "🥇"
+    match: '<track_stats ident="gran_paradiso_island" .* won="[1-9]'
+
+  - name: "Hacienda Champion"
+    description: "Win a race on Hacienda."
+    icon: "🥇"
+    match: '<track_stats ident="hacienda" .* won="[1-9]'
+
+  - name: "Lighthouse Champion"
+    description: "Win a race on Lighthouse."
+    icon: "🥇"
+    match: '<track_stats ident="lighthouse" .* won="[1-9]'
+
+  - name: "Mines Champion"
+    description: "Win a race on Mines."
+    icon: "🥇"
+    match: '<track_stats ident="mines" .* won="[1-9]'
+
+  - name: "Minigolf Champion"
+    description: "Win a race on Minigolf."
+    icon: "🥇"
+    match: '<track_stats ident="minigolf" .* won="[1-9]'
+
+  - name: "Oliver's Math Class Champion"
+    description: "Win a race on Oliver's Math Class."
+    icon: "🥇"
+    match: '<track_stats ident="olivermath" .* won="[1-9]'
+
+  - name: "Ravenbridge Mansion Champion"
+    description: "Win a race on Ravenbridge Mansion."
+    icon: "🥇"
+    match: '<track_stats ident="ravenbridge_mansion" .* won="[1-9]'
+
+  - name: "Sandtrack Champion"
+    description: "Win a race on Sandtrack."
+    icon: "🥇"
+    match: '<track_stats ident="sandtrack" .* won="[1-9]'
+
+  - name: "Scotland Champion"
+    description: "Win a race on Scotland."
+    icon: "🥇"
+    match: '<track_stats ident="scotland" .* won="[1-9]'
+
+  - name: "Snow Mountain Champion"
+    description: "Win a race on Snow Mountain."
+    icon: "🥇"
+    match: '<track_stats ident="snowmountain" .* won="[1-9]'
+
+  - name: "Snow Peak Champion"
+    description: "Win a race on Snow Peak."
+    icon: "🥇"
+    match: '<track_stats ident="snowtuxpeak" .* won="[1-9]'
+
+  - name: "STK Enterprise Champion"
+    description: "Win a race on STK Enterprise."
+    icon: "🥇"
+    match: '<track_stats ident="stk_enterprise" .* won="[1-9]'
+
+  - name: "Volcano Island Champion"
+    description: "Win a race on Volcano Island."
+    icon: "🥇"
+    match: '<track_stats ident="volcano_island" .* won="[1-9]'
+
+  - name: "XR591 Champion"
+    description: "Win a race on XR591."
+    icon: "🥇"
+    match: '<track_stats ident="xr591" .* won="[1-9]'
+
+  - name: "Zen Garden Champion"
+    description: "Win a race on Zen Garden."
+    icon: "🥇"
+    match: '<track_stats ident="zengarden" .* won="[1-9]'
+
+  # ======================================================================
+  # STORY MODE
+  # ======================================================================
+
+  - name: "First Trophy"
+    description: "Complete a story-mode challenge."
+    icon: "🏅"
+    match: 'solved="(easy|medium|hard|best)"'
+
+  - name: "Gold Cup"
+    description: "Complete a challenge at gold rank or better."
+    icon: "🥇"
+    match: 'solved="(hard|best)"'
+
+  - name: "Platinum"
+    description: "Complete a challenge at the best rank."
+    icon: "💎"
+    match: 'solved="best"'
+
+  - name: "Grand Prix 1"
+    description: "Complete story-mode Grand Prix 1."
+    icon: "🏎️"
+    match: '<gp1 solved="(easy|medium|hard|best)"'
+
+  - name: "Grand Prix 2"
+    description: "Complete story-mode Grand Prix 2."
+    icon: "🏎️"
+    match: '<gp2 solved="(easy|medium|hard|best)"'
+
+  - name: "Grand Prix 3"
+    description: "Complete story-mode Grand Prix 3."
+    icon: "🏎️"
+    match: '<gp3 solved="(easy|medium|hard|best)"'
+
+  - name: "Grand Prix 4"
+    description: "Complete story-mode Grand Prix 4."
+    icon: "🏎️"
+    match: '<gp4 solved="(easy|medium|hard|best)"'
+
+  - name: "SuperTux"
+    description: "Unlock SuperTux."
+    icon: "🐧"
+    match: '<unlock_supertux solved="(easy|medium|hard|best)"'
+
+  - name: "First Bonus Kart"
+    description: "Unlock the first bonus kart."
+    icon: "🛻"
+    match: '<unlock_bonus_kart1 solved="(easy|medium|hard|best)"'
+
+  - name: "Second Bonus Kart"
+    description: "Unlock the second bonus kart."
+    icon: "🚙"
+    match: '<unlock_bonus_kart2 solved="(easy|medium|hard|best)"'
+
+  - name: "Story Complete"
+    description: "Finish the story mode."
+    icon: "📖"
+    match: '\sfinished="true"'
+    hidden: true
+
+  - name: "Speedrunner"
+    description: "Finish the story mode in speedrun mode."
+    icon: "⏱️"
+    match: 'speedrun-finished="true"'
+    hidden: true
