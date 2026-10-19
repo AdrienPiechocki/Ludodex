@@ -1,0 +1,287 @@
+# TUNIC achievements for Ludodex ("Achievements" module).
+
+# Requires a BepInEx 6 IL2CPP mod: LudodexLogger-TUNIC.
+# The mod polls SaveFile.intStore / floatStore / stringStore and appends
+# transition lines to ludodex.log.
+
+# Expected log vocabulary:
+#   ITEM ACQUIRED: <Item>
+#   INVENTORY COUNT: <Item> | n=<count>
+#   CHEST OPENED: <chestID>
+#   FLAG SET: <saveKey>
+#   SCENE ENTERED: <sceneName>
+#   PLAYER DIED: x1            (hook PlayerCharacter.Die)
+#   MANUAL PAGE FOUND: <0-27> | n=<count>/28   (clés "unlocked page <i>")
+#   FAIRY FREED: <1-20>        (clés SV_Fairy_<n>_*_Opened)
+#   SECRET TREASURE FOUND: <1-12>   (item GoldenTrophy_<n>)
+#   GRASS CUT: x1              (hook PermanentStateByPosition.onKilled)
+#   MONEYBANK COUNT: n=<count>  (item Piggybank*)
+#   WISH MADE: x1              (hook TrinketWell.TossedInCoin)
+#   SPECIAL TECHNIQUE PERFORMED
+#   GUN ACQUIRED BEFORE SWORD  (item Shotgun sans Sword)
+#   PLAYER FROZEN
+#   PAGE 17 MARGIN UNDERSTOOD
+#   LUDODEX LOGGER READY: hooked=<n> missing=<n>
+
+# Notes:
+# - TUNIC has 36 Steam achievements.
+# - Chest, inventory, death and several boss flags are readable from the
+#   SaveFile key/value stores; the mod should emit transitions only.
+# - The exact SaveFile keys for manual pages, fairies, treasures, grass,
+#   wishes, the special-technique event and the page-17 margin must be
+#   confirmed with a first instrumented run. The event names above are the
+#   stable contract between the logger and this YAML.
+
+achievements:
+
+# ==========================================================
+# STORY
+# ==========================================================
+
+- name: "A Stick!"
+  description: "Found a stick."
+  icon: "🪵"
+  match: 'ITEM ACQUIRED: Stick\b'
+  case_insensitive: true
+
+- name: "A Sword!"
+  description: "Found a sword."
+  icon: "⚔️"
+  match: 'ITEM ACQUIRED: Sword\b'
+  case_insensitive: true
+
+- name: "What just happened?"
+  description: "Was resurrected."
+  icon: "👻"
+  match: 'PLAYER DIED'
+  case_insensitive: true
+
+- name: "Ding"
+  description: "Rang the Eastern Bell."
+  icon: "🔔"
+  match: 'FLAG SET: Rung Bell 1 \(East\)'
+  case_insensitive: true
+
+- name: "Dong"
+  description: "Rang the Western Bell."
+  icon: "🔕"
+  match: 'FLAG SET: Rung Bell 2 \(West\)'
+  case_insensitive: true
+
+- name: "You hear a strange hum"
+  description: "Engaged a strange device."
+  icon: "🌀"
+  match: 'FLAG SET: .*Strange Device.*'
+  case_insensitive: true
+
+- name: "Your gift is accepted"
+  description: "Made an offering."
+  icon: "🎁"
+  match: 'FLAG SET: .*Offering.*'
+  case_insensitive: true
+
+- name: "Deep In The Forest"
+  description: "Found the red key."
+  icon: "🔴"
+  match: 'ITEM ACQUIRED: Hexagon Red\b'
+  case_insensitive: true
+
+- name: "High Above The Clouds"
+  description: "Found the green key."
+  icon: "🟢"
+  match: 'ITEM ACQUIRED: Hexagon Green\b'
+  case_insensitive: true
+
+- name: "At The Root of The World"
+  description: "Found the blue key."
+  icon: "🔵"
+  match: 'ITEM ACQUIRED: Hexagon Blue\b'
+  case_insensitive: true
+
+- name: "What now?"
+  description: "Completed key collection."
+  icon: "🔑"
+  all:
+    - 'ITEM ACQUIRED: Hexagon Red\b'
+    - 'ITEM ACQUIRED: Hexagon Green\b'
+    - 'ITEM ACQUIRED: Hexagon Blue\b'
+  case_insensitive: true
+
+- name: "You feel a tingling..."
+  description: "Earned the Cathedral's Prize."
+  icon: "✨"
+  match: 'ITEM ACQUIRED: Hyperdash\b'
+  case_insensitive: true
+
+- name: "Your body is restored."
+  description: "Restored corporeal form."
+  icon: "🫀"
+  match: 'FLAG SET: .*Corporeal.*|FLAG SET: .*Body Restored.*'
+  case_insensitive: true
+
+- name: "Game Over"
+  description: "Found your rightful place."
+  icon: "🏁"
+  match: 'FLAG SET: .*Bad Ending.*|FLAG SET: .*Rightful Place.*'
+  case_insensitive: true
+  hidden: true
+
+- name: "Thank you for playing!"
+  description: "Completed the Manual."
+  icon: "📖"
+  match: 'FLAG SET: .*Manual Complete.*|MANUAL PAGE FOUND: n=28/28'
+  case_insensitive: true
+  hidden: true
+
+# ==========================================================
+# FAIRIES AND SECRET TREASURES
+# ==========================================================
+
+- name: "I'm free!"
+  description: "Freed a friendly fairy."
+  icon: "🧚"
+  match: 'FAIRY FREED'
+  case_insensitive: true
+
+- name: "Mr Mayor"
+  description: "Found Secret Treasure #1."
+  icon: "🎩"
+  match: 'SECRET TREASURE FOUND: 1\b'
+  case_insensitive: true
+  hidden: true
+
+- name: "A Secret Legend"
+  description: "Found Secret Treasure #2."
+  icon: "🦊"
+  match: 'SECRET TREASURE FOUND: 2\b'
+  case_insensitive: true
+  hidden: true
+
+- name: "Sacred Geometry"
+  description: "Found Secret Treasure #3."
+  icon: "🔺"
+  match: 'SECRET TREASURE FOUND: 3\b'
+  case_insensitive: true
+  hidden: true
+
+- name: "Vintage"
+  description: "Found Secret Treasure #4."
+  icon: "📻"
+  match: 'SECRET TREASURE FOUND: 4\b'
+  case_insensitive: true
+  hidden: true
+
+- name: "Just Some Pals"
+  description: "Found Secret Treasure #5."
+  icon: "💀"
+  match: 'SECRET TREASURE FOUND: 5\b'
+  case_insensitive: true
+  hidden: true
+
+- name: "Regal Weasel"
+  description: "Found Secret Treasure #6."
+  icon: "👑"
+  match: 'SECRET TREASURE FOUND: 6\b'
+  case_insensitive: true
+  hidden: true
+
+- name: "Spring Falls"
+  description: "Found Secret Treasure #7."
+  icon: "⛲"
+  match: 'SECRET TREASURE FOUND: 7\b'
+  case_insensitive: true
+  hidden: true
+
+- name: "Power Up"
+  description: "Found Secret Treasure #8."
+  icon: "🔋"
+  match: 'SECRET TREASURE FOUND: 8\b'
+  case_insensitive: true
+  hidden: true
+
+- name: "Back to Work"
+  description: "Found Secret Treasure #9."
+  icon: "🛠️"
+  match: 'SECRET TREASURE FOUND: 9\b'
+  case_insensitive: true
+  hidden: true
+
+- name: "Phonomath"
+  description: "Found Secret Treasure #10."
+  icon: "🎵"
+  match: 'SECRET TREASURE FOUND: 10\b'
+  case_insensitive: true
+  hidden: true
+
+- name: "Dusty"
+  description: "Found Secret Treasure #11."
+  icon: "🕸️"
+  match: 'SECRET TREASURE FOUND: 11\b'
+  case_insensitive: true
+  hidden: true
+
+- name: "Forever Friend"
+  description: "Found Secret Treasure #12."
+  icon: "🤝"
+  match: 'SECRET TREASURE FOUND: 12\b'
+  case_insensitive: true
+  hidden: true
+
+# ==========================================================
+# MISCELLANEOUS
+# ==========================================================
+
+- name: "Lawnmower"
+  description: "Chopped down 1000 blades of grass."
+  icon: "🌿"
+  match: 'GRASS CUT'
+  count: 1000
+  case_insensitive: true
+
+- name: "Too Cute To Smash"
+  description: "Had 10 moneybanks at once."
+  icon: "🐷"
+  match: 'MONEYBANK COUNT: n=10\b'
+  case_insensitive: true
+  hidden: true
+
+- name: "Nothing happened..."
+  description: "Made a wish."
+  icon: "🪙"
+  match: 'WISH MADE'
+  case_insensitive: true
+
+- name: "Well done!"
+  description: "Made 15 wishes."
+  icon: "🌟"
+  match: 'WISH MADE'
+  count: 15
+  case_insensitive: true
+
+- name: "It uses stamina"
+  description: "Perfectly executed a special technique."
+  icon: "⚡"
+  match: 'SPECIAL TECHNIQUE PERFORMED'
+  case_insensitive: true
+  hidden: true
+
+- name: "Bring it to the wrong fight"
+  description: "Found a certain weapon before getting a sword. (Page 38)"
+  icon: "🔫"
+  match: 'GUN ACQUIRED BEFORE SWORD'
+  case_insensitive: true
+  hidden: true
+
+- name: "Whoops"
+  description: "Froze yourself."
+  icon: "🧊"
+  match: 'PLAYER FROZEN'
+  case_insensitive: true
+  hidden: true
+
+- name: "Your pocket feels heavier..."
+  description: "Understood the margin of page 17."
+  icon: "🎒"
+  match: 'PAGE 17 MARGIN UNDERSTOOD'
+  case_insensitive: true
+  hidden: true
