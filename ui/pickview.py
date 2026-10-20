@@ -518,8 +518,9 @@ class PickViewMixin:
         desc = P.status_label(g["status"])
         if not g["installed"]:
             desc += " · " + tr("not installed")
-        if g["playtime_min"]:
-            desc += " · " + tr("{t} played", t=P.fmt_minutes(g["playtime_min"]))
+        pt = g["playtime_min"] or P.playtime_min(self.con, g["id"])  # provider sinon sessions
+        if pt:
+            desc += " · " + tr("{t} played", t=P.fmt_minutes(pt))
         if g["store_tags"]:
             desc += "\n" + " · ".join(g["store_tags"].split(",")[:4])
         self.pick_desc.set_text(desc)

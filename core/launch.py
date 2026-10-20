@@ -10,6 +10,7 @@ from . import platform
 from .db import LUTRIS_DBS, ITCH_DBS, _ro
 from .platform import uri_command, split_command, join_command
 from .steam import steam_appid_of, champ_acf
+from .stats import span_minutes
 
 
 def default_command(g):
@@ -149,9 +150,11 @@ def close_open_sessions(con, now=None):
     now = int(time.time()) if now is None else now
     rows = con.execute("SELECT id, game_id, started FROM sessions WHERE ended=0").fetchall()
     for r in rows:
-        minutes = max(0, (now - r["started"]) // 60)
+        # Durée = écart des horaires affichés par la frise (jamais (now-start)//60 :
+        # tronquer chaque fragment à l'unité inférieure perdait jusqu'à 1 min/session)
+        minutes = span_minutes(r["started"], now)
         con.execute("UPDATE sessions SET ended=?, minutes=? WHERE id=?", (now, minutes, r["id"]))
-        if minutes >= PROGRESS_MIN_MINUTES:
+        if now - r["started"] >= PROGRESS_MIN_MINUTES * 60:  # règle de statut au moment près
             con.execute("UPDATE games SET status='en_cours' "
                         "WHERE id=? AND status IN ('backlog','pause')", (r["game_id"],))
     con.commit()
@@ -168,9 +171,9 @@ def close_session(con, sid, now=None):
     row = con.execute("SELECT game_id, started FROM sessions WHERE id=? AND ended=0", (sid,)).fetchone()
     if not row:
         return False
-    minutes = max(0, (now - row["started"]) // 60)
+    minutes = span_minutes(row["started"], now)
     con.execute("UPDATE sessions SET ended=?, minutes=? WHERE id=?", (now, minutes, sid))
-    if minutes >= PROGRESS_MIN_MINUTES:
+    if now - row["started"] >= PROGRESS_MIN_MINUTES * 60:
         con.execute("UPDATE games SET status='en_cours' "
                     "WHERE id=? AND status IN ('backlog','pause')", (row["game_id"],))
     con.commit()

@@ -11,9 +11,18 @@ from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, GObject, Gtk, Pango
 import picker as P
 from i18n import available, get_lang, tr
 
-# Camembert : palette fixe par rang (5 max), gris pour « Autres ».
-PIE_COLORS = ("#614d8f", "#4f9e6e", "#c9a227", "#c96a3d", "#4f7fc9")
+# Camembert : palette fixe par rang (6 max), gris pour « Autres ».
+PIE_COLORS = ("#614d8f", "#4f9e6e", "#c9a227", "#c96a3d", "#4f7fc9", "#c264a1")
 OTHER_COLOR = "#55555f"
+
+
+def dot_class(color):
+    """Classe CSS de la pastille d'une part du camembert, déduite de SA COULEUR.
+
+    La couleur décide de la classe — jamais l'index de la ligne : la part « Autres »
+    (grise) tombe en 6ᵉ position à la suite des 5 rangs nommés et ne doit surtout pas
+    hériter de la pastille rose du rang 6."""
+    return f"retro-dot-{PIE_COLORS.index(color)}" if color in PIE_COLORS else "retro-dot-other"
 
 
 def _hex_rgb(color):
@@ -316,7 +325,7 @@ class RetroMixin:
                       css_classes=["retro-row"], valign=Gtk.Align.CENTER,
                       tooltip_text=f"{s['name']}\n{sub}\n{s['delta_plain']}")
         dot = Gtk.Box(width_request=10, height_request=10, valign=Gtk.Align.CENTER,
-                      css_classes=[f"retro-dot-{idx if idx < 5 else 'other'}"])
+                      css_classes=[dot_class(s["color"])])
         row.append(dot)
         g = self._top_game_row_data(s["name"])
         tex = self._cover_texture(g) if g else None

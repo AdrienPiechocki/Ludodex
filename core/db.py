@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
     started INTEGER NOT NULL,
     ended INTEGER NOT NULL DEFAULT 0,       -- 0 = session encore ouverte
-    minutes INTEGER NOT NULL DEFAULT 0,     -- durée en minutes (0 = inconnue / session d'import)
+    minutes INTEGER NOT NULL DEFAULT 0,     -- durée affichée en minutes (écart des horaires, 0 = session d'import)
     UNIQUE (game_id, started)
 );
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);

@@ -850,8 +850,9 @@ class NotesMixin:
         self.notes_right.set_visible_child_name("editor")
 
     def _note_subtitle(self, gid):
-        inst, hid, pt, status = self.con.execute(
-            "SELECT installed, hidden, playtime_min, status FROM games WHERE id=?", (gid,)).fetchone()
+        inst, hid, status = self.con.execute(
+            "SELECT installed, hidden, status FROM games WHERE id=?", (gid,)).fetchone()
+        pt = P.playtime_min(self.con, gid)   # provider si > 0, sinon temps des sessions
         extra = [P.fmt_minutes(pt)] if pt else []
         return " · ".join([P.status_label(status)] + extra + ([] if inst else [tr("not installed")])
                           + ([tr("hidden")] if hid else []))

@@ -53,6 +53,7 @@ CSS = """
 .retro-dot-2 { background-color: #c9a227; border-radius: 5px; }
 .retro-dot-3 { background-color: #c96a3d; border-radius: 5px; }
 .retro-dot-4 { background-color: #4f7fc9; border-radius: 5px; }
+.retro-dot-5 { background-color: #c264a1; border-radius: 5px; }
 .retro-dot-other { background-color: #55555f; border-radius: 5px; }
 .retro-time { font-size: 11px; }
 .retro-row { border-radius: 6px; padding: 3px 6px; }

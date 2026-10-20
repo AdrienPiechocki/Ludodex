@@ -454,8 +454,13 @@ class LibraryMixin:
             self.lib_flow.remove(child)
         self._tiles = []
         where = self._lib_where(trailing=True)
+        # Temps de jeu affichable : provider s'il en donne un, sinon la somme des sessions
+        # (une seule requête pour toute la grille → sert aussi au tri « Le plus joué »).
+        pts = P.playtimes(self.con)
         for row in self.con.execute(f"SELECT * FROM games {where}"):
-            tile = self._make_tile(dict(row))
+            g = dict(row)
+            g["playtime_min"] = pts.get(g["id"], g["playtime_min"])
+            tile = self._make_tile(g)
             self.lib_flow.append(tile)
             self._tiles.append(tile)
         self._apply_filter()
@@ -854,7 +859,8 @@ class LibraryMixin:
         self.lib_flow.invalidate_sort()
 
     def _lib_subtitle(self, gid, status):
-        inst, hid, pt = self.con.execute("SELECT installed, hidden, playtime_min FROM games WHERE id=?", (gid,)).fetchone()
+        inst, hid = self.con.execute("SELECT installed, hidden FROM games WHERE id=?", (gid,)).fetchone()
+        pt = P.playtime_min(self.con, gid)   # provider si > 0, sinon temps des sessions
         extra = [P.fmt_minutes(pt)] if pt else []
         return " · ".join([P.status_label(status)] + extra + ([] if inst else [tr("not installed")])
                           + ([tr("hidden")] if hid else []))

@@ -51,20 +51,89 @@ def fmt_minutes(m):
     return f"{m // 60} h {m % 60:02d}" if m >= 60 else f"{m} min"
 
 
-def _timeline(con, period_start, period_end, bucket, today, game=None):
+def span_minutes(start, end):
+    """Minutes entières entre deux horodatages : exactement l'écart des deux
+    horaires que la frise AFFICHE (« 23:05 → 23:21 » = 16 min).
+
+    La durée se déduit des horodatages, jamais du champ `sessions.minutes` :
+    ce dernier est tronqué à l'unité inférieure à la clôture ((now - started)
+    // 60), et sommer des fragments ainsi tronqués donnait 4 + 0 + 6 = 10 min
+    pour une entrée de frise affichée 16 min — frise, histogrammes et totaux
+    disaient donc des choses différentes du même événement."""
+    return max(0, int(end) // 60 - int(start) // 60)
+
+
+# Temps de jeu AFFICHABLE : le provider (games.playtime_min) quand il existe, sinon les
+# sessions — déduites des horodatages comme la frise, jamais du champ `minutes` tronqué.
+def _session_totals(con, now=None, game_id=None):
+    """Minutes de jeu par jeu, calculées sur les sessions AVEC LES MÊMES RÈGLES QUE LA FRISE :
+    les sessions d'un même jeu d'un même JOUR séparées de ≤ GROUP_GAP fusionnent (l'entrée vaut
+    son intervalle écoulé, cf. `_timeline`), une session ouverte (ended=0) est bornée à `now`.
+
+    Sans cette fusion, 3 fragments « 23:05→23:10 + 23:14 + 23:14:30→23:21 » donnent 5+0+7 = 12
+    min alors que la frise affiche une entrée 23:05→23:21 = 16 min : bibliothèque et
+    rétrospective devraient dire la même chose du même temps joué."""
+    now = int(time.time()) if now is None else int(now)
+    sql, args = "SELECT game_id, started, ended FROM sessions", ()
+    if game_id is not None:
+        sql += " WHERE game_id=?"
+        args = (game_id,)
+    tot, gid, jour, start, end = {}, None, None, 0, 0
+    for r in con.execute(sql + " ORDER BY game_id, started", args):
+        d = datetime.date.fromtimestamp(r["started"])
+        fin = r["ended"] or now
+        if r["game_id"] != gid or d != jour or r["started"] - end > GROUP_GAP:
+            if gid is not None:
+                tot[gid] = tot.get(gid, 0) + span_minutes(start, end)
+            gid, jour, start, end = r["game_id"], d, r["started"], fin
+        else:
+            end = max(end, fin)
+    if gid is not None:
+        tot[gid] = tot.get(gid, 0) + span_minutes(start, end)
+    return tot
+
+
+def playtimes(con, now=None):
+    """Temps de jeu par identifiant, pour TOUS les jeux en une seule passe.
+
+    Le temps du provider (`games.playtime_min`, rempli par Steam/Lutris/imports) l'emporte
+    quand il est > 0 : les sessions locales ne connaissent pas ce temps. Sinon on retombe
+    sur les sessions fusionnées comme la frise (voir `_session_totals`) — une session
+    d'import (ended = started) vaut 0 min, ses minutes sont déjà dans le temps provider."""
+    sess = _session_totals(con, now=now)
+    return {r["id"]: (r["playtime_min"] if r["playtime_min"] > 0 else sess.get(r["id"], 0))
+            for r in con.execute("SELECT id, playtime_min FROM games")}
+
+
+def playtime_min(con, gid, now=None):
+    """Temps de jeu affichable d'UN jeu (même règle que `playtimes`) ; 0 si inconnu."""
+    row = con.execute("SELECT playtime_min FROM games WHERE id=?", (gid,)).fetchone()
+    if row is None:
+        return 0
+    if row["playtime_min"] > 0:
+        return row["playtime_min"]
+    return _session_totals(con, now=now, game_id=gid).get(gid, 0)
+
+
+def _timeline(con, period_start, period_end, bucket, today, game=None, now=None):
     """Entrées de la frise entre period_start et period_end (dates incluses).
 
     `bucket(date)` ramène une date à sa colonne (le jour lui-même pour une frise
     par jour, le 1er du mois pour une frise par mois). Les sessions d'un même jeu
-    séparées de ≤ GROUP_GAP sont fusionnées dans la même colonne. Le seuil
-    « retro_hide_min » (0 = tout montrer) masque les entrées trop courtes, totaux
-    compris. Toutes les colonnes de la période existent, vides ou non.
+    séparées de ≤ GROUP_GAP sont fusionnées dans la même colonne : l'entrée
+    commune alors LE TEMPS ÉCOULÉ entre sa première début et sa dernière fin,
+    c'est-à-dire l'intervalle qu'elle affiche (« 23:05 → 23:21 »), et non la
+    somme des durées fragmentées. Le seuil « retro_hide_min » (0 = tout montrer)
+    masque les entrées trop courtes, totaux compris. Toutes les colonnes de la
+    période existent, vides ou non.
     `game` (optionnel) filtre sur une sous-chaîne du nom, insensible à la casse :
     plusieurs jeux correspondants sont cumulés — appliqué AVANT fusion et seuil.
+    `now` borne les sessions encore ouvertes (ended=0) ; time.time() par défaut.
     """
+    now = int(time.time()) if now is None else int(now)
     buckets = {}
     needle = game.strip().lower() if game else ""
-    sql = ("SELECT s.started, s.ended, s.minutes, g.name FROM sessions s "
+    sql = ("SELECT s.started, s.ended, g.name FROM sessions s "
            "JOIN games g ON g.id = s.game_id")
     cond = source_cond(con, "g")
     if cond:
@@ -79,19 +148,15 @@ def _timeline(con, period_start, period_end, bucket, today, game=None):
         key = bucket(d)
         if key < bucket(period_start) or key > bucket(period_end):
             continue  # défensif : session en dehors des colonnes de la période
-        if r["ended"]:
-            end = r["ended"]
-            mins = r["minutes"]
-        else:
-            end = int(time.time())
-            mins = max(0, (end - r["started"]) // 60)
+        start, end = r["started"], (r["ended"] or now)
         col = buckets.setdefault(key, [])
         prev = col[-1] if col else None
-        if prev and prev["name"] == r["name"] and r["started"] - prev["end"] <= GROUP_GAP:
-            prev["minutes"] += mins
-            prev["end"] = max(prev["end"], end)
+        if prev and prev["name"] == r["name"] and start - prev["end"] <= GROUP_GAP:
+            prev["end"] = max(prev["end"], end)      # fusion : l'entrée vaut son intervalle
+            prev["minutes"] = span_minutes(prev["start"], prev["end"])
             continue
-        col.append({"name": r["name"], "start": r["started"], "minutes": mins, "end": end})
+        col.append({"name": r["name"], "start": start, "minutes": span_minutes(start, end),
+                    "end": end})
     thr = hide_short_min(con)
     if thr > 0:
         for k in list(buckets):
@@ -116,7 +181,7 @@ def week_timeline(con, now=None, game=None):
     today = datetime.date.fromtimestamp(now)
     monday = today - datetime.timedelta(days=today.weekday())
     days = [monday + datetime.timedelta(days=i) for i in range(7)]
-    buckets, ngames, total = _timeline(con, days[0], days[-1], lambda d: d, today, game)
+    buckets, ngames, total = _timeline(con, days[0], days[-1], lambda d: d, today, game, now)
     return {"start": monday, "today": today,
             "days": [{"date": d, "entries": _public(buckets.get(d, []))} for d in days],
             "game_count": ngames, "total_minutes": total}
@@ -130,7 +195,7 @@ def month_timeline(con, now=None, game=None):
     first = today.replace(day=1)
     last = (first + datetime.timedelta(days=32)).replace(day=1) - datetime.timedelta(days=1)
     days = [first + datetime.timedelta(days=i) for i in range((last - first).days + 1)]
-    buckets, ngames, total = _timeline(con, first, last, lambda d: d, today, game)
+    buckets, ngames, total = _timeline(con, first, last, lambda d: d, today, game, now)
     return {"start": first, "today": today,
             "days": [{"date": d, "entries": _public(buckets.get(d, []))} for d in days],
             "game_count": ngames, "total_minutes": total}
@@ -143,7 +208,7 @@ def year_timeline(con, now=None, game=None):
     today = datetime.date.fromtimestamp(now)
     jan1 = today.replace(month=1, day=1)
     months = [datetime.date(today.year, m, 1) for m in range(1, 13)]
-    buckets, ngames, total = _timeline(con, jan1, months[-1], lambda d: d.replace(day=1), today, game)
+    buckets, ngames, total = _timeline(con, jan1, months[-1], lambda d: d.replace(day=1), today, game, now)
     return {"start": jan1, "today": today,
             "months": [{"date": m, "entries": _public(buckets.get(m, []))} for m in months],
             "game_count": ngames, "total_minutes": total}
@@ -177,9 +242,9 @@ def previous_bounds(kind, now=None):
     return start.replace(year=start.year - 1), end.replace(year=end.year - 1)
 
 
-def _entries(con, start, end, game=None):
+def _entries(con, start, end, game=None, now=None):
     """Entrées fusionnées + seuil appliqué sur [start, end], colonnes d'un jour."""
-    buckets, _, _ = _timeline(con, start, end, lambda d: d, end, game)
+    buckets, _, _ = _timeline(con, start, end, lambda d: d, end, game, now)
     return [e for col in buckets.values() for e in col]
 
 
@@ -203,17 +268,21 @@ def period_summary(con, kind, now=None, game=None):
 
     start, end = period_bounds(kind, now)
     pstart, pend = previous_bounds(kind, now)
-    return {**_agg(_entries(con, start, end, game), (end - start).days + 1),
-            "prev": _agg(_entries(con, pstart, pend, game), (pend - pstart).days + 1)}
+    return {**_agg(_entries(con, start, end, game, now), (end - start).days + 1),
+            "prev": _agg(_entries(con, pstart, pend, game, now), (pend - pstart).days + 1)}
 
 
 def top_games(con, kind, now=None, limit=5, game=None):
     """Top « limit » jeux de la période par minutes, avec rang, part et évolution.
 
     Chaque ligne porte « prev_rank » : rang complet du même jeu sur la période précédente
-    (None = ★ nouveau). « others » agrège le reste du classement. `game` filtre sur le nom."""
+    (None = ★ nouveau). « others » agrège le reste du classement — sauf quand il ne
+    reste qu'UN SEUL jeu après le top : il monte alors comme un rang nommé de plus
+    (son rang, sa part et son évolution comme les autres), et « others » reste vide.
+    L'agrégat « Autres (N jeux) » ne sert donc plus qu'à résumer N ≥ 2 jeux.
+    `game` filtre sur le nom (sous-chaîne, casse ignorée), comme la frise."""
     start, end = period_bounds(kind, now)
-    entries = _entries(con, start, end, game)
+    entries = _entries(con, start, end, game, now)
     total = sum(e["minutes"] for e in entries)
     agg = {}
     for e in entries:
@@ -223,17 +292,18 @@ def top_games(con, kind, now=None, limit=5, game=None):
     ranked = sorted(agg.values(), key=lambda a: -a["minutes"])
     pstart, pend = previous_bounds(kind, now)
     prev_minutes = {}
-    for e in _entries(con, pstart, pend, game):
+    for e in _entries(con, pstart, pend, game, now):
         prev_minutes[e["name"]] = prev_minutes.get(e["name"], 0) + e["minutes"]
     prev_rank = {name: i + 1 for i, name in enumerate(
         sorted(prev_minutes, key=lambda n: -prev_minutes[n]))}
+    affiches = limit + 1 if len(ranked) == limit + 1 else limit   # le 6ᵉ seul est un rang
     top = []
-    for i, a in enumerate(ranked[:limit]):
+    for i, a in enumerate(ranked[:affiches]):
         a["rank"] = i + 1
         a["share"] = round(a["minutes"] * 100 / total) if total else 0
         a["prev_rank"] = prev_rank.get(a["name"])
         top.append(a)
-    rest = ranked[limit:]
+    rest = ranked[affiches:]
     return {"top": top, "total_minutes": total,
             "others": {"games": len(rest), "minutes": sum(a["minutes"] for a in rest),
                        "sessions": sum(a["sessions"] for a in rest)}}
@@ -252,8 +322,8 @@ def _time_buckets(con, kind, now, nbuckets, key, game=None):
 
     start, end = period_bounds(kind, now)
     pstart, pend = previous_bounds(kind, now)
-    return {"current": _buckets(_entries(con, start, end, game)),
-            "previous": _buckets(_entries(con, pstart, pend, game))}
+    return {"current": _buckets(_entries(con, start, end, game, now)),
+            "previous": _buckets(_entries(con, pstart, pend, game, now))}
 
 
 def hours_histogram(con, kind, now=None, game=None):
@@ -269,9 +339,9 @@ def weekdays_histogram(con, kind, now=None, game=None):
                          lambda e: datetime.datetime.fromtimestamp(e["start"]).weekday(), game)
 
 
-def _played_days(con, until, game=None):
+def _played_days(con, until, game=None, now=None):
     """Jours (≤ until) comptant au moins une session retenue par le seuil de la frise."""
-    buckets, _, _ = _timeline(con, datetime.date(1970, 1, 1), until, lambda d: d, until, game)
+    buckets, _, _ = _timeline(con, datetime.date(1970, 1, 1), until, lambda d: d, until, game, now)
     return {d for d, col in buckets.items() if col}
 
 
@@ -312,7 +382,7 @@ def regularity(con, kind, now=None, game=None):
     today = datetime.date.fromtimestamp(now)
     start, end = period_bounds(kind, now)
     pstart, pend = previous_bounds(kind, now)
-    played = _played_days(con, min(end, today), game)
+    played = _played_days(con, min(end, today), game, now)
 
     def _agg(cutoff, s, e):
         return {"days_played": len([d for d in played if s <= d <= e]),
@@ -335,7 +405,7 @@ def heatmap(con, kind, now=None, game=None):
     today = datetime.date.fromtimestamp(now)
     start, end = period_bounds(kind, now)
     cutoff = min(end, today)
-    buckets, _, _ = _timeline(con, start, cutoff, lambda d: d, cutoff, game)
+    buckets, _, _ = _timeline(con, start, cutoff, lambda d: d, cutoff, game, now)
     cells, d = [], start
     while d <= end:
         entries = buckets.get(d, []) if d <= cutoff else []
