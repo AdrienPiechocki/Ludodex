@@ -212,26 +212,10 @@ achievements:
   # IN-GAME ACHIEVEMENTS (mirror) — needs the Blueprint hook found by the logger
   # ======================================================================
 
-  # "First launch" is missing from the wiki; the demo, pre-alpha and "Launch tutorial level"
-  # rows are version-gated: only older builds of the game still grant them.
-
-  - name: "First launch"
-    description: "In-game achievement: Launch the game for the first time."
-    icon: "🎮"
-    match: 'GAME ACHIEVEMENT: (Launch \||[^|]*\| [^|]*First[ _.,!?-]*launch)'
-    case_insensitive: true
-
   - name: "Complete 09 the tutorial"
     description: "In-game achievement: Reach the end of Layer 1 of the tutorial."
     icon: "🎓"
     match: 'GAME ACHIEVEMENT: (tutorial09 \||[^|]*\| [^|]*Complete[ _.,!?-]*09[ _.,!?-]*the[ _.,!?-]*tutorial)'
-    case_insensitive: true
-
-  - name: "Alpha player"
-    description: "In-game achievement: Launch the alpha for the first time."
-    icon: "🚀"
-    # The lookbehind keeps "Pre-alpha player" (id prealpha) from unlocking this one.
-    match: 'GAME ACHIEVEMENT: (alphaStart \||[^|]*\| [^|]*(?<![a-z-])Alpha[ _.,!?-]*player)'
     case_insensitive: true
 
   - name: "Sandbox unlocked"

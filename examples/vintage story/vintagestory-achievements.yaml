@@ -1,0 +1,623 @@
+# Vintage Story achievements for Ludodex ("Achievements" module).
+#
+# To use with the "LudodexLogger" Vintage Story mod (server-side C# mod, works in single player).
+# The mod appends one line per state change to ludodex.log
+# (default: <VintagestoryData>/Logs/ludodex.log, configurable in ModConfig/ludodexlogger.json).
+# Each pattern is a free-search regular expression, applied line by line.
+# Format of the lines produced by the mod ("<code>" is the game code without the "game:" domain,
+# e.g. ingot-copper, ore-poor-nativecopper-granite, drifter-normal):
+#   ITEM ACQUIRED: <code> | n=<distinct items seen>     first time an item/block code shows up in
+#                                                        hotbar, backpack or clothing slots
+#   ITEMS DISCOVERED: n=<10|25|50|100|200|300|500>      milestone of distinct item codes
+#   BLOCK BROKEN: <code>                                 first time a block code is broken
+#   BLOCK PLACED: <code>                                 first time a block code is placed
+#   BLOCK USED: <code>                                   first time a block code is right-clicked
+#   BLOCKS BROKEN: n=<1|10|100|500|1000|2500|5000|10000|25000|50000|100000>
+#   BLOCKS PLACED: n=<same milestones>
+#   ENTITY KILLED: <code> | n=<total kills>             every creature killed by the player
+#   PLAYER DIED: x1 | cause=<EnumDamageType> | by=<entity code, optional>
+#   CLASS SELECTED: <characterClass>
+#   DISTANCE TRAVELED: km=<1|5|10|25|50|100|250|500|1000>
+#   DEPTH REACHED: m=<25|50|75|100>                      metres below sea level
+#   ALTITUDE REACHED: m=<25|50|75|100|125>               metres above sea level
+#   TEMPORAL STABILITY: below=<75|50|25|10|1>            percent, first time the player drops under it
+#   WORLD DAY: n=<1|10|30|60|100|200|365|500|1000>       in-game days elapsed in the world
+#   LUDODEX LOGGER READY: hooked=<n> | missing=<hooks that failed to register>
+#
+# Notes:
+# - Only the first occurrence of each item / block code emits a line (transitions only), so the
+#   log stays small. State is stored in the savegame; run "/ludodex" in chat after deleting or
+#   moving the log to truncate it and re-emit everything.
+# - Creative / spectator players are ignored by default (config "OnlySurvival").
+# - Provisional: the line formats are implemented but not seen in a real session yet. The item,
+#   block and entity codes in the patterns below come from the base game as far as known, but
+#   they are intentionally loose (prefix / alternation matches) and some may need a tweak after
+#   the first real playthrough: every code the player meets is written to the log, so a wrong
+#   pattern is fixed by looking up the real code in ludodex.log. Families to double-check:
+#   firepit / pitkiln, ores, bronze alloys, mechanical power blocks, crops, translocators,
+#   the rare drifter variants and the damage "cause" names.
+# - count: N counts matching lines (used for kills and deaths).
+# - hidden: true marks achievements whose name or description would spoil something.
+
+achievements:
+
+  # ======================================================================
+  # FIRST STEPS
+  # ======================================================================
+
+  - name: "Scavenger"
+    description: "Discover 25 different items."
+    icon: "🎒"
+    match: 'ITEMS DISCOVERED: n=25\b'
+    case_insensitive: true
+
+  - name: "Collector"
+    description: "Discover 100 different items."
+    icon: "🧺"
+    match: 'ITEMS DISCOVERED: n=100\b'
+    case_insensitive: true
+
+  - name: "Curator"
+    description: "Discover 300 different items."
+    icon: "🏛️"
+    match: 'ITEMS DISCOVERED: n=300\b'
+    case_insensitive: true
+
+  # ======================================================================
+  # STONE AGE
+  # ======================================================================
+
+  - name: "Rock Solid"
+    description: "Pick up your first stone."
+    icon: "🪨"
+    match: 'ITEM ACQUIRED: stone-\S+ \|'
+    case_insensitive: true
+
+  - name: "Spark of Genius"
+    description: "Find a piece of flint."
+    icon: "✨"
+    match: 'ITEM ACQUIRED: flint \|'
+    case_insensitive: true
+
+  - name: "Knapper"
+    description: "Craft a flint axe or knife."
+    icon: "🪓"
+    match: 'ITEM ACQUIRED: (axe|knife)-flint \|'
+    case_insensitive: true
+
+  - name: "Hearth"
+    description: "Build or light a fire pit."
+    icon: "🔥"
+    match: 'BLOCK (PLACED|USED): firepit'
+    case_insensitive: true
+
+  - name: "Clay Hands"
+    description: "Dig up some clay."
+    icon: "🏺"
+    match: 'ITEM ACQUIRED: (raw)?clay'
+    case_insensitive: true
+
+  - name: "Kiln Master"
+    description: "Build a pit kiln."
+    icon: "🧱"
+    match: 'BLOCK (PLACED|USED): pitkiln'
+    case_insensitive: true
+
+  - name: "Fired Up"
+    description: "Get your hands on a fired clay vessel."
+    icon: "🍶"
+    match: 'ITEM ACQUIRED: \S*burned'
+    case_insensitive: true
+
+  # ======================================================================
+  # METALLURGY
+  # ======================================================================
+
+  - name: "Something Green"
+    description: "Mine your first copper ore."
+    icon: "🟢"
+    match: 'BLOCK BROKEN: ore-\S*(nativecopper|malachite)'
+    case_insensitive: true
+
+  - name: "Copper Age"
+    description: "Smelt a copper ingot."
+    icon: "🟠"
+    match: 'ITEM ACQUIRED: ingot-copper \|'
+    case_insensitive: true
+
+  - name: "Copper Pick"
+    description: "Craft a copper pickaxe."
+    icon: "⛏️"
+    match: 'ITEM ACQUIRED: pickaxe-copper \|'
+    case_insensitive: true
+
+  - name: "Anvil Chorus"
+    description: "Get yourself an anvil."
+    icon: "⚒️"
+    match: 'ITEM ACQUIRED: anvil-'
+    case_insensitive: true
+
+  - name: "Bronze Age"
+    description: "Cast a bronze ingot."
+    icon: "🥉"
+    match: 'ITEM ACQUIRED: ingot-(tinbronze|bismuthbronze|blackbronze) \|'
+    case_insensitive: true
+
+  - name: "Bronze Pick"
+    description: "Craft a bronze pickaxe."
+    icon: "🔨"
+    match: 'ITEM ACQUIRED: pickaxe-(tinbronze|bismuthbronze|blackbronze) \|'
+    case_insensitive: true
+
+  - name: "Iron Will"
+    description: "Smelt an iron bloom in a bloomery."
+    icon: "🧲"
+    match: 'ITEM ACQUIRED: ironbloom'
+    case_insensitive: true
+
+  - name: "Iron Age"
+    description: "Forge an iron ingot."
+    icon: "🔩"
+    match: 'ITEM ACQUIRED: ingot-iron \|'
+    case_insensitive: true
+
+  - name: "Iron Pick"
+    description: "Craft an iron pickaxe."
+    icon: "⛓️"
+    match: 'ITEM ACQUIRED: pickaxe-iron \|'
+    case_insensitive: true
+
+  - name: "Falling Star"
+    description: "Get your hands on meteoric iron."
+    icon: "☄️"
+    match: 'ITEM ACQUIRED: \S*meteoriciron'
+    case_insensitive: true
+
+  - name: "Steel Yourself"
+    description: "Produce a steel ingot."
+    icon: "🛡️"
+    match: 'ITEM ACQUIRED: ingot-steel \|'
+    case_insensitive: true
+
+  - name: "Steel Pick"
+    description: "Craft a steel pickaxe."
+    icon: "🗡️"
+    match: 'ITEM ACQUIRED: pickaxe-steel \|'
+    case_insensitive: true
+
+  - name: "Gold Rush"
+    description: "Cast a gold ingot."
+    icon: "🥇"
+    match: 'ITEM ACQUIRED: ingot-gold \|'
+    case_insensitive: true
+
+  - name: "Silver Lining"
+    description: "Cast a silver ingot."
+    icon: "🥈"
+    match: 'ITEM ACQUIRED: ingot-silver \|'
+    case_insensitive: true
+
+  - name: "Metallurgist"
+    description: "Produce copper, bronze, iron and steel ingots."
+    icon: "🏅"
+    all:
+      - 'ITEM ACQUIRED: ingot-copper \|'
+      - 'ITEM ACQUIRED: ingot-(tinbronze|bismuthbronze|blackbronze) \|'
+      - 'ITEM ACQUIRED: ingot-iron \|'
+      - 'ITEM ACQUIRED: ingot-steel \|'
+    case_insensitive: true
+
+  - name: "Black Gold"
+    description: "Find coal."
+    icon: "⚫"
+    match: 'ITEM ACQUIRED: \S*(lignite|bituminouscoal|anthracite)'
+    case_insensitive: true
+
+  # ======================================================================
+  # MINING & BUILDING
+  # ======================================================================
+
+  - name: "First Dig"
+    description: "Break your first block."
+    icon: "⛏️"
+    match: 'BLOCKS BROKEN: n=1\b'
+    case_insensitive: true
+
+  - name: "Digger"
+    description: "Break 100 blocks."
+    icon: "🕳️"
+    match: 'BLOCKS BROKEN: n=100\b'
+    case_insensitive: true
+
+  - name: "Miner"
+    description: "Break 1,000 blocks."
+    icon: "🪙"
+    match: 'BLOCKS BROKEN: n=1000\b'
+    case_insensitive: true
+
+  - name: "Strip Miner"
+    description: "Break 10,000 blocks."
+    icon: "🚜"
+    match: 'BLOCKS BROKEN: n=10000\b'
+    case_insensitive: true
+
+  - name: "Terraformer"
+    description: "Break 50,000 blocks."
+    icon: "🌋"
+    match: 'BLOCKS BROKEN: n=50000\b'
+    case_insensitive: true
+
+  - name: "First Brick"
+    description: "Place your first block."
+    icon: "🧱"
+    match: 'BLOCKS PLACED: n=1\b'
+    case_insensitive: true
+
+  - name: "Builder"
+    description: "Place 100 blocks."
+    icon: "🏠"
+    match: 'BLOCKS PLACED: n=100\b'
+    case_insensitive: true
+
+  - name: "Architect"
+    description: "Place 1,000 blocks."
+    icon: "🏰"
+    match: 'BLOCKS PLACED: n=1000\b'
+    case_insensitive: true
+
+  - name: "Megastructure"
+    description: "Place 10,000 blocks."
+    icon: "🏙️"
+    match: 'BLOCKS PLACED: n=10000\b'
+    case_insensitive: true
+
+  - name: "Delver"
+    description: "Go 25 metres below sea level."
+    icon: "🔦"
+    match: 'DEPTH REACHED: m=25\b'
+    case_insensitive: true
+
+  - name: "Deep Delver"
+    description: "Go 75 metres below sea level."
+    icon: "🦇"
+    match: 'DEPTH REACHED: m=75\b'
+    case_insensitive: true
+
+  - name: "Rock Bottom"
+    description: "Go 100 metres below sea level."
+    icon: "🌑"
+    match: 'DEPTH REACHED: m=100\b'
+    case_insensitive: true
+
+  - name: "Hill Climber"
+    description: "Reach 50 metres above sea level."
+    icon: "⛰️"
+    match: 'ALTITUDE REACHED: m=50\b'
+    case_insensitive: true
+
+  - name: "Peak Performance"
+    description: "Reach 100 metres above sea level."
+    icon: "🏔️"
+    match: 'ALTITUDE REACHED: m=100\b'
+    case_insensitive: true
+
+  # ======================================================================
+  # MECHANICAL POWER
+  # ======================================================================
+
+  - name: "Turning Point"
+    description: "Place an axle, gear or windmill rotor."
+    icon: "⚙️"
+    match: 'BLOCK PLACED: (axle|angledgears|windmillrotor|waterwheel)'
+    case_insensitive: true
+
+  - name: "Helve Hammer"
+    description: "Set up a helve hammer."
+    icon: "🔨"
+    match: 'BLOCK (PLACED|USED): helvehammer'
+    case_insensitive: true
+
+  - name: "Grinding Along"
+    description: "Use a quern."
+    icon: "🌾"
+    match: 'BLOCK (PLACED|USED): quern'
+    case_insensitive: true
+
+  # ======================================================================
+  # FARMING & FOOD
+  # ======================================================================
+
+  - name: "Seed Saver"
+    description: "Get your hands on some seeds."
+    icon: "🌱"
+    match: 'ITEM ACQUIRED: seeds-'
+    case_insensitive: true
+
+  - name: "Green Thumb"
+    description: "Plant a crop."
+    icon: "🪴"
+    match: 'BLOCK PLACED: crop-'
+    case_insensitive: true
+
+  - name: "Harvest Time"
+    description: "Harvest grain."
+    icon: "🌾"
+    match: 'ITEM ACQUIRED: grain-'
+    case_insensitive: true
+
+  - name: "Flour Power"
+    description: "Grind flour."
+    icon: "🥣"
+    match: 'ITEM ACQUIRED: flour-'
+    case_insensitive: true
+
+  - name: "Baker"
+    description: "Bake bread."
+    icon: "🍞"
+    match: 'ITEM ACQUIRED: bread-'
+    case_insensitive: true
+
+  - name: "Pie Maker"
+    description: "Bake a pie."
+    icon: "🥧"
+    match: 'ITEM ACQUIRED: pie-'
+    case_insensitive: true
+
+  - name: "Egg Hunter"
+    description: "Collect an egg."
+    icon: "🥚"
+    match: 'ITEM ACQUIRED: egg-'
+    case_insensitive: true
+
+  - name: "Beekeeper"
+    description: "Harvest honeycomb."
+    icon: "🐝"
+    match: 'ITEM ACQUIRED: honeycomb'
+    case_insensitive: true
+
+  # ======================================================================
+  # HUNTING & COMBAT
+  # ======================================================================
+
+  - name: "Archer"
+    description: "Craft a bow."
+    icon: "🏹"
+    match: 'ITEM ACQUIRED: bow-'
+    case_insensitive: true
+
+  - name: "First Blood"
+    description: "Kill your first creature."
+    icon: "🩸"
+    match: 'ENTITY KILLED:'
+    case_insensitive: true
+
+  - name: "Pest Control"
+    description: "Kill 100 creatures."
+    icon: "💀"
+    match: 'ENTITY KILLED:'
+    count: 100
+    case_insensitive: true
+
+  - name: "Drifter Slayer"
+    description: "Kill a drifter."
+    icon: "🧟"
+    match: 'ENTITY KILLED: drifter'
+    case_insensitive: true
+
+  - name: "Drifter Exterminator"
+    description: "Kill 25 drifters."
+    icon: "⚔️"
+    match: 'ENTITY KILLED: drifter'
+    count: 25
+    case_insensitive: true
+
+  - name: "Deeper Trouble"
+    description: "Kill a stronger drifter variant."
+    icon: "👹"
+    match: 'ENTITY KILLED: drifter-(deep|tainted|corrupt|nightmare)'
+    case_insensitive: true
+
+  - name: "Wolf Pack"
+    description: "Kill a wolf."
+    icon: "🐺"
+    match: 'ENTITY KILLED: wolf'
+    case_insensitive: true
+
+  - name: "Bear Necessities"
+    description: "Kill a bear."
+    icon: "🐻"
+    match: 'ENTITY KILLED: bear'
+    case_insensitive: true
+
+  - name: "Boar Hunter"
+    description: "Kill a wild boar."
+    icon: "🐗"
+    match: 'ENTITY KILLED: boar'
+    case_insensitive: true
+
+  - name: "Hyena Hunter"
+    description: "Kill a hyena."
+    icon: "🦴"
+    match: 'ENTITY KILLED: hyena'
+    case_insensitive: true
+
+  - name: "Hare Raiser"
+    description: "Catch a hare."
+    icon: "🐇"
+    match: 'ENTITY KILLED: hare'
+    case_insensitive: true
+
+  - name: "Locust Plague"
+    description: "Destroy a locust."
+    icon: "🦗"
+    match: 'ENTITY KILLED: locust'
+    case_insensitive: true
+
+  - name: "Eidolon Slayer"
+    description: "Defeat an Eidolon."
+    icon: "🗿"
+    match: 'ENTITY KILLED: eidolon'
+    case_insensitive: true
+    hidden: true
+
+  # ======================================================================
+  # DEATHS
+  # ======================================================================
+
+  - name: "First Fall"
+    description: "Die for the first time."
+    icon: "💫"
+    match: 'PLAYER DIED'
+    case_insensitive: true
+
+  - name: "Slow Learner"
+    description: "Die 10 times."
+    icon: "☠️"
+    match: 'PLAYER DIED'
+    count: 10
+    case_insensitive: true
+
+  - name: "Frequent Flyer"
+    description: "Die 50 times."
+    icon: "⚰️"
+    match: 'PLAYER DIED'
+    count: 50
+    case_insensitive: true
+
+  - name: "Gravity Wins"
+    description: "Die from a fall."
+    icon: "🪂"
+    match: 'PLAYER DIED: .*cause=Gravity'
+    case_insensitive: true
+
+  - name: "Playing with Fire"
+    description: "Die in flames."
+    icon: "🔥"
+    match: 'PLAYER DIED: .*cause=Fire'
+    case_insensitive: true
+
+  - name: "Gone Hungry"
+    description: "Starve to death."
+    icon: "🍽️"
+    match: 'PLAYER DIED: .*cause=Hunger'
+    case_insensitive: true
+
+  - name: "Drifted Away"
+    description: "Get killed by a drifter."
+    icon: "👻"
+    match: 'PLAYER DIED: .*by=drifter'
+    case_insensitive: true
+
+  # ======================================================================
+  # TEMPORAL STABILITY & THE STRANGE
+  # ======================================================================
+
+  - name: "Slightly Off"
+    description: "Let your temporal stability drop below 75%."
+    icon: "🌀"
+    match: 'TEMPORAL STABILITY: below=75\b'
+    case_insensitive: true
+
+  - name: "Unstable"
+    description: "Let your temporal stability drop below 50%."
+    icon: "🌀"
+    match: 'TEMPORAL STABILITY: below=50\b'
+    case_insensitive: true
+
+  - name: "Fraying"
+    description: "Let your temporal stability drop below 25%."
+    icon: "🌪️"
+    match: 'TEMPORAL STABILITY: below=25\b'
+    case_insensitive: true
+
+  - name: "On the Brink"
+    description: "Let your temporal stability drop to almost nothing."
+    icon: "🕳️"
+    match: 'TEMPORAL STABILITY: below=1\b'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Rusty Cog"
+    description: "Find a rusty gear."
+    icon: "⚙️"
+    match: 'ITEM ACQUIRED: gear-rusty'
+    case_insensitive: true
+
+  - name: "Temporal Cog"
+    description: "Get your hands on a temporal gear."
+    icon: "🕰️"
+    match: 'ITEM ACQUIRED: gear-temporal'
+    case_insensitive: true
+
+  - name: "Translocated"
+    description: "Find or use a translocator."
+    icon: "🌌"
+    match: '(BLOCK (PLACED|USED)|ITEM ACQUIRED): \S*translocator'
+    case_insensitive: true
+
+  # ======================================================================
+  # TRAVEL & TIME
+  # ======================================================================
+
+  - name: "Wanderer"
+    description: "Travel 1 km on foot."
+    icon: "🥾"
+    match: 'DISTANCE TRAVELED: km=1\b'
+    case_insensitive: true
+
+  - name: "Trekker"
+    description: "Travel 10 km."
+    icon: "🧭"
+    match: 'DISTANCE TRAVELED: km=10\b'
+    case_insensitive: true
+
+  - name: "Long Walk"
+    description: "Travel 100 km."
+    icon: "🗺️"
+    match: 'DISTANCE TRAVELED: km=100\b'
+    case_insensitive: true
+
+  - name: "Nomad"
+    description: "Travel 500 km."
+    icon: "🐪"
+    match: 'DISTANCE TRAVELED: km=500\b'
+    case_insensitive: true
+
+  - name: "Still Alive"
+    description: "Reach day 10 of the world."
+    icon: "📅"
+    match: 'WORLD DAY: n=10\b'
+    case_insensitive: true
+
+  - name: "Settler"
+    description: "Reach day 30 of the world."
+    icon: "🏕️"
+    match: 'WORLD DAY: n=30\b'
+    case_insensitive: true
+
+  - name: "Veteran"
+    description: "Reach day 100 of the world."
+    icon: "🎖️"
+    match: 'WORLD DAY: n=100\b'
+    case_insensitive: true
+
+  - name: "Old Timer"
+    description: "Reach day 365 of the world."
+    icon: "🕰️"
+    match: 'WORLD DAY: n=365\b'
+    case_insensitive: true
+
+  # ======================================================================
+  # MASTER COLLECTION
+  # ======================================================================
+
+  - name: "Seasoned Survivor"
+    description: "Reach day 100, produce steel, mine 1,000 blocks and travel 100 km."
+    icon: "🌟"
+    all:
+      - 'WORLD DAY: n=100\b'
+      - 'ITEM ACQUIRED: ingot-steel \|'
+      - 'BLOCKS BROKEN: n=1000\b'
+      - 'DISTANCE TRAVELED: km=100\b'
+    case_insensitive: true
+    hidden: true
