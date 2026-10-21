@@ -1,0 +1,776 @@
+# Fear & Hunger achievements for Ludodex
+# Log: ludodex.log, written by the LudodexLogger.js plugin (game folder, next to index.html)
+#
+# None of the generic achievements below depend on any game identifier or
+# text: they work the same on the original English game and on any
+# translated patch. The plugin only logs database IDs, never text.
+# The story achievements (bosses, endings, key items...) match on database
+# IDs taken from YOUR installation's ludodex-dump.txt: IDs may differ between
+# the original game and a translation patch.
+
+achievements:
+
+  # ----------------------------------------------------------------- Combat
+  - name: First Blood
+    description: Kill your first enemy.
+    icon: '🗡️'
+    match: 'ENEMY KILLED:'
+    count: 1
+
+  - name: Slaughterhouse
+    description: Kill 50 enemies.
+    icon: '🪓'
+    match: 'ENEMY KILLED:'
+    count: 50
+
+  - name: Charnel House
+    description: Kill 250 enemies.
+    icon: '💀'
+    match: 'ENEMY KILLED:'
+    count: 250
+
+  - name: Baptism of Fire
+    description: Win your first battle.
+    icon: '🔥'
+    match: 'BATTLE WON:'
+    count: 1
+
+  - name: Dungeon Regular
+    description: Win 25 battles.
+    icon: '🏰'
+    match: 'BATTLE WON:'
+    count: 25
+
+  - name: Veteran
+    description: Win 100 battles.
+    icon: '🎖️'
+    match: 'BATTLE WON:'
+    count: 100
+
+  - name: Cowardly Flight
+    description: Flee a battle.
+    icon: '🏃'
+    match: 'BATTLE ESCAPED:'
+    count: 1
+
+  - name: Coward
+    description: Flee 15 battles.
+    icon: '🐈'
+    match: 'BATTLE ESCAPED:'
+    count: 15
+
+  - name: Technician
+    description: Use 100 skills.
+    icon: '✨'
+    match: 'SKILL USED: (?!.*map=(10|73) )'
+    count: 100
+
+  - name: Weapons Master
+    description: Use 500 skills.
+    icon: '⚔️'
+    match: 'SKILL USED: (?!.*map=(10|73) )'
+    count: 500
+
+  # ------------------------------------------------------------- Survival
+  - name: First Loss
+    description: Watch a character die.
+    icon: '⚰️'
+    match: 'ACTOR DIED:'
+    count: 1
+
+  - name: Hecatomb
+    description: Watch 10 characters die.
+    icon: '☠️'
+    match: 'ACTOR DIED:'
+    count: 10
+    hidden: true
+
+  - name: This Is Only The Beginning
+    description: See the game over screen.
+    icon: '🪦'
+    match: 'GAME OVER:'
+    count: 1
+
+  - name: Relentless
+    description: See the game over screen 10 times.
+    icon: '🧟'
+    match: 'GAME OVER:'
+    count: 10
+    hidden: true
+
+  - name: Marked For Life
+    description: Suffer 25 status effects.
+    icon: '🦠'
+    match: 'STATE ADDED: (?!.*map=(10|73) )'
+    count: 25
+    hidden: true
+
+  - name: Survival Instinct
+    description: Use 25 items.
+    icon: '🎒'
+    match: 'ITEM USED: (?!.*map=(10|73) )'
+    count: 25
+
+  - name: Resourceful
+    description: Use 100 items.
+    icon: '🧰'
+    match: 'ITEM USED: (?!.*map=(10|73) )'
+    count: 100
+
+  - name: Better Safe Than Sorry
+    description: Save the game 10 times.
+    icon: '💾'
+    match: 'GAME SAVED:'
+    count: 10
+
+  - name: One More Time
+    description: Start 3 new games.
+    icon: '🔁'
+    match: 'NEW GAME:'
+    count: 3
+
+  # --------------------------------------------------------------- Party
+  - name: Companion In Misfortune
+    description: Recruit your first ally.
+    icon: '🤝'
+    match: 'PARTY JOIN: (?!.*map=(10|73) )'
+    count: 1
+
+  - name: The Gang
+    description: Recruit 4 allies.
+    icon: '👥'
+    match: 'PARTY JOIN: (?!.*map=(10|73) )'
+    count: 4
+
+  - name: Apprenticeship
+    description: Learn 3 skills.
+    icon: '📖'
+    match: 'SKILL LEARNED: (?!.*map=(10|73) )'
+    count: 3
+
+  # ----------------------------------------------------------- Exploration
+  # LOCATION / ITEM / ENEMY DISCOVERED are logged only once per location,
+  # item or enemy: the counter therefore tracks distinct entries.
+  - name: First Steps
+    description: Discover 10 locations.
+    icon: '👣'
+    match: 'LOCATION DISCOVERED: (?!.*map=(10|73) )'
+    count: 10
+
+  - name: Cartographer
+    description: Discover 30 locations.
+    icon: '🗺️'
+    match: 'LOCATION DISCOVERED: (?!.*map=(10|73) )'
+    count: 30
+
+  - name: Wanderer
+    description: Discover 60 locations.
+    icon: '🧭'
+    match: 'LOCATION DISCOVERED: (?!.*map=(10|73) )'
+    count: 60
+
+  - name: Scavenger
+    description: Obtain 15 different items.
+    icon: '🧺'
+    match: 'ITEM DISCOVERED: (?!.*map=(10|73) )'
+    count: 15
+
+  - name: Collector
+    description: Obtain 40 different items.
+    icon: '📦'
+    match: 'ITEM DISCOVERED: (?!.*map=(10|73) )'
+    count: 40
+
+  - name: Looter
+    description: Obtain 80 different items.
+    icon: '💰'
+    match: 'ITEM DISCOVERED: (?!.*map=(10|73) )'
+    count: 80
+
+  - name: Bestiary
+    description: Encounter 10 different enemy types.
+    icon: '🐾'
+    match: 'ENEMY DISCOVERED:'
+    count: 10
+
+  - name: Encyclopedia Of Horror
+    description: Encounter 25 different enemy types.
+    icon: '📚'
+    match: 'ENEMY DISCOVERED:'
+    count: 25
+
+  # ------------------------------------------------------ Combat (cont.)
+  - name: Monster Hunter
+    description: Kill 10 different enemy types.
+    icon: '🎯'
+    match: 'ENEMY FIRST KILLED:'
+    count: 10
+
+  - name: Legendary Slayer
+    description: Kill 25 different enemy types.
+    icon: '🐉'
+    match: 'ENEMY FIRST KILLED:'
+    count: 25
+
+  - name: No Mercy
+    description: Kill 1000 enemies.
+    icon: '💢'
+    match: 'ENEMY KILLED:'
+    count: 1000
+
+  - name: Tactician
+    description: Win 15 different battles.
+    icon: '🧠'
+    match: 'BATTLE FIRST WON:'
+    count: 15
+
+  - name: Grand Tactician
+    description: Win 40 different battles.
+    icon: '🧩'
+    match: 'BATTLE FIRST WON:'
+    count: 40
+
+  - name: Lone Wolf
+    description: Win a battle while alone.
+    icon: '🐺'
+    match: 'BATTLE WON: party=1 '
+    count: 1
+
+  - name: One Against All
+    description: Win 10 battles while alone.
+    icon: '🗿'
+    match: 'BATTLE WON: party=1 '
+    count: 10
+    hidden: true
+
+  - name: Fallen In Battle
+    description: Lose 5 battles.
+    icon: '🩸'
+    match: 'BATTLE LOST:'
+    count: 5
+    hidden: true
+
+  - name: Well Equipped
+    description: Equip 10 items.
+    icon: '🛡️'
+    match: 'ITEM EQUIPPED:'
+    count: 10
+
+  - name: Change Of Outfit
+    description: Equip 50 items.
+    icon: '👗'
+    match: 'ITEM EQUIPPED:'
+    count: 50
+
+  - name: Scholar
+    description: Learn 10 skills.
+    icon: '🎓'
+    match: 'SKILL LEARNED: (?!.*map=(10|73) )'
+    count: 10
+
+  - name: A Collection Of Ailments
+    description: Suffer 100 status effects.
+    icon: '🧪'
+    match: 'STATE ADDED: (?!.*map=(10|73) )'
+    count: 100
+    hidden: true
+
+  # --------------------------------------------------- Survival / Perseverance
+  - name: Parting Ways
+    description: Watch an ally leave the party.
+    icon: '🚶'
+    match: 'PARTY LEAVE: (?!.*map=(10|73) )'
+    count: 1
+
+  - name: Dispersal
+    description: Watch 3 allies leave the party.
+    icon: '🧳'
+    match: 'PARTY LEAVE: (?!.*map=(10|73) )'
+    count: 3
+    hidden: true
+
+  - name: Step Back
+    description: Load a save 10 times.
+    icon: '⏪'
+    match: 'GAME LOADED:'
+    count: 10
+
+  - name: Dying Is Useless
+    description: See the game over screen 25 times.
+    icon: '😵'
+    match: 'GAME OVER:'
+    count: 25
+    hidden: true
+
+  - name: Regular
+    description: Launch the game 5 times.
+    icon: '💻'
+    match: 'SESSION START:'
+    count: 5
+
+  - name: Addict
+    description: Launch the game 25 times.
+    icon: '🕹️'
+    match: 'SESSION START:'
+    count: 25
+
+  - name: Bottomless Bag
+    description: Pick up 100 items (cumulative).
+    icon: '🛍️'
+    match: 'ITEM ACQUIRED: (?!.*map=(10|73) )'
+    count: 100
+
+  - name: Diogenes Syndrome
+    description: Pick up 500 items (cumulative).
+    icon: '🗄️'
+    match: 'ITEM ACQUIRED: (?!.*map=(10|73) )'
+    count: 500
+    hidden: true
+
+  - name: Trampler
+    description: Enter a map 500 times.
+    icon: '🥾'
+    match: 'LOCATION ENTERED:'
+    count: 500
+
+  # --------------------------------------------------------------- Story
+  # Endings, bosses, recruits, key items and story beats, using the IDs of
+  # YOUR installation (see ludodex-dump.txt; IDs may differ between the
+  # original game and a translation patch). Ending achievements are hidden
+  # (spoilers).
+  #
+  # The plugin writes an ENDING line when the credits roll (common event 310):
+  #   ENDING: map=86 ending=e last_troop=0 throne=0 girl=0 legarde=0 leader=1 | <map>
+  # - ending=   : ending recognized from the final battle's troop, then the map
+  # - throne=1  : the player sat on the Throne of Ascension
+  # - girl/legarde=1 : that character was in the party at the credits
+  # Endings C-II, D and S are deduced from these fields (regex below).
+  # If an ending produces no ENDING line, check ludodex.log for which common
+  # event marks the credits and adjust the creditsEventIds parameter.
+
+  # ---------------------------------------------------------------- Endings
+  - name: The God of Fear & Hunger
+    description: Reach ending A, taking the Girl to the Heart of Darkness.
+    icon: '👶'
+    match: 'ending=a'
+    hidden: true
+
+  - name: The Older One
+    description: Reach ending B, at the Heart of Darkness without the Girl.
+    icon: '🌑'
+    match: 'ending=b'
+    hidden: true
+
+  - name: The Yellow King
+    description: Reach ending C, rejecting Le'garde in the Void.
+    icon: '👑'
+    match: 'ending=c'
+    hidden: true
+
+  - name: The Prophecy
+    description: Reach ending C-II, kneeling before Le'garde in the Void.
+    icon: '🙇'
+    match: 'ENDING: .* ending=none .*throne=1 .*legarde=1 '
+    hidden: true
+
+  - name: A New God
+    description: Reach ending D, taking the Throne of Ascension.
+    icon: '🔱'
+    match: 'ending=d'
+    hidden: true
+
+  - name: Escape?
+    description: Reach ending E, leaving the dungeons after finding Le'garde.
+    icon: '🚪'
+    match: 'ending=e'
+    hidden: true
+
+  - name: The Happy Ending
+    description: 'Cahara''s S ending: place the King''s Crown on your head.'
+    icon: '☀️'
+    match: 'ITEM ACQUIRED: item=189 '
+    hidden: true
+
+  - name: The True God of Fear and Hunger
+    description: 'D''arce''s S ending: cast Rebirth of the Beloved on Le''garde.'
+    icon: '🖤'
+    match: 'SKILL USED: actor=3 skill=290 '
+    hidden: true
+
+  - name: The Enlightenment
+    description: 'Enki''s S ending: claim the Soul Anchor.'
+    icon: '💡'
+    match: 'ITEM ACQUIRED: armor=53 '
+    hidden: true
+
+  - name: The God of Ultra-Violence
+    description: 'Ragnvaldr''s S ending: gather every soul and ascend the Throne.'
+    icon: '🔪'
+    match: 'ENDING: .* ending=none .*throne=1 .*legarde=0 .*leader=5 '
+    hidden: true
+
+  - name: Every Ending
+    description: Discover all 10 endings of the game.
+    icon: '🏆'
+    all:
+      - 'ending=a'
+      - 'ending=b'
+      - 'ending=c'
+      - 'ending=none .*throne=1 .*legarde=1 '
+      - 'ending=d'
+      - 'ending=e'
+      - 'ITEM ACQUIRED: item=189 '
+      - 'SKILL USED: actor=3 skill=290 '
+      - 'ITEM ACQUIRED: armor=53 '
+      - 'ending=none .*throne=1 .*legarde=0 .*leader=5 '
+    hidden: true
+
+  # ------------------------------------------------------------------ Bosses
+  # Matches on BATTLE FIRST WON (once per troop). Several IDs = forms or
+  # variants of the same boss.
+  - name: Crow Mauler
+    description: Defeat the Crow Mauler.
+    icon: '🪶'
+    match: 'BATTLE FIRST WON: troop=(51|52|135) '
+
+  - name: Salmonsnake
+    description: Defeat the Salmonsnake.
+    icon: '🐍'
+    match: 'BATTLE FIRST WON: troop=50 '
+
+  - name: The Tormented One
+    description: Defeat the Tormented One in his Temple.
+    icon: '😖'
+    match: 'BATTLE FIRST WON: troop=(53|72) '
+
+  - name: Hydra
+    description: Defeat the Hydra.
+    icon: '🐲'
+    match: 'BATTLE FIRST WON: troop=13 '
+
+  - name: The Matriarch
+    description: Defeat the Cave Matriarch.
+    icon: '🧌'
+    match: 'BATTLE FIRST WON: troop=(19|20) '
+
+  - name: The Old Knight
+    description: Defeat the Old Knight.
+    icon: '🤺'
+    match: 'BATTLE FIRST WON: troop=(21|22) '
+
+  - name: Moonless
+    description: Defeat Moonless.
+    icon: '🌙'
+    match: 'BATTLE FIRST WON: troop=23 '
+
+  - name: Iron Shakespeare
+    description: Defeat Iron Shakespeare.
+    icon: '🎭'
+    match: 'BATTLE FIRST WON: troop=57 '
+
+  - name: The Nameless
+    description: Defeat the Nameless of Ma'habre.
+    icon: '🕳️'
+    match: 'BATTLE FIRST WON: troop=(97|103|104) '
+
+  - name: The White Angel
+    description: Defeat the White Angel.
+    icon: '😇'
+    match: 'BATTLE FIRST WON: troop=100 '
+
+  - name: The Old Guardian
+    description: Defeat the Old Guardian.
+    icon: '🔐'
+    match: 'BATTLE FIRST WON: troop=101 '
+
+  - name: Valteil
+    description: Defeat Valteil.
+    icon: '👁️'
+    match: 'BATTLE FIRST WON: troop=110 '
+
+  - name: The Dominant One
+    description: Defeat Francois the Dominant One in the Golden Temple.
+    icon: '🥇'
+    match: 'BATTLE FIRST WON: troop=(115|116) '
+
+  - name: Isayah
+    description: Defeat Isayah.
+    icon: '🧿'
+    match: 'BATTLE FIRST WON: troop=138 '
+
+  - name: Ser SerSeymor
+    description: Defeat Ser SerSeymor.
+    icon: '🐗'
+    match: 'BATTLE FIRST WON: troop=205 '
+
+  - name: The Traces of Gro-goroth
+    description: Face the Traces of Gro-goroth at the Heart of Darkness.
+    icon: '💥'
+    match: 'BATTLE FIRST WON: troop=(155|169|170) '
+
+  - name: The Traces of Sylvian
+    description: Face the Traces of Sylvian in the Void.
+    icon: '🌸'
+    match: 'BATTLE FIRST WON: troop=210 '
+
+  - name: The God of Fear and Hunger
+    description: Face the God of Fear and Hunger.
+    icon: '🌟'
+    match: 'BATTLE FIRST WON: troop=130 '
+
+  - name: The Mercenary
+    description: Defeat Cahara in a duel.
+    icon: '🪙'
+    match: 'BATTLE FIRST WON: troop=(67|68) '
+
+  - name: The Dark Priest
+    description: Defeat Enki in a duel.
+    icon: '📿'
+    match: 'BATTLE FIRST WON: troop=(69|70) '
+
+  - name: The Knight
+    description: Defeat D'arce in a duel.
+    icon: '🌹'
+    match: 'BATTLE FIRST WON: troop=119 '
+
+  - name: The Outlander
+    description: Defeat Ragnvaldr in a duel.
+    icon: '🏹'
+    match: 'BATTLE FIRST WON: troop=120 '
+
+  # ---------------------------------------------------------------- Recruits
+  - name: The Girl
+    description: Recruit the Girl.
+    icon: '🧸'
+    match: 'PARTY JOIN: actor=2 (?!map=(10|73) )'
+
+  - name: D'arce
+    description: Recruit D'arce, the Knight.
+    icon: '⚜️'
+    match: 'PARTY JOIN: actor=3 (?!map=(10|73) )'
+
+  - name: Enki
+    description: Recruit Enki, the Dark Priest.
+    icon: '🕯️'
+    match: 'PARTY JOIN: actor=4 (?!map=(10|73) )'
+
+  - name: Ragnvaldr
+    description: Recruit Ragnvaldr, the Outlander.
+    icon: '🏔️'
+    match: 'PARTY JOIN: actor=5 (?!map=(10|73) )'
+
+  - name: Le'garde
+    description: Find Le'garde in his cell.
+    icon: '⭐'
+    match: 'PARTY JOIN: actor=6 (?!map=(10|73) )'
+
+  - name: Moonless Hound
+    description: Recruit the Moonless Hound.
+    icon: '🌕'
+    match: 'PARTY JOIN: actor=7 (?!map=(10|73) )'
+
+  - name: Blood Golem
+    description: Bring a Blood Golem to life.
+    icon: '🧫'
+    match: 'PARTY JOIN: actor=10 (?!map=(10|73) )'
+
+  - name: Buckman
+    description: Recruit Buckman.
+    icon: '🍺'
+    match: 'PARTY JOIN: actor=13 (?!map=(10|73) )'
+
+  - name: Nas'hrah
+    description: Recruit Nas'hrah.
+    icon: '🔥'
+    match: 'PARTY JOIN: actor=14 (?!map=(10|73) )'
+
+  - name: The Ghouls
+    description: Recruit a Ghoul.
+    icon: '🍖'
+    match: 'PARTY JOIN: actor=(16|17|18) (?!map=(10|73) )'
+
+  - name: The Skeletons
+    description: Recruit a Skeleton.
+    icon: '🦴'
+    match: 'PARTY JOIN: actor=(19|20|21) (?!map=(10|73) )'
+
+  - name: The Whole Crew
+    description: Recruit all four playable heroes in a single run.
+    icon: '🎪'
+    all:
+      - 'PARTY JOIN: actor=3 (?!map=(10|73) )'
+      - 'PARTY JOIN: actor=4 (?!map=(10|73) )'
+      - 'PARTY JOIN: actor=5 (?!map=(10|73) )'
+      - 'PARTY JOIN: actor=6 (?!map=(10|73) )'
+    hidden: true
+
+  # ------------------------------------------------------------- Key Items
+  - name: The King's Crown
+    description: Find the King's Crown among Isayah's treasures.
+    icon: '👑'
+    match: 'ITEM ACQUIRED: item=189 '
+
+  - name: Instructions of Rebirth
+    description: Find the Instructions of Rebirth book.
+    icon: '📕'
+    match: 'ITEM ACQUIRED: item=190 '
+
+  - name: The Soul Anchor
+    description: Claim Nosramus' Soul Anchor.
+    icon: '⚓'
+    match: 'ITEM ACQUIRED: armor=53 '
+
+  - name: The Endless Soul
+    description: Obtain the Endless Soul.
+    icon: '🌀'
+    match: 'ITEM ACQUIRED: item=126 '
+
+  - name: The Dominated Soul
+    description: Obtain the Soul of Domination.
+    icon: '🧲'
+    match: 'ITEM ACQUIRED: item=127 '
+
+  - name: The Enlightened Soul
+    description: Obtain the Enlightened Soul.
+    icon: '💫'
+    match: 'ITEM ACQUIRED: item=128 '
+
+  - name: The Tormented Soul
+    description: Obtain the Tormented Soul.
+    icon: '😣'
+    match: 'ITEM ACQUIRED: item=129 '
+
+  - name: The Stone Crown
+    description: Wear the Stone Crown.
+    icon: '🪨'
+    match: 'ITEM ACQUIRED: armor=11 '
+
+  # -------------------------------------------------------- Story Moments
+  - name: The Way Out Reopens
+    description: Make escaping the dungeons possible again.
+    icon: '🛤️'
+    match: 'SWITCH ON: switch=1000 '
+
+  - name: The Torment Ends
+    description: Put the Tormented One down for good.
+    icon: '🕊️'
+    match: 'SWITCH ON: switch=1001 '
+
+  - name: Rescue
+    description: Save Le'garde.
+    icon: '🙌'
+    match: 'SWITCH ON: switch=1003 '
+
+  - name: Too Late
+    description: Find Le'garde dead in his cell.
+    icon: '🪦'
+    match: 'SWITCH ON: switch=1005 '
+    hidden: true
+
+  - name: The Mouth of the God of the Depths
+    description: Open the way to the Heart of Darkness.
+    icon: '🌊'
+    match: 'SWITCH ON: switch=1560 '
+
+  - name: The Throne of Ascension
+    description: Sit on the Throne of Ascension.
+    icon: '🪑'
+    match: 'SWITCH ON: switch=1839 '
+
+  - name: The Soul Tax
+    description: Gather the souls demanded by the Nameless.
+    icon: '🫀'
+    match: 'SWITCH ON: switch=1644 '
+
+  - name: A Caw In The Dark
+    description: The Crow Mauler now stalks the dungeons.
+    icon: '🪶'
+    match: 'SWITCH ON: switch=998 '
+    hidden: true
+
+  - name: The One-Winged
+    description: Cross paths with the One-Winged.
+    icon: '🪽'
+    match: 'SWITCH ON: switch=150 '
+    hidden: true
+
+  - name: One More Crime
+    description: Kill the Girl.
+    icon: '🔪'
+    match: 'SWITCH ON: switch=231 '
+    hidden: true
+
+  # ------------------------------------------------------------- Key Places
+  - name: The God of the Depths
+    description: Reach the lair of the God of the Depths.
+    icon: '🌊'
+    match: 'LOCATION DISCOVERED: map=17 '
+
+  - name: The Tree of the Depths
+    description: Reach the Tree of the Depths.
+    icon: '🌳'
+    match: 'LOCATION DISCOVERED: map=14 '
+
+  - name: The Cavedwellers' Village
+    description: Discover the Cavedwellers' village.
+    icon: '🏠'
+    match: 'LOCATION DISCOVERED: map=22 '
+
+  - name: Ma'habre
+    description: Reach the city of Ma'habre.
+    icon: '🏛️'
+    match: 'LOCATION DISCOVERED: map=26 '
+
+  - name: The Fortress
+    description: Reach the Fortress.
+    icon: '🏰'
+    match: 'LOCATION DISCOVERED: map=74 '
+
+  - name: The Temple of Torment
+    description: Discover the Temple of Torment.
+    icon: '🛐'
+    match: 'LOCATION DISCOVERED: map=78 '
+
+  - name: The Golden Temple
+    description: Enter the Golden Temple of Ma'habre.
+    icon: '💛'
+    match: 'LOCATION DISCOVERED: map=96 '
+
+  - name: The Pit of Enlightenment
+    description: Discover the Pit of Enlightenment.
+    icon: '⛲'
+    match: 'LOCATION DISCOVERED: map=106 '
+
+  - name: The Tower of Endless
+    description: Reach the Tower of Endless.
+    icon: '🗼'
+    match: 'LOCATION DISCOVERED: map=119 '
+
+  - name: The Ancient Tomb
+    description: Explore the Tomb of the Ancient Gods.
+    icon: '⚱️'
+    match: 'LOCATION DISCOVERED: map=149 '
+
+  - name: The Void
+    description: Enter the Void.
+    icon: '🌌'
+    match: 'LOCATION DISCOVERED: map=160 '
+
+  - name: Level 9
+    description: Descend to Level 9.
+    icon: '🪜'
+    match: 'LOCATION DISCOVERED: map=142 '
+
+  - name: Level 10
+    description: Descend to Level 10.
+    icon: '⛏️'
+    match: 'LOCATION DISCOVERED: map=159 '
+
+  # --------------------------------------------------------- Add Your Own
+  # Look up the ID in ludodex-dump.txt (categories: enemy, troop, actor, item,
+  # weapon, armor, map, switch, variable, commonevent), then:
+  # - battle  : 'BATTLE FIRST WON: troop=<ID> '   (trailing space required)
+  # - recruit : 'PARTY JOIN: actor=<ID> '
+  # - item    : 'ITEM ACQUIRED: item=<ID> '  / weapon= / armor=
+  # - story   : 'SWITCH ON: switch=<ID> '
+  # - place   : 'LOCATION DISCOVERED: map=<ID> '
