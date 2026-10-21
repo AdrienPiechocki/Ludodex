@@ -2,7 +2,7 @@
 #
 # To use with the "LudodexLogger" Vintage Story mod (server-side C# mod, works in single player).
 # The mod appends one line per state change to ludodex.log
-# (default: <VintagestoryData>/Logs/ludodex.log, configurable in ModConfig/ludodexlogger.json).
+# (default: <VintagestoryData>/ModData/ludodex/ludodex.log, configurable in ModConfig/ludodexlogger.json).
 # Each pattern is a free-search regular expression, applied line by line.
 # Format of the lines produced by the mod ("<code>" is the game code without the "game:" domain,
 # e.g. ingot-copper, ore-poor-nativecopper-granite, drifter-normal):
