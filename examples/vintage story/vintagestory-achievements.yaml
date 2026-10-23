@@ -22,12 +22,17 @@
 #   ALTITUDE REACHED: m=<25|50|75|100|125>               metres above sea level
 #   TEMPORAL STABILITY: below=<75|50|25|10|1>            percent, first time the player drops under it
 #   WORLD DAY: n=<1|10|30|60|100|200|365|500|1000>       in-game days elapsed in the world
+#   STORY AREA ENTERED: owner=<claim owner name> | desc=<claim description>
+#                                                        first time the player stands inside a server-owned
+#                                                        land claim (story locations are claim-protected)
 #   LUDODEX LOGGER READY: hooked=<n> | missing=<hooks that failed to register>
 #
 # Notes:
 # - Only the first occurrence of each item / block code emits a line (transitions only), so the
-#   log stays small. State is stored in the savegame; run "/ludodex" in chat after deleting or
-#   moving the log to truncate it and re-emit everything.
+#   log stays small. State is stored in the savegame. The log is emptied each time a world is loaded
+#   (config "ClearLogOnStart"), so lines already emitted in a previous session are NOT written again:
+#   Ludodex must keep unlocked achievements itself. Run "/ludodex" in chat to reset the state and
+#   re-emit everything from scratch.
 # - Creative / spectator players are ignored by default (config "OnlySurvival").
 # - Provisional: the line formats are implemented but not seen in a real session yet. The item,
 #   block and entity codes in the patterns below come from the base game as far as known, but
@@ -36,6 +41,14 @@
 #   pattern is fixed by looking up the real code in ludodex.log. Families to double-check:
 #   firepit / pitkiln, ores, bronze alloys, mechanical power blocks, crops, translocators,
 #   the rare drifter variants and the damage "cause" names.
+# - Story achievements: the main story (chapters 1 and 2 as of the wiki; later chapters are not
+#   released yet) is tracked with the map / letter / key items the quest givers hand out, boss kills
+#   and STORY AREA ENTERED. The item codes come from the wiki file names (locatormap-*, letter-*),
+#   the other ones (lens, terminus, pump head, large gear, lore book, glider, eidolon, bell) are loose guesses.
+#   The "enter a location" achievements match keywords in the claim owner / description, which have
+#   not been read in a real session yet: check the STORY AREA ENTERED lines in ludodex.log and tighten
+#   the patterns. Chapter completions use a single line each (no "all:"), so they still work when
+#   the log is emptied between sessions.
 # - count: N counts matching lines (used for kills and deaths).
 # - hidden: true marks achievements whose name or description would spoil something.
 
@@ -453,13 +466,6 @@ achievements:
     match: 'ENTITY KILLED: locust'
     case_insensitive: true
 
-  - name: "Eidolon Slayer"
-    description: "Defeat an Eidolon."
-    icon: "🗿"
-    match: 'ENTITY KILLED: eidolon'
-    case_insensitive: true
-    hidden: true
-
   # ======================================================================
   # DEATHS
   # ======================================================================
@@ -605,6 +611,130 @@ achievements:
     description: "Reach day 365 of the world."
     icon: "🕰️"
     match: 'WORLD DAY: n=365\b'
+    case_insensitive: true
+
+  # ======================================================================
+  # MAIN STORY - CHAPTER ONE: THE RESONANCE ARCHIVES
+  # ======================================================================
+
+  - name: "Know of Any Interesting Places?"
+    description: "Trade a tin bronze pickaxe to a Treasure Hunter for the map to the Resonance Archives."
+    icon: "📜"
+    match: 'ITEM ACQUIRED: locatormap-resonancearchive \|'
+    case_insensitive: true
+
+  - name: "Into the Echo"
+    description: "Enter the Resonance Archives."
+    icon: "🕳️"
+    match: 'STORY AREA ENTERED: .*(resonance|archive)'
+    case_insensitive: true
+
+  - name: "Pump It Up"
+    description: "Find a pump head in the mines of the Archives."
+    icon: "🔧"
+    match: 'ITEM ACQUIRED: \S*pump\S*head'
+    case_insensitive: true
+
+  - name: "Gear Up"
+    description: "Find the large temporal gear."
+    icon: "⚙️"
+    match: 'ITEM ACQUIRED: \S*(large\S*gear|gear\S*large)'
+    case_insensitive: true
+
+  - name: "Silence the Bell"
+    description: "Destroy a Bell."
+    icon: "🔔"
+    match: 'ENTITY KILLED: \S*bell'
+    case_insensitive: true
+
+  - name: "Eidolon Slayer"
+    description: "Defeat the Eidolon guarding the library."
+    icon: "🗿"
+    match: 'ENTITY KILLED: eidolon'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Bookworm"
+    description: "Take a lore book from the library shelves."
+    icon: "📚"
+    match: 'ITEM ACQUIRED: \S*lore'
+    case_insensitive: true
+
+  - name: "Leap of Faith"
+    description: "Get your hands on a glider."
+    icon: "🪂"
+    match: 'ITEM ACQUIRED: glider'
+    case_insensitive: true
+
+  - name: "Chapter One: Echoes"
+    description: "Listen to the library resonator and receive directions to the Lazaret."
+    icon: "📖"
+    match: 'ITEM ACQUIRED: letter-lazaret \|'
+    case_insensitive: true
+
+  # ======================================================================
+  # MAIN STORY - CHAPTER TWO: THE JOURNEY
+  # ======================================================================
+
+  - name: "Lazaret Bound"
+    description: "Reach the Lazaret."
+    icon: "🏚️"
+    match: 'STORY AREA ENTERED: .*lazaret'
+    case_insensitive: true
+
+  - name: "Take Hope"
+    description: "Take the faded and crumpled letter from the skeleton in the Lazaret."
+    icon: "✉️"
+    match: 'ITEM ACQUIRED: letter-faded \|'
+    case_insensitive: true
+
+  - name: "Nadiya"
+    description: "Reach Nadiya village."
+    icon: "🏘️"
+    match: 'STORY AREA ENTERED: .*(nadiya|village)'
+    case_insensitive: true
+
+  - name: "Watch the Skies"
+    description: "Receive the map to the Devastation from Gerhardt."
+    icon: "🗺️"
+    match: 'ITEM ACQUIRED: locatormap-devastationarea \|'
+    case_insensitive: true
+
+  - name: "Before You Come to Me"
+    description: "Receive the map to Tobias' cave from Agnieszka."
+    icon: "🧭"
+    match: 'ITEM ACQUIRED: locatormap-cavetobias \|'
+    case_insensitive: true
+
+  - name: "The Devastation"
+    description: "Enter the Devastation."
+    icon: "🌪️"
+    match: 'STORY AREA ENTERED: .*devastation'
+    case_insensitive: true
+
+  - name: "Through the Lens"
+    description: "Retrieve the lens from the top of the tower."
+    icon: "🔭"
+    match: 'ITEM ACQUIRED: \S*lens'
+    case_insensitive: true
+
+  - name: "Saint Tobias"
+    description: "Enter Tobias' cave."
+    icon: "🧙"
+    match: 'STORY AREA ENTERED: .*tobias'
+    case_insensitive: true
+
+  - name: "Chapter Two: The Journey"
+    description: "Bring the lens to Tobias and receive the parts for the terminus teleporter."
+    icon: "🌀"
+    match: 'ITEM ACQUIRED: \S*terminus'
+    case_insensitive: true
+    hidden: true
+
+  - name: "Off the Beaten Path"
+    description: "Enter any story location."
+    icon: "🏛️"
+    match: 'STORY AREA ENTERED:'
     case_insensitive: true
 
   # ======================================================================
