@@ -126,10 +126,34 @@ def open_url(url):
         return False
 
 
-# Variables d'affichage et de locale qu'un processus HÔTE doit recevoir
+# Variables de locale et de session qu'un processus HÔTE doit recevoir
 # explicitement quand l'environnement transmis n'est pas celui de la session.
-PASSE = ("DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XDG_SESSION_TYPE",
-         "LANG", "LC_ALL", "LC_MESSAGES")
+#
+# L'AFFICHAGE n'y figure pas, et c'est volontaire : dans le bac à sable, flatpak
+# a remplacé WAYLAND_DISPLAY par son propre alias local (`wayland-0`, un proxy
+# interne au sandbox, absent de l'hôte) et retiré DISPLAY quand le manifeste
+# n'accorde que `--socket=fallback-x11`. Ré-exportées telles quelles, ces valeurs
+# font chercher au processus hôte un serveur qui n'existe pas chez lui : il meurt
+# sur place (core dump de Qt/GLFW — « xdg-open : kde-open Abandon (core
+# dumped) »), donc aucun jeu ne se lance. Le bon affichage est celui de la
+# SESSION : `flatpak-spawn --host` le fournit déjà de lui-même, et
+# `cyberrealm_wrapper` le précise pour le bureau virtuel CyberRealm.
+PASSE = ("XDG_RUNTIME_DIR", "XDG_SESSION_TYPE", "LANG", "LC_ALL", "LC_MESSAGES")
+
+
+def cyberrealm_wrapper():
+    """`[chemin de cyberrealm-launch]` si l'utilisateur l'a installé, sinon `[]`.
+
+    Ce wrapper de l'HÔTE pose l'affichage de la session CyberRealm avant d'exec
+    la commande : le socket du jeu (`$XDG_RUNTIME_DIR/cyberrealm-0`) et son
+    affichage X11 publié dans `cyberrealm-x11-display` — sans quoi les apps X11
+    partent sur `:0`, l'affichage de KWin, derrière le verrou de session du jeu,
+    invisibles. Le bac à sable ne VOIT PAS le socket du jeu (flatpak filtre
+    `$XDG_RUNTIME_DIR`) : la décision ne peut donc pas être prise ici, elle est
+    laissée au wrapper, côté hôte, qui exec la commande telle quelle dès que le
+    jeu n'est pas en cours — d'où un coût nul partout ailleurs."""
+    p = pathlib.Path.home() / ".local" / "bin" / "cyberrealm-launch"
+    return [str(p)] if os.access(p, os.X_OK) else []
 
 
 def in_flatpak(env=None):
@@ -141,15 +165,18 @@ def host_argv(argv, env_vars=None, env=None):
     """Commande exécutant `argv` sur l'HÔTE — un bac à sable ne peut pas lancer les
     binaires hôtes (`steam`, `xdg-open`, `lutris`…) lui-même.
 
-    Hors Flatpak : `argv` inchangé. Dedans : `flatpak-spawn --host` reçoit un `sh -c`
-    qui dépouille d'abord l'environnement du sandbox — les `FLATPAK_*` de `flatpak run`,
-    et surtout `XDG_DATA_HOME` / `XDG_CONFIG_HOME` / … redirigés vers `~/.var/app/…` :
-    sans ce retrait, `xdg-open` lirait le mauvais `mimeapps.list` et les jeux
-    rangeraient leurs sauvegardes chez Ludodex — puis ré-exporte l'affichage (`PASSE`)
-    et les variables d'en-tête de la commande, et `exec` l'argv d'origine.
+    Hors Flatpak : `argv`, préfixé de `cyberrealm_wrapper()` (absent = inchangé).
+    Dedans : `flatpak-spawn --host` reçoit un `sh -c` qui dépouille d'abord
+    l'environnement du sandbox — les `FLATPAK_*` de `flatpak run`, et surtout
+    `XDG_DATA_HOME` / `XDG_CONFIG_HOME` / … redirigés vers `~/.var/app/…` : sans
+    ce retrait, `xdg-open` lirait le mauvais `mimeapps.list` et les jeux
+    rangeraient leurs sauvegardes chez Ludodex — puis ré-exporte `PASSE` (jamais
+    l'affichage, voir plus haut) et les variables d'en-tête de la commande, et
+    `exec` la commande — wrapper CyberRealm compris.
     `XDG_RUNTIME_DIR`, lui, reste : son chemin est le même des deux côtés."""
+    commande = [*cyberrealm_wrapper(), *argv]
     if not in_flatpak(env):
-        return list(argv)
+        return commande
     e = _env(env)
     avant = {k: e[k] for k in PASSE if k in e}
     exports = " ".join(f"export {k}={shlex.quote(str(v))};" for k, v in
@@ -157,7 +184,7 @@ def host_argv(argv, env_vars=None, env=None):
     script = ('for v in $(env | cut -d= -f1 | grep "^FLATPAK_"); do unset "$v"; done; '
               'unset XDG_DATA_HOME XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_DIRS XDG_CONFIG_DIRS; '
               + (exports + " " if exports else "") + 'exec "$@"')
-    return ["flatpak-spawn", "--host", "sh", "-c", script, "sh", *argv]
+    return ["flatpak-spawn", "--host", "sh", "-c", script, "sh", *commande]
 
 
 # Scan des processus de l'HÔTE, exécuté par `sh -c` derrière flatpak-spawn.
