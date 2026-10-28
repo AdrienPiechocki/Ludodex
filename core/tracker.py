@@ -461,7 +461,18 @@ def _hits(d, line):
         return 1 if d["regexes"][0].search(line) else 0
     if d["op"] == "any":
         return 1 if any(r.search(line) for r in d["regexes"]) else 0
-    return sum(1 for r in d["regexes"] if r.search(line))  # « all » : chaque pattern présent compte
+    # « all » : chaque pattern présent sur CETTE ligne compte ? 
+    # Non - on doit suivre les patterns vus dans TOUT le log
+    return sum(1 for r in d["regexes"] if r.search(line))
+
+
+def _hits_all(d, line):
+    """Pour 'all', renvoie les indices des patterns correspondant à cette ligne."""
+    hits = []
+    for i, r in enumerate(d["regexes"]):
+        if r.search(line):
+            hits.append(i)
+    return hits
 
 
 def scan(con, gid, now=None):
@@ -504,9 +515,61 @@ def scan(con, gid, now=None):
         # additionnerait aux compteurs déjà posés.
         con.execute("DELETE FROM achievements WHERE game_id=?", (gid,))
     state = {r["ach_id"]: dict(r) for r in con.execute(
-        "SELECT ach_id, count, unlocked_at FROM achievements WHERE game_id=?", (gid,))}
+        "SELECT ach_id, count, unlocked_at, seen_patterns FROM achievements WHERE game_id=?", (gid,))}
+    # Pour les "all", on doit cumuler les patterns vus depuis le début du suivi
+    all_seen = {}
+    for d in defs:
+        if d["op"] == "all":
+            st = state.get(d["id"])
+            if st and st.get("seen_patterns"):
+                try:
+                    all_seen[d["id"]] = set(s for s in st["seen_patterns"].split(',') if s)
+                except Exception:
+                    all_seen[d["id"]] = set()
+            else:
+                all_seen[d["id"]] = set()
+    # Lire depuis le début du log pour les "all" (on a déjà tracké la position)
+    # Mais si on vient de reset, on veut repartir à partir de maintenant
+    # Vérifier si c'est un reset récent - on regarde si la position correspond au reset
+    try:
+        with open(log_path, "rb") as f:
+            full_data = f.read()
+        # Pour les 'all', scanner tout le log depuis le début (car les patterns peuvent apparaître n'importe où)
+        # Mais on doit respecter que si on a reset, on ne veut compter que ce qui est arrivé après reset
+        full_lines = full_data.decode("utf-8", "replace").splitlines()
+    except Exception:
+        full_lines = data.decode("utf-8", "replace").splitlines()
+    # Si on n'a pas d'état existant pour ce 'all' (reset), on ne doit compter que les nouvelles lignes
+    for line in data.decode("utf-8", "replace").splitlines():  # seulement nouvelles lignes si pas d'état
+        for d in defs:
+            if d["op"] == "all":
+                st = state.get(d["id"])
+                # Si pas d'état et pas débloqué, c'est probablement après reset
+                if not st and d["id"] not in all_seen:
+                    all_seen[d["id"]] = set()
+                elif st is None:
+                    all_seen.setdefault(d["id"], set())
+                else:
+                    # a déjà un état, on cumule
+                    pass
+                hit_indices = _hits_all(d, line)
+                if hit_indices:
+                    all_seen.setdefault(d["id"], set()).update(str(i) for i in hit_indices)
+    # Mettre à jour l'état pour les "all"
+    for d in defs:
+        if d["op"] == "all":
+            st = state.get(d["id"])
+            new_count = len(all_seen.get(d["id"], set()))
+            if st is None:
+                st = state[d["id"]] = {"ach_id": d["id"], "count": 0, "unlocked_at": 0}
+            st["count"] = min(d["target"], new_count)
+            if st["count"] >= d["target"] and not st["unlocked_at"]:
+                st["unlocked_at"] = now
+    # Traiter les autres types (match/any) avec les nouvelles lignes seulement (comportement incrémental)
     for line in data.decode("utf-8", "replace").splitlines():
         for d in defs:
+            if d["op"] == "all":
+                continue  # déjà traité
             st = state.get(d["id"])
             if st and st["unlocked_at"]:
                 continue  # déjà acquis
@@ -522,11 +585,12 @@ def scan(con, gid, now=None):
     for d in defs:
         st = state.get(d["id"])
         if st:
+            seen_patterns_str = ','.join(sorted(all_seen.get(d["id"], set()))) if d["op"] == "all" else ''
             con.execute(
-                "INSERT INTO achievements (game_id, ach_id, count, unlocked_at) VALUES (?,?,?,?) "
+                "INSERT INTO achievements (game_id, ach_id, count, unlocked_at, seen_patterns) VALUES (?,?,?,?,?) "
                 "ON CONFLICT(game_id, ach_id) DO UPDATE SET count=excluded.count, "
-                "unlocked_at=excluded.unlocked_at",
-                (gid, d["id"], st["count"], st["unlocked_at"]))
+                "unlocked_at=excluded.unlocked_at, seen_patterns=excluded.seen_patterns",
+                (gid, d["id"], st["count"], st["unlocked_at"], seen_patterns_str))
     con.execute(
         "INSERT INTO tracker_logs (game_id, log_path, offset, size, prefix, yaml) VALUES (?,?,?,?,?,?) "
         "ON CONFLICT(game_id, log_path) DO UPDATE SET offset=excluded.offset, size=excluded.size, "

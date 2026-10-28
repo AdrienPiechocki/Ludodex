@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS achievements (
     ach_id TEXT NOT NULL,
     count INTEGER NOT NULL DEFAULT 0,
     unlocked_at INTEGER NOT NULL DEFAULT 0,
+    seen_patterns TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (game_id, ach_id)
 );
 CREATE TABLE IF NOT EXISTS ra_achievements (
@@ -130,6 +131,9 @@ def db():
     tcols = {r["name"] for r in con.execute("PRAGMA table_info(tracker_logs)")}
     if "yaml" not in tcols:  # la position de lecture vaut pour le YAML qui l'a produite
         con.execute("ALTER TABLE tracker_logs ADD COLUMN yaml TEXT NOT NULL DEFAULT ''")
+    acols = {r["name"] for r in con.execute("PRAGMA table_info(achievements)")}
+    if "seen_patterns" not in acols:
+        con.execute("ALTER TABLE achievements ADD COLUMN seen_patterns TEXT NOT NULL DEFAULT ''")
     ensure_auto_collections(con)
     con.execute("PRAGMA foreign_keys=ON")
     load_lang(con)  # langue choisie dans les réglages (sinon celle du système)
