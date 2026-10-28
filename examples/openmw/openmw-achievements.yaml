@@ -147,59 +147,59 @@ achievements:
     count: 50
     case_insensitive: true
 
-  - name: "Mainland Fighter"
-    description: "Complete 10 Fighters Guild quests on the mainland."
+  - name: "Blade for Hire"
+    description: "Complete 10 Fighters Guild quests."
     icon: "⚔️"
-    match: 'QUEST COMPLETE: tr_m\d_fg_'
+    match: 'QUEST COMPLETE: (tr_m\d_)?fg_'
     count: 10
     case_insensitive: true
 
-  - name: "Mainland Assassin"
-    description: "Complete 5 Morag Tong quests on the mainland."
+  - name: "Contract Killer"
+    description: "Complete 5 Morag Tong quests."
     icon: "🗡️"
-    match: 'QUEST COMPLETE: tr_m\d_mt_'
+    match: 'QUEST COMPLETE: (tr_m\d_)?mt_'
     count: 5
     case_insensitive: true
 
-  - name: "Mainland Pilgrim"
-    description: "Complete 10 Tribunal Temple quests on the mainland."
+  - name: "Devout Servant"
+    description: "Complete 10 Tribunal Temple quests."
     icon: "🕯️"
-    match: 'QUEST COMPLETE: tr_m\d_tt_'
+    match: 'QUEST COMPLETE: (tr_m\d_)?tt_'
     count: 10
     case_insensitive: true
 
-  - name: "Mainland Legionnaire"
-    description: "Complete 5 Imperial Legion quests on the mainland."
+  - name: "Imperial Footsoldier"
+    description: "Complete 5 Imperial Legion quests."
     icon: "🦅"
-    match: 'QUEST COMPLETE: tr_m\d_il_'
+    match: 'QUEST COMPLETE: (tr_m\d_)?il_'
     count: 5
     case_insensitive: true
 
-  - name: "Mainland Mage"
-    description: "Complete 10 Mages Guild quests on the mainland."
+  - name: "Arcane Errand Runner"
+    description: "Complete 10 Mages Guild quests."
     icon: "🔮"
-    match: 'QUEST COMPLETE: tr_m\d_mg_'
+    match: 'QUEST COMPLETE: (tr_m\d_)?mg_'
     count: 10
     case_insensitive: true
 
-  - name: "Mainland Thief"
-    description: "Complete 10 Thieves Guild quests on the mainland."
+  - name: "Light Fingers"
+    description: "Complete 10 Thieves Guild quests."
     icon: "🗝️"
-    match: 'QUEST COMPLETE: tr_m\d_tg_'
+    match: 'QUEST COMPLETE: (tr_m\d_)?tg_'
     count: 10
     case_insensitive: true
 
   - name: "Hlaalu Heavyweight"
-    description: "Complete 15 House Hlaalu quests on the mainland."
+    description: "Complete 15 House Hlaalu quests."
     icon: "💰"
-    match: 'QUEST COMPLETE: tr_m\d_hh_'
+    match: 'QUEST COMPLETE: (tr_m\d_)?hh_'
     count: 15
     case_insensitive: true
 
   - name: "Telvanni Errand Boy"
-    description: "Complete 10 House Telvanni quests on the mainland."
+    description: "Complete 10 House Telvanni quests."
     icon: "🍄"
-    match: 'QUEST COMPLETE: tr_m\d_ht_'
+    match: 'QUEST COMPLETE: (tr_m\d_)?ht_'
     count: 10
     case_insensitive: true
 
@@ -2287,16 +2287,16 @@ achievements:
     case_insensitive: true
 
   - name: "Pilgrim's Progress"
-    description: "Complete 25 Tribunal Temple quests on the mainland."
+    description: "Complete 25 Tribunal Temple quests."
     icon: "🕯️"
-    match: 'QUEST COMPLETE: tr_m\d_tt_'
+    match: 'QUEST COMPLETE: (tr_m\d_)?tt_'
     count: 25
     case_insensitive: true
 
-  - name: "Mainland Executioner"
-    description: "Complete 15 Morag Tong quests on the mainland."
+  - name: "Sworn Blade"
+    description: "Complete 15 Morag Tong quests."
     icon: "🗡️"
-    match: 'QUEST COMPLETE: tr_m\d_mt_'
+    match: 'QUEST COMPLETE: (tr_m\d_)?mt_'
     count: 15
     case_insensitive: true
 
