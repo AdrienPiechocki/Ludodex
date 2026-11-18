@@ -1325,10 +1325,15 @@ class LibraryMixin:
 
     def _quick_launch(self, gid):
         g = self.con.execute("SELECT * FROM games WHERE id=?", (gid,)).fetchone()
-        ok = P.launch(self.con, g, on_exit=self._on_game_exit)
+        ok = P.launch(self.con, g, on_exit=self._on_game_exit, on_fail=self._launch_failed)
         self._maj_session_bar()  # session ouverte par ce lancement, précédente closee par lui
         self.toasts.add_toast(Adw.Toast.new(GLib.markup_escape_text(
             tr("▶ Launched. Have fun!") if ok else tr("Couldn't launch: is the game still installed?"))))
+
+    def _launch_failed(self, msg):
+        """Le lanceur est sorti en erreur juste après le démarrage (appelé depuis un fil)."""
+        GLib.idle_add(lambda: self.toasts.add_toast(Adw.Toast.new(
+            GLib.markup_escape_text(tr("Launch failed: {e}", e=msg[:200])))) and False)
 
     def _install(self, gid):
         """Ouvre l'installation chez le lanceur. Ludodex ne peut pas savoir si elle

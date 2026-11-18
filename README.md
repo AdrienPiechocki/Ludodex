@@ -67,6 +67,19 @@ Every launch through Ludodex opens a **session**; its duration is recorded when 
 
 ## Installation
 
+### Quick install (Flatpak, nothing to clone)
+
+Download **`ludodex.flatpak`** from the [latest release](../../releases/latest), then:
+
+```sh
+flatpak install --user ./ludodex.flatpak      # the GNOME runtime is fetched from Flathub if missing
+flatpak run io.github.AdrienPiechocki.Ludodex
+```
+
+The command line is bundled too: `flatpak run --command=ludodex-cli io.github.AdrienPiechocki.Ludodex <command>`
+(every `python3 picker.py <command>` below becomes that). Community achievements, covers,
+HowLongToBeat and exports all work from the package; nothing else needs installing.
+
 ### Linux
 
 Dependencies: Python 3, PyGObject, GTK 4, libadwaita, Cairo and PyYAML (Debian/Ubuntu: `python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 python3-yaml`).
@@ -97,7 +110,7 @@ flatpak-builder --force-clean --user --install --repo=build/repo build/flatpak i
 flatpak build-bundle build/repo build/ludodex.flatpak io.github.AdrienPiechocki.Ludodex
 ```
 
-`build/ludodex.flatpak` is the file attached to a GitHub release; install it with:
+`ludodex.flatpak` is attached to each GitHub release **automatically**: pushing a tag `vX.Y.Z` runs `.github/workflows/release.yml`, which builds the bundle and publishes it. To build it yourself (replace the last command's output path with `build/ludodex.flatpak`), install it with:
 
 ```sh
 flatpak install --user ./ludodex.flatpak
@@ -114,6 +127,7 @@ known, the session falls back to closing on the next launch or when the app clos
 
 ```
 python3 picker.py <command> [options]
+# from the Flatpak: flatpak run --command=ludodex-cli io.github.AdrienPiechocki.Ludodex <command> [options]
 ```
 
 | Command | Effect |

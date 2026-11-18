@@ -31,7 +31,8 @@ modules:
     buildsystem: simple
     build-commands:
       - install -d /app/share/ludodex
-      - cp -a . /app/share/ludodex/
+      # Uniquement ce qui tourne : ni tests, ni docs, ni achievements/ (le dépôt communautaire se lit en ligne).
+      - cp -a gui.py picker.py i18n.py core ui lang share /app/share/ludodex/
       - install -Dm755 flatpak/ludodex /app/bin/ludodex
       - install -Dm755 flatpak/ludodex-cli /app/bin/ludodex-cli
       - install -Dm644 flatpak/io.github.AdrienPiechocki.Ludodex.desktop
@@ -50,3 +51,5 @@ modules:
           - .pytest_cache
           - build
           - __pycache__
+          - docs
+          - tests

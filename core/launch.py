@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """launch.py — construction et exécution des commandes de lancement, d'installation et
 de désinstallation."""
-import json, os, pathlib, re, shutil, sqlite3, subprocess, threading, time
+import json, os, pathlib, re, shutil, sqlite3, subprocess, tempfile, threading, time
 import urllib.error, urllib.request
 from urllib.parse import quote
 
@@ -373,7 +373,28 @@ def _watch_uri(motifs, sid, on_exit, debut, fenetre=None, lister=None, dormir=No
         on_exit(sid)
 
 
-def launch(con, g, on_exit=None):
+def _surveiller_echec(proc, errfile, on_fail):
+    """Un lanceur qui échoue (jeu absent, `flatpak run` refusé…) sort en quelques instants, sans
+    rien montrer : le bouton semblait « ne rien faire ». Dans la fenêtre de grâce, un code de
+    sortie non nul est rapporté avec la fin de la sortie d'erreur."""
+    try:
+        code = proc.wait(timeout=EXIT_GRACE_SEC)
+    except subprocess.TimeoutExpired:
+        return                                   # toujours là : c'est le jeu
+    if code == 0:
+        return
+    try:
+        errfile.seek(0)
+        fin = errfile.read().decode("utf-8", "replace").strip().splitlines()[-3:]
+    except (OSError, ValueError):
+        fin = []
+    msg = " ".join(l.strip() for l in fin) or tr("exit code {code}", code=code)
+    print(tr("! couldn't launch: {e}", e=msg))
+    if on_fail:
+        on_fail(msg)
+
+
+def launch(con, g, on_exit=None, on_fail=None):
     """Lance le jeu et ouvre sa session. Avec `on_exit`, un fil d'attente referme
     cette session à la vraie sortie du jeu — sans quoi la fin n'était que le
     prochain lancement ou la fermeture de l'application, et la frise affichait
@@ -383,12 +404,14 @@ def launch(con, g, on_exit=None):
         env, argv = split_env(cmd)
         if not argv:
             raise ValueError(tr("empty command"))
+        errfile = tempfile.TemporaryFile()       # stderr du lanceur, lue seulement s'il échoue vite
         proc = subprocess.Popen(platform.host_argv(argv, env), cwd=cwd,
                                 env={**os.environ, **env} if env else None,
-                                start_new_session=True)
+                                stderr=errfile, start_new_session=True)
     except (OSError, ValueError) as e:
         print(tr("! couldn't launch: {e}", e=e))
         return False
+    threading.Thread(target=_surveiller_echec, args=(proc, errfile, on_fail), daemon=True).start()
     now = int(time.time())
     close_open_sessions(con, now=now)  # lancer un jeu clôt la session précédente
     con.execute("UPDATE games SET last_played=? WHERE id=?", (now, g["id"]))

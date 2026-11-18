@@ -586,16 +586,21 @@ class SettingsMixin:
             return
         self._covering = True
 
+        errors = []
+
         def work():
             n = 0
             try:
                 con = P.db()
-                n = P.fetch_missing_covers(con)
+                n = P.fetch_missing_covers(con, progress=lambda m: errors.append(m.lstrip("! ")) if m.startswith("!") else None)
                 con.close()
             finally:
                 self._covering = False
             if n:
                 GLib.idle_add(self._after_covers)
+            if errors:   # clé SteamGridDB refusée, réseau coupé… : sinon seules les jaquettes Steam arrivent, sans un mot
+                GLib.idle_add(lambda: self.toasts.add_toast(Adw.Toast.new(
+                    GLib.markup_escape_text(errors[0][:200]))) and False)
         threading.Thread(target=work, daemon=True).start()
 
     def _after_covers(self):

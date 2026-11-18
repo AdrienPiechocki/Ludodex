@@ -537,5 +537,7 @@
   "Story / extras / 100 % durations, kept locally. Game names are sent to howlongtobeat.com only when you press Fetch.": "Durées histoire / extras / 100 %, gardées en local. Les noms de jeux ne sont envoyés à howlongtobeat.com que si vous appuyez sur Récupérer.",
   "Only used for games that have no SteamGridDB or Steam cover. Free Twitch application credentials: api-docs.igdb.com.": "Utilisé seulement pour les jeux sans jaquette SteamGridDB ni Steam. Identifiants gratuits d'application Twitch : api-docs.igdb.com.",
   "Time per game": "Temps par jeu",
-  "max games per run (default: all)": "nombre max de jeux par passage (défaut : tous)"
+  "max games per run (default: all)": "nombre max de jeux par passage (défaut : tous)",
+  "exit code {code}": "code de sortie {code}",
+  "Launch failed: {e}": "Échec du lancement : {e}"
 }
