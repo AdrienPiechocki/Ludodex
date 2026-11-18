@@ -1,3 +1,8 @@
+game:
+  name: "SuperTuxKart"
+  language: en
+  log: "players.xml itself (no mod needed; Flatpak: ~/.var/app/net.supertuxkart.SuperTuxKart/config/supertuxkart/config*/players.xml)"
+
 # SuperTuxKart achievements for Ludodex ("Achievements" module).
 #
 # The "log" to attach is STK's players.xml itself

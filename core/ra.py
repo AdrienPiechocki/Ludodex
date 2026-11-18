@@ -13,6 +13,7 @@ import urllib.parse
 import urllib.request
 
 from i18n import tr
+from . import keystore
 from .db import get_setting, set_setting, _ts
 
 RA_API = "https://retroachievements.org/API"
@@ -32,14 +33,15 @@ def ra_user(con):
     return get_setting(con, "ra_user")
 
 
-def ra_key(con):
-    return get_setting(con, "ra_key")
+def ra_key(con=None):
+    """Clé Web API : fichier `ra.key` (jamais la base). `con` est gardé pour les appelants existants."""
+    return keystore.read("ra_key")
 
 
 def set_ra_credentials(con, user, key):
     """Enregistre le nom d'utilisateur et la clé Web de l'API RetroAchievements."""
     set_setting(con, "ra_user", (user or "").strip())
-    set_setting(con, "ra_key", (key or "").strip())
+    keystore.write("ra_key", key)
 
 
 def ra_enabled(con):

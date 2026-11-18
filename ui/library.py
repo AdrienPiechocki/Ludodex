@@ -1,4 +1,6 @@
 """library.py — page « Bibliothèque » : grille, tri, filtres et collections."""
+import threading
+
 import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
@@ -6,6 +8,7 @@ gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, GObject, Gtk, Pango
 
 import picker as P
+from core import hltb as H
 from i18n import available, get_lang, tr
 from .theme import STATUTS, TILE_W, TILE_H, COVER_PX
 
@@ -848,7 +851,7 @@ class LibraryMixin:
         self._reset_pick()  # filtre du tirage : la proposition en cours est caduque
         self._refresh_covers_summary()  # le compte des couvertures suit les jeux affichés
         if self.show_not_installed:  # couvertures récupérées à la demande
-            self._fetch_covers_bg(include_not_installed=True)
+            self._fetch_covers_bg()
 
     def _on_group_games(self, chk):
         """« Regrouper les jeux » : la grille passe à trois paliers — installés,
@@ -1155,6 +1158,49 @@ class LibraryMixin:
         edit.set_child(edit_box)
         edit.connect("clicked", on_edit)
 
+        # Durées HowLongToBeat : affichées depuis la base ; la récupération (réseau) ne part
+        # que du bouton, jamais toute seule. Le temps restant tient compte du temps joué.
+        hl_group = Adw.PreferencesGroup(margin_top=6)
+        hl_row = Adw.ActionRow(title="HowLongToBeat", subtitle_lines=3)
+        hl_btn = Gtk.Button(icon_name="view-refresh-symbolic", valign=Gtk.Align.CENTER,
+                            css_classes=["flat"], tooltip_text=tr("Fetch durations"))
+        hl_row.add_suffix(hl_btn)
+        hl_group.add(hl_row)
+
+        def refresh_hltb():
+            row = self.con.execute("SELECT * FROM games WHERE id=?", (gid,)).fetchone()
+            text = H.summary(row) if row else ""
+            if text:
+                rem = H.remaining_minutes(row, P.playtime_min(self.con, gid))
+                if rem is not None:
+                    text += "\n" + (tr("Story: about {t} left", t=H.fmt_hours(rem)) if rem
+                                    else tr("Story length reached"))
+            hl_row.set_subtitle(GLib.markup_escape_text(text or tr("No data yet")))
+
+        def on_hltb(_b):
+            hl_btn.set_sensitive(False)
+            hl_row.set_subtitle(tr("Fetching…"))
+
+            def work():
+                try:
+                    con = P.db()
+                    row = con.execute("SELECT * FROM games WHERE id=?", (gid,)).fetchone()
+                    msg = "" if H.fetch_hltb(con, row) else tr("Not found on HowLongToBeat")
+                    con.close()
+                except Exception as e:
+                    msg = tr("Failed: {e}", e=e)
+                GLib.idle_add(done, msg)
+
+            def done(msg):
+                hl_btn.set_sensitive(True)
+                refresh_hltb()
+                if msg:
+                    self.toasts.add_toast(Adw.Toast.new(GLib.markup_escape_text(msg)))
+                return False
+            threading.Thread(target=work, daemon=True).start()
+        hl_btn.connect("clicked", on_hltb)
+        refresh_hltb()
+
         col_group = Adw.PreferencesGroup(title=tr("Collections"), margin_top=6)
         col_rows = []
 
@@ -1204,7 +1250,7 @@ class LibraryMixin:
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12,
                       margin_top=6, margin_bottom=24, margin_start=18, margin_end=18)
-        for w in (cover, title, subtitle, play, edit, actions, col_group):
+        for w in (cover, title, subtitle, play, edit, actions, hl_group, col_group):
             if w is not None:
                 box.append(w)
         body = Gtk.ScrolledWindow(child=Adw.Clamp(maximum_size=480, child=box), vexpand=True,

@@ -8,6 +8,7 @@ import urllib.parse
 import urllib.request
 
 from i18n import tr
+from . import keystore
 from .db import upsert, upsert_owned, get_setting, set_setting, marqueur_couvert
 from .platform import steam_roots, clean_path
 
@@ -303,8 +304,9 @@ class SteamAuthError(SteamError):
 
 
 # ---------- identifiants ----------
-def steam_api_key(con):
-    return get_setting(con, "steam_api_key")
+def steam_api_key(con=None):
+    """Clé Web API : fichier `steam.key` (jamais la base). `con` est gardé pour les appelants existants."""
+    return keystore.read("steam_api_key")
 
 
 def steam_id_setting(con):
@@ -314,7 +316,7 @@ def steam_id_setting(con):
 
 def set_steam_credentials(con, key, steam_id=""):
     """Enregistre la clé Web API et, éventuellement, la SteamID64 du compte."""
-    set_setting(con, "steam_api_key", (key or "").strip())
+    keystore.write("steam_api_key", key)
     set_setting(con, "steam_id64", (steam_id or "").strip())
 
 

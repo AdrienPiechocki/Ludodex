@@ -8,17 +8,87 @@ from .launch import launch_text, set_launch_override, check_command
 from .steam import backfill_steam_logs
 from .tags import diagnose, fetch_missing_tags
 from .covers import sgdb_key, covers_dir, cover_file, fetch_missing_covers, fetch_cover, SgdbAuthError, \
-    set_custom_cover, clear_custom_cover
+    set_custom_cover, clear_custom_cover, igdb_credentials, igdb_configured, save_igdb_credentials, igdb_token, \
+    IgdbAuthError
 from .stats import auto_tidy, refresh_stats, week_text, month_text, year_text, fmt_minutes
 from .game_collections import find_collection, list_collections, add_collection, rename_collection, delete_collection, \
     collection_game_ids, add_game_to_collection, remove_game_from_collection
 from .importers import import_all, add_custom
 from .pick import excluded_tags, pick, STATUS_WEIGHT
 from .sources import source_cond
+from . import community, export as retro_export, hltb
+from . import rules as tracker_rules, tracker
 from .tracker import (tracked_games, tracker_paths, set_tracker, clear_tracker, scan, reset,
                       show_hidden)
 from .ra import (ra_user, ra_key, set_ra_credentials, sync_account, sync_game, ra_achievements,
                  ra_linked_games, link, RaError, account_games)
+
+
+def _repo(con, args):
+    """Sous-commandes `repo` : parcourir, installer et valider les fichiers de succès communautaires."""
+    if args.action == "validate":
+        if not args.query:
+            raise SystemExit(tr("usage: repo validate <file.yaml>"))
+        try:
+            data = tracker.read_tracker_file(args.query)
+            defs = tracker.load_defs(data)
+        except (OSError, ValueError) as e:
+            raise SystemExit(f"! {e}")
+        head = tracker_rules.parse_header(data)
+        print(tr("{n} achievement(s), {h} hidden", n=len(defs), h=sum(1 for d in defs if d["hidden"]))
+              + (f" · {head['name']}" if head.get("name") else ""))
+        for w in tracker_rules.lint(data):
+            print("  ⚠", w)
+        return
+    try:
+        index = community.load_index()
+        if args.action in ("list", "search"):
+            have = community.installed()
+            for e in community.search(index, args.query or ""):
+                mark = "✓" if e["id"] in have else " "
+                print(f"{mark} {e['id']:<18} {e['name']:<34} {e['count']:>4}  {e.get('author', '')}")
+        elif args.action == "installed":
+            for i, m in community.installed().items():
+                print(f"{i:<18} {m.get('version') or '-':<8} {m['yaml']}")
+        elif args.action == "update":
+            todo = community.outdated(index)
+            for e in todo:
+                print(tr("updated: {path}", path=community.install(e)))
+            if not todo:
+                print(tr("all installed files are up to date"))
+        else:
+            if not args.query:
+                raise SystemExit(tr("game id or name required"))
+            hits = community.search(index, args.query)
+            exact = [e for e in hits if e["id"] == args.query]
+            hits = exact or hits
+            if len(hits) != 1:
+                raise SystemExit(tr("{n} results for '{frag}': ", n=len(hits), frag=args.query)
+                                 + ", ".join(e["id"] for e in hits))
+            e = hits[0]
+            if args.action == "info":
+                print(f"{e['name']} ({e['id']}) — {e['count']} " + tr("achievements")
+                      + (f", {e['hidden']} " + tr("hidden") if e.get("hidden") else ""))
+                for k, label in (("log", "log"), ("mod", "mod"), ("author", "author"), ("version", "version"),
+                                 ("description", "description")):
+                    if e.get(k):
+                        print(f"  {label}: {e[k]}")
+            elif args.action == "uninstall":
+                print(tr("removed: ") + e["id"] if community.uninstall(e["id"]) else tr("not installed"))
+            else:
+                path = community.install(e, with_extras=args.mod)
+                print(tr("installed: {path}", path=path))
+                if args.game:
+                    g = find(con, args.game)
+                    if args.log:
+                        set_tracker(con, g["id"], path, args.log)
+                        print(tr("attached to {name}", name=g["name"]))
+                    else:
+                        print(tr("next: tracker attach \"{name}\" {path} <log file>", name=g["name"], path=path))
+                if e.get("log"):
+                    print(tr("log: {log}", log=e["log"]))
+    except community.CommunityError as e:
+        raise SystemExit(f"! {e}")
 
 
 # ---------- gestion ----------
@@ -36,6 +106,8 @@ def main():
                    help=tr("restrict the draw to collection(s) (name; repeatable, or comma-separated)"))
     p.add_argument("-x", "--exclude", action="append",
                    help=tr("tag(s) to exclude from the draw (repeatable, or comma-separated)"))
+    p.add_argument("-f", "--finish-in", type=float, metavar="HOURS",
+                   help=tr("only games whose main story (HowLongToBeat) can be finished in this many hours"))
     s = sub.add_parser("set")
     s.add_argument("name")
     s.add_argument("--status", choices=list(STATUS_WEIGHT))
@@ -69,9 +141,36 @@ def main():
     tg.add_argument("--retry", action="store_true", help=tr("retry Steam / Itch / Lutris games whose fetch failed"))
     sub.add_parser("diag").add_argument("name", nargs="?", default="")
     cv = sub.add_parser("covers")
-    cv.add_argument("-n", "--limit", type=int, default=50)
+    cv.add_argument("-n", "--limit", type=int, default=0, help=tr("max games per run (default: all)"))
     cv.add_argument("--retry", action="store_true", help=tr("retry games without a cover"))
     cv.add_argument("--status", action="store_true", help=tr("cover status, no network"))
+    ig = sub.add_parser("igdb")  # IGDB : couvertures de dernier recours (identifiants Twitch)
+    ig.add_argument("action", choices=["login", "status", "clear", "test"])
+    ig.add_argument("client_id", nargs="?")
+    ig.add_argument("client_secret", nargs="?")
+    ex_ = sub.add_parser("export")  # rétrospective exportable : Web (HTML + CSS), PNG, PDF
+    ex_.add_argument("kind", choices=list(retro_export.KINDS))
+    ex_.add_argument("format", choices=list(retro_export.FORMATS))
+    ex_.add_argument("-o", "--output", help=tr("output file (default: ./ludodex-retro-<period>-<date>.<ext>)"))
+    ex_.add_argument("--game", help=tr("only games whose name contains this text"))
+    ex_.add_argument("--date", help=tr("any day of the period to export, YYYY-MM-DD (default: today)"))
+    ex_.add_argument("--inline", action="store_true", help=tr("html: embed the CSS instead of writing a .css file"))
+    ex_.add_argument("--theme", choices=["dark", "light"], help=tr("png/pdf theme (default: dark for png, light for pdf)"))
+    rp = sub.add_parser("repo")  # dépôt communautaire de fichiers de succès (achievements/)
+    rp.add_argument("action", choices=["list", "search", "info", "install", "installed", "update", "uninstall",
+                                       "validate"])
+    rp.add_argument("query", nargs="?", help=tr("game id or name (validate: YAML file)"))
+    rp.add_argument("--game", help=tr("install: library game to attach the file to"))
+    rp.add_argument("--log", help=tr("install: log file of that game"))
+    rp.add_argument("--mod", action="store_true", help=tr("install: also download the logger mod"))
+    hl = sub.add_parser("hltb")  # durées HowLongToBeat (jamais récupérées sans cette commande ou le bouton des réglages)
+    hl.add_argument("action", choices=["fetch", "show", "link", "set"])
+    hl.add_argument("name", nargs="?", help=tr("game name"))
+    hl.add_argument("id", nargs="?", type=int, help=tr("link: HowLongToBeat game id (howlongtobeat.com/game/<id>)"))
+    hl.add_argument("-n", "--limit", type=int, default=30)
+    hl.add_argument("--retry", action="store_true", help=tr("retry games not found recently"))
+    for part in ("main", "extra", "complete"):
+        hl.add_argument(f"--{part}", type=float, metavar="HOURS", help=tr("set: duration in hours"))
     c1 = sub.add_parser("cover")  # forcer l'id SteamGridDB d'un jeu (quand la recherche par nom échoue)
     c1.add_argument("name"); c1.add_argument("sgdb_id", type=int)
     tk = sub.add_parser("tracker")  # succès définis par l'utilisateur, détectés dans les logs d'un jeu moddé
@@ -95,7 +194,8 @@ def main():
         cids = [find_collection(con, n)["id"] for n in names] or None
         excl = set(excluded_tags(con))
         excl.update(t.strip() for v in (args.exclude or []) for t in v.split(",") if t.strip())
-        pick(con, args.time, moods or None, cids, args.mood_mode, sorted(excl))
+        pick(con, args.time, moods or None, cids, args.mood_mode, sorted(excl),
+             round(args.finish_in * 60) if args.finish_in is not None else None)
     elif args.cmd == "set":
         g = find(con, args.name)
         for col in ("status", "tags", "session_length"):
@@ -156,7 +256,8 @@ def main():
     elif args.cmd == "covers" and args.status:
         print(tr("API key: {state} | folder: {folder}",
                                   state=tr("present") if sgdb_key() else tr("MISSING"), folder=covers_dir()))
-        for g in con.execute("SELECT * FROM games WHERE installed=1 AND hidden=0"
+        print(tr("IGDB (fallback): {state}", state=tr("present") if igdb_configured() else tr("MISSING")))
+        for g in con.execute("SELECT * FROM games WHERE 1=1"
                              + ((" AND " + source_cond(con)) if source_cond(con) else "")
                              + " ORDER BY source, name"):
             f = cover_file(g)
@@ -170,7 +271,58 @@ def main():
             con.execute("UPDATE games SET cover_fetched=0 WHERE cover_path=''"
                         + (" OR cover_src != 'sgdb'" if sgdb_key() else ""))
             con.commit()
-        print(tr("{n} cover(s) fetched", n=fetch_missing_covers(con, args.limit, progress=print)))
+        print(tr("{n} cover(s) fetched", n=fetch_missing_covers(con, args.limit if args.limit > 0 else -1, progress=print)))
+    elif args.cmd == "export":
+        now = None
+        if args.date:
+            try:
+                now = datetime.datetime.strptime(args.date, "%Y-%m-%d").replace(hour=12).timestamp()
+            except ValueError:
+                raise SystemExit(tr("invalid date: {d} (YYYY-MM-DD)", d=args.date))
+        out = args.output or retro_export.filename(args.kind, now) + "." + args.format
+        for path in retro_export.export(con, args.kind, args.format, out, now=now, game=args.game,
+                                        inline=args.inline, theme=args.theme):
+            print(path)
+    elif args.cmd == "repo":
+        _repo(con, args)
+    elif args.cmd == "hltb":
+        if args.action == "fetch":
+            print(tr("{n} game(s) matched on HowLongToBeat",
+                     n=hltb.fetch_missing(con, args.limit, progress=print, retry=args.retry)))
+        else:
+            if not args.name:
+                raise SystemExit(tr("game name required"))
+            g = find(con, args.name)
+            if args.action == "link":
+                if not args.id:
+                    raise SystemExit(tr("usage: hltb link <game> <hltb_id>"))
+                try:
+                    ok = hltb.link(con, g["id"], args.id)
+                except (hltb.HltbError, urllib.error.URLError, OSError) as e:
+                    raise SystemExit(f"! {e}")
+                print("OK:" if ok else tr("no such HowLongToBeat game:"), g["name"])
+            elif args.action == "set":
+                hltb.set_manual(con, g["id"], args.main, args.extra, args.complete)
+                print("OK:", g["name"])
+            g = con.execute("SELECT * FROM games WHERE id=?", (g["id"],)).fetchone()
+            print(f"{g['name']}: " + (hltb.summary(g) or tr("no HowLongToBeat data")))
+    elif args.cmd == "igdb":
+        if args.action == "login":
+            if not (args.client_id and args.client_secret):
+                raise SystemExit(tr("usage: igdb login <client_id> <client_secret>"))
+            save_igdb_credentials(args.client_id, args.client_secret)
+            print(tr("IGDB credentials saved"))
+        elif args.action == "clear":
+            save_igdb_credentials("", "")
+            print(tr("IGDB credentials removed"))
+        elif args.action == "test":
+            try:
+                igdb_token(force=True)
+            except (IgdbAuthError, urllib.error.URLError, OSError) as e:
+                raise SystemExit(f"! {e}")
+            print(tr("IGDB: connection OK"))
+        else:
+            print(tr("IGDB (fallback): {state}", state=tr("present") if igdb_credentials()[0] else tr("MISSING")))
     elif args.cmd == "cover":
         if not sgdb_key():
             raise SystemExit(tr("No API key: set STEAMGRIDDB_API_KEY."))

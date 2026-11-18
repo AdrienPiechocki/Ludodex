@@ -34,9 +34,10 @@ Launch the picked game directly, or launch from the library.
 ### Achievements
 - bring your own achievements for **modded games**: pick a game on the left, then attach a **YAML file** and the game's **log file** to it;
 - each achievement tests the **log lines** with regular expressions: `match` (one pattern), `any` (at least one), or `all` (every pattern), with an optional `count` (e.g. "defeat 50 bandits");
+- richer rules (see `achievements/README.md`): `sequence` (ordered), `distinct` (N different values), `sum` / `max` (numbers captured in the line), `all_of` / `any_of` (meta-achievements on other ids), and modifiers `exclude`, `reset_on`, `requires`, `case_insensitive`; `repo validate` / `lint` check a file before use;
 - `hidden: true` marks an achievement as secret: its name, description and icon stay masked until it is unlocked;
 - the log is read **incrementally** (each line is counted once); a truncated or rewritten log is detected and re-scanned from the start;
-- per-game panel with progress (`x/N`) and unlock dates — the counter under the title always shows **all three sources combined** (YAML-tracked, RetroAchievements *and* Steam), in the same place; a ready-to-adapt example lives in `examples/openmw/openmw-achievements.yaml` along with the logger mod for OpenMW in `examples/openmw/LudodexLogger-OpenMW.zip`;
+- per-game panel with progress (`x/N`) and unlock dates — the counter under the title always shows **all three sources combined** (YAML-tracked, RetroAchievements *and* Steam), in the same place; a ready-to-adapt example lives in `achievements/openmw/openmw-achievements.yaml` along with the logger mod for OpenMW in `achievements/openmw/LudodexLogger-OpenMW.zip`;
 - the achievements of a game can be **filtered** (all / unlocked / locked, plus an accent-insensitive search over titles and descriptions) and **sorted** (original order, A→Z, Z→A, unlocked first, locked first); the settings persist across games;
 - a single **refresh** button re-reads the log *and* syncs that game with RetroAchievements (when it is linked) and Steam (when it comes from Steam) — no separate buttons;
 - **auto-refresh**: every 5 seconds the app checks the log file of each tracked game, and re-reads it automatically when it changes — so the achievements update on their own **while you play**; one final re-read happens when the writing stops (the game just closed), and a toast announces any newly unlocked achievements. The same signal also **re-syncs RetroAchievements** for a linked game and **Steam** for a Steam game, and a single toast covers the unlocks of all three sources. Each kind of game is watched through its own file, updated while you play — same principle, no process inspection: a YAML-tracked game through its log, a RetroArch game through its per-game runtime file (`…/playlists/logs/<core>/<game>.lrtl`), a Steam game through `steamapps/appmanifest_<appid>.acf`, where Steam writes `LastPlayed`. Nothing runs when no game is writing: the check is a single `stat()` per watched game.
@@ -121,6 +122,10 @@ python3 picker.py <command> [options]
 | `covers` | SteamGridDB covers (`-n`, `--retry`, `--status`) |
 | `cover` | Forces a game's SteamGridDB ID |
 | `tracker` | Achievements from a game log: `list`, `attach <game> <yaml> <log>`, `status`, `scan`, `clear`, `reset` |
+| `export` | Retrospective to a file: `export week\|month\|year html\|png\|pdf [-o file] [--game text] [--date YYYY-MM-DD] [--inline] [--theme dark\|light]` |
+| `hltb` | HowLongToBeat durations (optional, explicit): `fetch` (`-n`, `--retry`), `show`, `set <game> --main/--extra/--complete <h>`, `link <game> <id>` |
+| `igdb` | IGDB cover fallback (optional): `login <client_id> <client_secret>`, `status`, `test`, `clear` |
+| `repo` | Community achievements: `list`, `search`, `info`, `install <id> [--game <game> --log <file>] [--mod]`, `installed`, `update`, `uninstall`, `validate <file.yaml>`; `LUDODEX_REPO` overrides the source |
 | `ra` | RetroAchievements: `login <user> <api_key>`, `status`, `sync`, `show <game>`, `link <game> --game <id>` |
 
 Examples:
@@ -130,7 +135,7 @@ python3 picker.py import
 python3 picker.py pick -t 30 -m calm -c "To finish"
 python3 picker.py stats
 python3 picker.py note "Hollow Knight" "- [x] beat the final boss"
-python3 picker.py tracker attach "OpenMW" examples/openmw/openmw-achievements.yaml ~/.local/share/openmw/openmw.log
+python3 picker.py tracker attach "OpenMW" achievements/openmw/openmw-achievements.yaml ~/.local/share/openmw/openmw.log
 python3 picker.py tracker status "OpenMW"
 ```
 
@@ -138,7 +143,9 @@ python3 picker.py tracker status "OpenMW"
 
 The local database is a SQLite file: `~/.local/share/ludodex/games.db`
 
-The data folder also holds the covers and the SteamGridDB API key. A legacy `gamepicker` folder is picked up automatically (once). Backup = copy `games.db`.
+The data folder also holds the covers and the API keys, **each in its own file outside the database** (`steamgriddb.key`, `igdb.key`, `steam.key`, `ra.key`, mode 0600), so `games.db` can be copied or shared without leaking a secret. Keys left in the database by older versions are moved to these files automatically at the next start and erased from `games.db`. Schema changes are **versioned migrations** (`PRAGMA user_version`, one transaction each); a backup `games.db.bak-v<N>` (last 3 kept) is made before any migration, and a database from a newer Ludodex is refused instead of being damaged. IGDB / HowLongToBeat credentials and data stay local, and neither service is contacted unless you configure or trigger it.
+
+A legacy `gamepicker` folder is picked up automatically (once). Backup = copy `games.db`.
 
 ## Languages
 
@@ -151,12 +158,14 @@ gui.py        graphical entry (re-exports Win/App, run python3 gui.py)
 picker.py     facade: re-exports core/* (used by gui and the CLI) and the CLI entry
 i18n.py       translation engine (tr, detection, set_lang)
 core/         logic: db, platform, sources, importers, steam, tags, covers,
-              launch, stats, pick, game_collections, tracker, ra, cli
+              launch, stats, pick, game_collections, tracker, rules, ra, hltb,
+              community, export, export_draw, migrations, cli
 ui/           GTK4 interface: main, theme, pickview, library, retrospec,
               notes, markdown, achievements, settingsui
 lang/         translations (en = base, fr)
-examples/     sample files, one folder per game (e.g. openmw/openmw-achievements.yaml
-              with the matching LudodexLogger mod)
+achievements/ community YAML files, one folder per game + index.json (SHA-256)
+tools/        build_index.py (regenerates achievements/index.json; CI checks it)
+tests/        pytest suite (migrations, rules, covers, hltb, community, export)
 share/        application logo: master PNG, hicolor sizes
 local.ludodex.desktop  Linux launcher (installed to ~/.local/share/applications)
 build.sh      standalone PyInstaller build (ludodex.spec)

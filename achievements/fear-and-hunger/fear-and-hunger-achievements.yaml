@@ -1,3 +1,8 @@
+game:
+  name: "Fear & Hunger"
+  mod: "LudodexLogger.js"
+  log: "ludodex.log, next to index.html in the game folder"
+
 # Fear & Hunger achievements for Ludodex
 # Log: ludodex.log, written by the LudodexLogger.js plugin (game folder, next to index.html)
 #

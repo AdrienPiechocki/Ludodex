@@ -7,13 +7,15 @@ débloqué avec date), un bouton « Rescan » relit les logs, et un dialogue per
 d'attacher, modifier ou retirer un suivi pour un jeu.
 """
 import datetime
+import threading
 
 import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, GLib, Gtk
+from gi.repository import Adw, Gdk, GLib, Gtk
 
 import picker as P
+from core import community
 from i18n import tr
 
 _TROPHY = "🏆"
@@ -815,6 +817,94 @@ class AchievementsMixin:
         dlg.connect("closed", lambda *_: setattr(self, "_tracker_dlg", None))
         dlg.present(self)
 
+    def _open_community(self, parent, game, on_pick):
+        """Dépôt communautaire : liste (recherche), « Utiliser » installe le YAML après contrôle,
+        « Mod » télécharge en plus le mod qui écrit le log. Réseau en arrière-plan."""
+        dlg = Adw.Dialog(content_width=520, content_height=560, title=tr("Community achievements"))
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
+                      margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
+        search = Gtk.SearchEntry(placeholder_text=tr("Search a game"), text=game["name"])
+        status = Gtk.Label(label=tr("Loading…"), css_classes=["dim-label"], xalign=0)
+        listbox = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE, css_classes=["boxed-list"])
+        scroll = Gtk.ScrolledWindow(vexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER, child=listbox)
+        for w in (search, status, scroll):
+            box.append(w)
+        # En-tête avec le bouton « × » : Adw.Dialog n'en affiche un que si on lui en donne un.
+        view = Adw.ToolbarView(content=box)
+        view.add_top_bar(Adw.HeaderBar())
+        dlg.set_child(view)
+        # Échap ferme le dialogue même quand la recherche a le focus : le champ de recherche
+        # consomme Échap pour vider sa saisie. Phase « capture » : on passe avant lui.
+        keys = Gtk.EventControllerKey(propagation_phase=Gtk.PropagationPhase.CAPTURE)
+        keys.connect("key-pressed", lambda _c, keyval, *_: (dlg.close() or True)
+                     if keyval == Gdk.KEY_Escape else False)
+        dlg.add_controller(keys)
+        state = {"index": None, "rows": []}
+
+        def toast(msg):
+            self.toasts.add_toast(Adw.Toast.new(GLib.markup_escape_text(msg)))
+
+        def install(entry, with_mod):
+            def work():
+                try:
+                    path = community.install(entry, with_extras=with_mod)
+                    GLib.idle_add(installed, entry, path, with_mod)
+                except Exception as e:
+                    GLib.idle_add(lambda: toast(tr("Failed: {e}", e=e)) or False)
+            threading.Thread(target=work, daemon=True).start()
+
+        def installed(entry, path, with_mod):
+            if with_mod:
+                toast(tr("Mod saved in {folder}", folder=str(path.parent)))
+            else:
+                on_pick(path, entry)
+                dlg.close()
+            return False
+
+        def fill(*_):
+            while (r := listbox.get_first_child()) is not None:
+                listbox.remove(r)
+            hits = community.search(state["index"], search.get_text())
+            have = community.installed()
+            status.set_text(tr("{n} game(s)", n=len(hits)) if hits else tr("No shared file for this game yet"))
+            for e in hits[:60]:
+                sub = tr("{n} achievements", n=e["count"])
+                if e.get("log"):
+                    sub += " · " + e["log"]
+                row = Adw.ActionRow(title=GLib.markup_escape_text(e["name"]),
+                                    subtitle=GLib.markup_escape_text(sub), subtitle_lines=2)
+                if e["id"] in have:
+                    row.add_prefix(Gtk.Image(icon_name="object-select-symbolic", css_classes=["success"]))
+                if e.get("extras"):
+                    mod = Gtk.Button(label=tr("Mod"), valign=Gtk.Align.CENTER, css_classes=["flat"],
+                                     tooltip_text=tr("Also download the logger mod"))
+                    mod.connect("clicked", lambda _b, e=e: install(e, True))
+                    row.add_suffix(mod)
+                use = Gtk.Button(label=tr("Use"), valign=Gtk.Align.CENTER, css_classes=["suggested-action"])
+                use.connect("clicked", lambda _b, e=e: install(e, False))
+                row.add_suffix(use)
+                listbox.append(row)
+
+        def loaded(index, err):
+            if err:
+                status.set_text(err)
+                return False
+            state["index"] = index
+            match = community.match_game(index, game)
+            if match is None:           # pas de correspondance exacte : on montre tout
+                search.set_text("")
+            fill()
+            return False
+
+        def work():
+            try:
+                GLib.idle_add(loaded, community.load_index(), "")
+            except community.CommunityError as e:
+                GLib.idle_add(loaded, None, str(e))
+        threading.Thread(target=work, daemon=True).start()
+        search.connect("search-changed", lambda *_: state["index"] is not None and fill())
+        dlg.present(parent)
+
     def _tracker_dialog_body(self, dlg, games, gid):
         grid = Gtk.Grid(row_spacing=10, column_spacing=14, margin_top=16,
                         margin_bottom=24, margin_start=24, margin_end=24)
@@ -845,6 +935,8 @@ class AchievementsMixin:
         log_btn = Gtk.Button(label=tr("Choose…"))
         ybox = Gtk.Box(spacing=8)
         ybox.append(yaml_btn)
+        comm_btn = Gtk.Button(label=tr("Community…"), tooltip_text=tr("Browse shared achievement files"))
+        ybox.append(comm_btn)
         ybox.append(yaml_text)
         grid.attach(ybox, 1, row[0] - 1, 2, 1)
         label("Log file")
@@ -885,6 +977,14 @@ class AchievementsMixin:
                     (yaml_text if kind == "yaml" else log_text).set_text(fc.get_file().get_path())
                 fc.destroy()
 
+        def on_community_pick(path, entry):
+            paths["yaml"] = str(path)
+            yaml_text.set_text(str(path))
+            if entry.get("log") and not paths["log"]:
+                log_text.set_text(tr("Log: {log}", log=entry["log"]))   # simple indication, pas un chemin
+
+        comm_btn.connect("clicked", lambda _b: self._open_community(
+            dlg, games[drop.get_selected()], on_community_pick))
         yaml_btn.connect("clicked", lambda b: pick(b, "yaml"))
         log_btn.connect("clicked", lambda b: pick(b, "log"))
         dlg._pick = pick   # référence pour les tests (appel direct → exceptions remontent)

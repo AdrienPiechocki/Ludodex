@@ -1,3 +1,7 @@
+game:
+  name: "Minecraft"
+  log: "latest.log (chat announcements of advancements and challenges)"
+
 # Minecraft Vanilla achievements (in English, based on the chat announcements) for Ludodex.
 #
 # Format of the lines read from the log:

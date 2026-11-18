@@ -572,13 +572,12 @@ class PickViewMixin:
         # la cible serait alors derrière le point de départ et l'animation
         # partirait à rebours.
         gardes = [p._jeu_id for p in bande._pics[:depart]]
-        nouveaux = P.roulette_strip(self.pool, g["id"], ROULETTE_JAQUETTES,
-                                    deja_visibles=gardes)
+        nouveaux, rang_local = P.roulette_strip_rang(self.pool, g["id"], ROULETTE_JAQUETTES,
+                                                     deja_visibles=gardes)
         bande.ajouter(nouveaux)
-        # Rang LU dans la bande, jamais déduit de `slots - 3` : la règle de
-        # placement appartient à `roulette_strip`, et la dupliquer la ferait
-        # dériver dès que l'une des deux évolue.
-        self._roulette_rang = bande.index_de(g["id"], depart)
+        # Rang RENDU par `roulette_strip_rang`, jamais déduit de `slots - 3` ni cherché
+        # par id : le gagnant peut figurer ailleurs dans la bande (doublons voulus).
+        self._roulette_rang = depart + rang_local
         self._charger_couvertures(nouveaux, depart)
         # Le résultat n'est masqué qu'ICI, et nulle part ailleurs : la rotation
         # n'existe que pour retarder la révélation, donc à défaut de rotation il

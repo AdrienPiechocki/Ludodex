@@ -17,15 +17,11 @@ import yaml
 
 from i18n import tr
 
+from . import rules
 from .db import get_setting, set_setting
 
 
-def _slug(name):
-    """« Première quête » → « premiere-quete » (id par défaut d'un succès)."""
-    s = unicodedata.normalize("NFKD", name)
-    s = "".join(c for c in s if not unicodedata.combining(c))
-    s = re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")
-    return s or "achievement"
+_slug = rules.slug  # compat : l'id par défaut d'un succès
 
 
 def _yaml_fingerprint(path):
@@ -42,12 +38,8 @@ def _yaml_fingerprint(path):
     return f"{path}|{st.st_mtime_ns}|{st.st_size}"
 
 
-def load_tracker(path):
-    """Lit et valide un fichier de succès ; renvoie la liste des définitions.
-
-    Chaque définition : id, name, description, icon, hidden, op (match|any|all),
-    patterns, regexes (compilées), target (= `count`, 1 par défaut).
-    """
+def read_tracker_file(path):
+    """Contenu brut d'un fichier de succès (dict), après contrôle de sa forme générale."""
     try:
         with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
@@ -57,50 +49,37 @@ def load_tracker(path):
         raise ValueError(f"YAML invalide : {e}") from e
     if not isinstance(data, dict) or not isinstance(data.get("achievements"), list):
         raise ValueError("le fichier doit contenir une liste « achievements »")
+    return data
+
+
+def load_tracker(path):
+    """Lit et valide un fichier de succès ; renvoie la liste des définitions.
+
+    Chaque définition : id, name, description, icon, hidden, op, patterns, regexes
+    (compilées), target (= `count`), plus les champs des règles évoluées (members,
+    exclude, reset, requires… voir core/rules.py)."""
+    return load_defs(read_tracker_file(path))
+
+
+def load_defs(data):
+    """Définitions validées d'un contenu YAML déjà lu."""
     defs, ids = [], set()
     for i, a in enumerate(data["achievements"]):
-        if not isinstance(a, dict) or not isinstance(a.get("name"), str) or not a["name"].strip():
-            raise ValueError(f"succès n°{i + 1} : nom manquant")
-        name = a["name"].strip()
-        ach_id = str(a.get("id") or _slug(name))
-        if not ach_id or re.search(r"\s", ach_id):
-            raise ValueError(f"« {name} » : id invalide : {ach_id!r}")
-        patterns, op = [], None
-        if isinstance(a.get("match"), str) and a["match"].strip():
-            op, patterns = "match", [a["match"].strip()]
-        elif isinstance(a.get("any"), list):
-            pats = [p for p in a["any"] if isinstance(p, str) and p.strip()]
-            if pats:
-                op, patterns = "any", pats
-        elif isinstance(a.get("all"), list):
-            pats = [p for p in a["all"] if isinstance(p, str) and p.strip()]
-            if pats:
-                op, patterns = "all", pats
-        if not op:
-            raise ValueError(f"« {name} » : il faut un « match » (ou « any »/« all »)")
-        if "count" in a:
-            count = a["count"]
-            if not isinstance(count, int) or count < 1:
-                raise ValueError(f"« {name} » : « count » doit être un entier ≥ 1")
-        else:
-            count = len(patterns) if op == "all" else 1  # « all » : chaque pattern doit apparaître
-        flags = re.IGNORECASE if a.get("case_insensitive") else 0
-        compiled = []
-        for p in patterns:
-            try:
-                compiled.append(re.compile(p, flags))
-            except re.error as e:
-                raise ValueError(f"« {name} » : expression invalide : {e}") from e
-        if ach_id in ids:
-            raise ValueError(f"id dupliqué : {ach_id}")
-        ids.add(ach_id)
-        defs.append({"id": ach_id, "name": name,
-                     "description": str(a.get("description") or ""),
-                     "icon": str(a.get("icon") or ""),
-                     "hidden": bool(a.get("hidden")),
-                     "op": op, "patterns": patterns, "regexes": compiled,
-                     "target": count})
+        d = rules.compile_def(a, i)
+        if d["id"] in ids:
+            raise ValueError(f"id dupliqué : {d['id']}")
+        ids.add(d["id"])
+        defs.append(d)
+    rules.check_graph(defs)
     return defs
+
+
+def load_header(path):
+    """Bloc `game:` facultatif d'un fichier de succès ({} s'il manque ou si le fichier est illisible)."""
+    try:
+        return rules.parse_header(read_tracker_file(path))
+    except (OSError, ValueError):
+        return {}
 
 
 def tracker_paths(con, gid):
@@ -455,26 +434,6 @@ class LogWatcher:
         return out
 
 
-def _hits(d, line):
-    """Nombre de correspondances de cette ligne pour la définition d."""
-    if d["op"] == "match":
-        return 1 if d["regexes"][0].search(line) else 0
-    if d["op"] == "any":
-        return 1 if any(r.search(line) for r in d["regexes"]) else 0
-    # « all » : chaque pattern présent sur CETTE ligne compte ? 
-    # Non - on doit suivre les patterns vus dans TOUT le log
-    return sum(1 for r in d["regexes"] if r.search(line))
-
-
-def _hits_all(d, line):
-    """Pour 'all', renvoie les indices des patterns correspondant à cette ligne."""
-    hits = []
-    for i, r in enumerate(d["regexes"]):
-        if r.search(line):
-            hits.append(i)
-    return hits
-
-
 def scan(con, gid, now=None):
     """Scanne les nouvelles lignes du log du jeu et met à jour les succès.
 
@@ -509,88 +468,26 @@ def scan(con, gid, now=None):
         else:
             start = row["offset"]
         f.seek(start)
-        data = f.read()
+        data = f.read(max(0, size - start))  # jamais au-delà de la taille mémorisée
     if changed:
         # On recompte tout avec les nouvelles définitions : conserver l'état
         # additionnerait aux compteurs déjà posés.
         con.execute("DELETE FROM achievements WHERE game_id=?", (gid,))
-    state = {r["ach_id"]: dict(r) for r in con.execute(
-        "SELECT ach_id, count, unlocked_at, seen_patterns FROM achievements WHERE game_id=?", (gid,))}
-    # Pour les "all", on doit cumuler les patterns vus depuis le début du suivi
-    all_seen = {}
-    for d in defs:
-        if d["op"] == "all":
-            st = state.get(d["id"])
-            if st and st.get("seen_patterns"):
-                try:
-                    all_seen[d["id"]] = set(s for s in st["seen_patterns"].split(',') if s)
-                except Exception:
-                    all_seen[d["id"]] = set()
-            else:
-                all_seen[d["id"]] = set()
-    # Lire depuis le début du log pour les "all" (on a déjà tracké la position)
-    # Mais si on vient de reset, on veut repartir à partir de maintenant
-    # Vérifier si c'est un reset récent - on regarde si la position correspond au reset
-    try:
-        with open(log_path, "rb") as f:
-            full_data = f.read()
-        # Pour les 'all', scanner tout le log depuis le début (car les patterns peuvent apparaître n'importe où)
-        # Mais on doit respecter que si on a reset, on ne veut compter que ce qui est arrivé après reset
-        full_lines = full_data.decode("utf-8", "replace").splitlines()
-    except Exception:
-        full_lines = data.decode("utf-8", "replace").splitlines()
-    # Si on n'a pas d'état existant pour ce 'all' (reset), on ne doit compter que les nouvelles lignes
-    for line in data.decode("utf-8", "replace").splitlines():  # seulement nouvelles lignes si pas d'état
-        for d in defs:
-            if d["op"] == "all":
-                st = state.get(d["id"])
-                # Si pas d'état et pas débloqué, c'est probablement après reset
-                if not st and d["id"] not in all_seen:
-                    all_seen[d["id"]] = set()
-                elif st is None:
-                    all_seen.setdefault(d["id"], set())
-                else:
-                    # a déjà un état, on cumule
-                    pass
-                hit_indices = _hits_all(d, line)
-                if hit_indices:
-                    all_seen.setdefault(d["id"], set()).update(str(i) for i in hit_indices)
-    # Mettre à jour l'état pour les "all"
-    for d in defs:
-        if d["op"] == "all":
-            st = state.get(d["id"])
-            new_count = len(all_seen.get(d["id"], set()))
-            if st is None:
-                st = state[d["id"]] = {"ach_id": d["id"], "count": 0, "unlocked_at": 0}
-            st["count"] = min(d["target"], new_count)
-            if st["count"] >= d["target"] and not st["unlocked_at"]:
-                st["unlocked_at"] = now
-    # Traiter les autres types (match/any) avec les nouvelles lignes seulement (comportement incrémental)
-    for line in data.decode("utf-8", "replace").splitlines():
-        for d in defs:
-            if d["op"] == "all":
-                continue  # déjà traité
-            st = state.get(d["id"])
-            if st and st["unlocked_at"]:
-                continue  # déjà acquis
-            hit = _hits(d, line)
-            if not hit:
-                continue
-            if st is None:
-                st = state[d["id"]] = {"ach_id": d["id"], "count": 0, "unlocked_at": 0}
-            st["count"] = min(d["target"], st["count"] + hit)
-            if st["count"] >= d["target"] and not st["unlocked_at"]:
-                st["unlocked_at"] = now
+    rows = {r["ach_id"]: r for r in con.execute(
+        "SELECT ach_id, count, unlocked_at, seen_patterns, state FROM achievements WHERE game_id=?", (gid,))}
+    states = {d["id"]: rules.load_state(d, rows.get(d["id"])) for d in defs}
+    rules.run(defs, states, data.decode("utf-8", "replace").splitlines(), now)
 
     for d in defs:
-        st = state.get(d["id"])
-        if st:
-            seen_patterns_str = ','.join(sorted(all_seen.get(d["id"], set()))) if d["op"] == "all" else ''
+        st = states[d["id"]]
+        if d["id"] in rows or st["count"] or st["unlocked_at"] or st["seen"] or st["step"] or st["value"]:
+            seen, extra = rules.dump_state(d, st)
             con.execute(
-                "INSERT INTO achievements (game_id, ach_id, count, unlocked_at, seen_patterns) VALUES (?,?,?,?,?) "
+                "INSERT INTO achievements (game_id, ach_id, count, unlocked_at, seen_patterns, state) "
+                "VALUES (?,?,?,?,?,?) "
                 "ON CONFLICT(game_id, ach_id) DO UPDATE SET count=excluded.count, "
-                "unlocked_at=excluded.unlocked_at, seen_patterns=excluded.seen_patterns",
-                (gid, d["id"], st["count"], st["unlocked_at"], seen_patterns_str))
+                "unlocked_at=excluded.unlocked_at, seen_patterns=excluded.seen_patterns, state=excluded.state",
+                (gid, d["id"], st["count"], st["unlocked_at"], seen, extra))
     con.execute(
         "INSERT INTO tracker_logs (game_id, log_path, offset, size, prefix, yaml) VALUES (?,?,?,?,?,?) "
         "ON CONFLICT(game_id, log_path) DO UPDATE SET offset=excluded.offset, size=excluded.size, "
@@ -600,12 +497,13 @@ def scan(con, gid, now=None):
 
     out = []
     for d in defs:
-        st = state.get(d["id"]) or {"ach_id": d["id"], "count": 0, "unlocked_at": 0}
+        st = states[d["id"]]
         out.append({"id": d["id"], "name": d["name"], "description": d["description"],
                     "icon": d["icon"], "target": d["target"], "progress": st["count"],
-                    "hidden": d["hidden"],
+                    "hidden": d["hidden"], "op": d["op"],
                     "unlocked_at": st["unlocked_at"], "done": bool(st["unlocked_at"])})
     return out
+
 
 # ---------- tri et filtre des succès (partagé par les succès YAML et RetroAchievements) ----------
 ACHIEVEMENT_FILTERS = ("all", "unlocked", "locked")

@@ -1,4 +1,4 @@
-"""settingsui.py — fenêtre de réglages et récupération des couvertures SteamGridDB."""
+"""settingsui.py — fenêtre de réglages et récupération des couvertures (SteamGridDB, Steam, IGDB)."""
 import threading
 
 import gi
@@ -8,6 +8,7 @@ gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, GObject, Gtk, Pango
 
 import picker as P
+from core import hltb as H
 from i18n import available, get_lang, tr
 
 
@@ -186,6 +187,32 @@ class SettingsMixin:
         group.add(self.cover_row)
         page.add(group)
 
+        # IGDB : dernier recours, seulement pour les jeux sans jaquette SteamGridDB ni Steam.
+        igdb_group = Adw.PreferencesGroup(
+            title=tr("Covers (IGDB, fallback)"),
+            description=tr("Only used for games that have no SteamGridDB or Steam cover. "
+                           "Free Twitch application credentials: api-docs.igdb.com."))
+        cid, secret = P.igdb_credentials()
+        self.igdb_id_row = Adw.PasswordEntryRow(title=tr("Client ID"), text=cid, show_apply_button=True)
+        self.igdb_secret_row = Adw.PasswordEntryRow(title=tr("Client secret"), text=secret, show_apply_button=True)
+        for row in (self.igdb_id_row, self.igdb_secret_row):
+            row.connect("apply", self._on_igdb)
+            igdb_group.add(row)
+        page.add(igdb_group)
+
+        # HowLongToBeat : sans clé ni compte, mais c'est un service tiers — rien n'est
+        # récupéré tant que ce bouton (ou la fiche d'un jeu) n'est pas pressé.
+        hl_group = Adw.PreferencesGroup(
+            title="HowLongToBeat",
+            description=tr("Story / extras / 100 % durations, kept locally. Game names are sent to "
+                           "howlongtobeat.com only when you press Fetch."))
+        self.hltb_row = Adw.ActionRow(title=tr("Durations"), subtitle=self._hltb_summary())
+        self.hltb_btn = Gtk.Button(label=tr("Fetch"), valign=Gtk.Align.CENTER, css_classes=["suggested-action"])
+        self.hltb_btn.connect("clicked", self._on_hltb)
+        self.hltb_row.add_suffix(self.hltb_btn)
+        hl_group.add(self.hltb_row)
+        page.add(hl_group)
+
         # Le compte RetroAchievements (source unique avec le dialogue de la page).
         ra_group = Adw.PreferencesGroup(
             title="RetroAchievements",
@@ -316,6 +343,45 @@ class SettingsMixin:
     def _on_key(self, row):
         P.save_sgdb_key(row.get_text())
         self._toast_settings(tr("Key saved") if row.get_text().strip() else tr("Key cleared"))
+
+    def _hltb_summary(self):
+        have, total = self.con.execute(
+            f"SELECT COALESCE(SUM(hltb_main > 0 OR hltb_extra > 0 OR hltb_complete > 0), 0), COUNT(*) "
+            f"FROM games {self._lib_where()}").fetchone()
+        return tr("{have}/{total} games have durations", have=have, total=total)
+
+    def _on_hltb(self, _btn):
+        if getattr(self, "_hltbing", False):
+            return self._toast_settings(tr("Already fetching"))
+        self._hltbing = True
+        self.hltb_btn.set_sensitive(False)
+        self.hltb_row.set_subtitle(tr("Fetching…"))
+        errors = []
+
+        def work():
+            n = 0
+            try:
+                con = P.db()
+                n = H.fetch_missing(con, limit=60, retry=True,
+                                    progress=lambda m: errors.append(m.lstrip("! ")) if m.startswith("!") else None)
+                con.close()
+            except Exception as e:
+                errors.append(str(e))
+            GLib.idle_add(done, n)
+
+        def done(n):
+            self._hltbing = False
+            self.hltb_btn.set_sensitive(True)
+            self.hltb_row.set_subtitle(self._hltb_summary())
+            self._toast_settings(errors[0] if errors else tr("{n} game(s) matched", n=n))
+            return False
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_igdb(self, _row):
+        cid, secret = self.igdb_id_row.get_text(), self.igdb_secret_row.get_text()
+        P.save_igdb_credentials(cid, secret)
+        self._toast_settings(tr("Credentials saved") if cid.strip() and secret.strip()
+                             else tr("Credentials cleared"))
 
     def _on_ach_show_hidden(self, chk):
         """Affiche/masque les succès secrets (verrouillés) partout dans l'app."""
@@ -457,14 +523,8 @@ class SettingsMixin:
                 con.execute("UPDATE games SET cover_fetched=0 WHERE cover_path=''"
                             + (" OR cover_src != 'sgdb'" if P.sgdb_key() else ""))
                 con.commit()
-                # `include_not_installed=True` : c'est un geste EXPLICITE de
-                # l'utilisateur qui demande toutes les couvertures manquantes. Sans
-                # lui, la boucle limite à `installed=1` — et les 236 démos de la
-                # base ne sont JAMAIS installées : elles restaient hors d'atteinte,
-                # malgré le retrait du « Demo » qui leur trouvait pourtant le jeu
-                # complet (mesuré : 15/25 couvertes une fois sélectionnées).
-                n = P.fetch_missing_covers(con, limit=500, progress=progress,
-                                           include_not_installed=True)
+                # Tous les jeux (installés ou non, masqués ou non), comme la récupération de fond.
+                n = P.fetch_missing_covers(con, limit=500, progress=progress)
                 con.close()
             except Exception as e:
                 errors.append(str(e))
@@ -521,7 +581,7 @@ class SettingsMixin:
         self._refresh_current_cover()
         return False
 
-    def _fetch_covers_bg(self, include_not_installed=False):
+    def _fetch_covers_bg(self):
         if getattr(self, "_covering", False):
             return
         self._covering = True
@@ -530,7 +590,7 @@ class SettingsMixin:
             n = 0
             try:
                 con = P.db()
-                n = P.fetch_missing_covers(con, include_not_installed=include_not_installed)
+                n = P.fetch_missing_covers(con)
                 con.close()
             finally:
                 self._covering = False

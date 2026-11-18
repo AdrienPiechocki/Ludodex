@@ -1,3 +1,9 @@
+game:
+  name: "OpenMW (Morrowind)"
+  aliases: ["Morrowind", "Tamriel Rebuilt"]
+  mod: "LudodexLogger-OpenMW.zip"
+  log: "~/.local/share/openmw/openmw.log"
+
 # Morrowind + expansions + Tamriel Rebuilt achievements for Ludodex ("Achievements" module).
 #
 # To use with the OpenMW "Ludodex Logger" mod (LudodexLogger.zip): the tracker reads

@@ -1,3 +1,8 @@
+game:
+  name: "Pseudoregalia"
+  mod: "LudodexLogger-Pseudoregalia.zip"
+  log: "ludodex.log next to UE4SS.log (pseudoregalia/Binaries/Win64/)"
+
 # Pseudoregalia achievements for Ludodex ("Achievements" module).
 #
 # To use with the "LudodexLogger" UE4SS mod for Pseudoregalia (LudodexLogger-Pseudoregalia.zip,

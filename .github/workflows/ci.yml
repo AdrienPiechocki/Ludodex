@@ -1,0 +1,19 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: System libraries (cairo, for the export tests)
+        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config python3-dev
+      - run: pip install pyyaml pytest pycairo
+      - name: Community achievements are valid and index.json is up to date
+        run: python3 tools/build_index.py --check
+      - run: python3 -m pytest tests -q

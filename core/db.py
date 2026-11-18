@@ -3,6 +3,8 @@
 import datetime, pathlib, re, sqlite3, time
 
 from i18n import available, set_lang, tr
+from .migrations import migrate
+from . import keystore
 from .platform import data_dir, migrate_data_dir, lutris_dbs, itch_dbs, flatpak_dirs, retro_dirs
 
 DB_PATH = data_dir() / "games.db"
@@ -98,42 +100,8 @@ def db():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(DB_PATH)
     con.row_factory = sqlite3.Row
-    con.executescript(SCHEMA)
-    cols = {r["name"] for r in con.execute("PRAGMA table_info(games)")}
-    if "playtime_min" not in cols:
-        con.execute("ALTER TABLE games ADD COLUMN playtime_min INTEGER NOT NULL DEFAULT 0")
-    if "installed" not in cols:
-        con.execute("ALTER TABLE games ADD COLUMN installed INTEGER NOT NULL DEFAULT 1")
-    for col, ddl in (("hidden", "INTEGER NOT NULL DEFAULT 0"), ("store_tags", "TEXT NOT NULL DEFAULT ''"),
-                     ("tags_fetched", "INTEGER NOT NULL DEFAULT 0"),
-                     ("store_url", "TEXT NOT NULL DEFAULT ''"), ("cover_path", "TEXT NOT NULL DEFAULT ''"),
-                     ("cover_fetched", "INTEGER NOT NULL DEFAULT 0"), ("sgdb_id", "INTEGER NOT NULL DEFAULT 0"),
-                     ("name_locked", "INTEGER NOT NULL DEFAULT 0"), ("launch_override", "TEXT NOT NULL DEFAULT ''"),
-                     ("custom_cover", "TEXT NOT NULL DEFAULT ''"), ("notes", "TEXT NOT NULL DEFAULT ''"),
-                     ("cover_src", "TEXT NOT NULL DEFAULT ''")):
-        if col not in cols:
-            con.execute(f"ALTER TABLE games ADD COLUMN {col} {ddl}")
-    ccols = {r["name"] for r in con.execute("PRAGMA table_info(collections)")}
-    if "kind" not in ccols:
-        con.execute("ALTER TABLE collections ADD COLUMN kind TEXT NOT NULL DEFAULT 'manual'")
-    if "auto_source" not in ccols:
-        con.execute("ALTER TABLE collections ADD COLUMN auto_source TEXT NOT NULL DEFAULT ''")
-    scols = {r["name"] for r in con.execute("PRAGMA table_info(sessions)")}
-    if "ended" not in scols or "minutes" not in scols:
-        if "ended" not in scols:
-            con.execute("ALTER TABLE sessions ADD COLUMN ended INTEGER NOT NULL DEFAULT 0")
-        if "minutes" not in scols:
-            con.execute("ALTER TABLE sessions ADD COLUMN minutes INTEGER NOT NULL DEFAULT 0")
-        con.execute("UPDATE sessions SET ended=started, minutes=0 WHERE ended=0")  # sessions héritées : clôturées
-    hcols = {r["name"] for r in con.execute("PRAGMA table_info(steam_achievements)")}
-    if "hidden" not in hcols:  # table créée sans le drapeau spoiler de Steam
-        con.execute("ALTER TABLE steam_achievements ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
-    tcols = {r["name"] for r in con.execute("PRAGMA table_info(tracker_logs)")}
-    if "yaml" not in tcols:  # la position de lecture vaut pour le YAML qui l'a produite
-        con.execute("ALTER TABLE tracker_logs ADD COLUMN yaml TEXT NOT NULL DEFAULT ''")
-    acols = {r["name"] for r in con.execute("PRAGMA table_info(achievements)")}
-    if "seen_patterns" not in acols:
-        con.execute("ALTER TABLE achievements ADD COLUMN seen_patterns TEXT NOT NULL DEFAULT ''")
+    migrate(con, DB_PATH)  # schéma versionné (core/migrations.py)
+    keystore.migrate_from_db(con)  # clés API d'anciennes versions : de la base vers des fichiers à part
     ensure_auto_collections(con)
     con.execute("PRAGMA foreign_keys=ON")
     load_lang(con)  # langue choisie dans les réglages (sinon celle du système)

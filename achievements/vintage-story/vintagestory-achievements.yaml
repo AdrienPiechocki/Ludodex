@@ -1,3 +1,8 @@
+game:
+  name: "Vintage Story"
+  mod: "LudodexLogger-VintageStory.zip"
+  log: "<VintagestoryData>/ModData/ludodex/ludodex.log"
+
 # Vintage Story achievements for Ludodex ("Achievements" module).
 #
 # To use with the "LudodexLogger" Vintage Story mod (server-side C# mod, works in single player).

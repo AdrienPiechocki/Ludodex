@@ -1,3 +1,7 @@
+game:
+  name: "Dusklight (Zelda: Twilight Princess, PC)"
+  log: "achievements.json of the game (see the YAML comments)"
+
 # Dusklight achievements for Ludodex ("Achievements" module).
 #
 # Matches the keys present in achievements.json only when unlocked is true.

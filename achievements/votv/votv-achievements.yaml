@@ -1,3 +1,9 @@
+game:
+  name: "Voices of the Void"
+  aliases: ["VotV"]
+  mod: "LudodexLogger-VotV.zip"
+  log: "%LOCALAPPDATA%/VotV/ludodex.log (under Proton: inside the game's Wine prefix)"
+
 # Voices of the Void achievements for Ludodex ("Achievements" module).
 #
 # Meant for the "Ludodex Logger" UE4SS mod (LudodexLogger/Scripts/main.lua). Log lines are written to UE4SS.log

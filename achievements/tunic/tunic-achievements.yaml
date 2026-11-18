@@ -1,3 +1,8 @@
+game:
+  name: "TUNIC"
+  mod: "LudodexLogger-Tunic.zip"
+  log: "ludodex.log written by the BepInEx 6 IL2CPP mod"
+
 # TUNIC achievements for Ludodex ("Achievements" module).
 
 # Requires a BepInEx 6 IL2CPP mod: LudodexLogger-TUNIC.

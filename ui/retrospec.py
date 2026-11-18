@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """retrospec.py — page « Rétrospective » : résumé, graphiques (quoi/quand/régularité) et frises."""
-import datetime, math, time
+import datetime, math, threading, time
 
 import gi
 gi.require_version("Gtk", "4.0")
@@ -9,6 +9,7 @@ gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, GObject, Gtk, Pango
 
 import picker as P
+from core import export as E
 from i18n import available, get_lang, tr
 
 # Camembert : palette fixe par rang (6 max), gris pour « Autres ».
@@ -53,9 +54,13 @@ class RetroMixin:
         # dont le nom contient la saisie (casse ignorée, correspondances cumulées).
         self._retro_game = ""
         self._retro_search = Gtk.SearchEntry(placeholder_text=tr("Search a game"),
-                                             halign=Gtk.Align.CENTER, width_request=280)
+                                             width_request=280)
         self._retro_search.connect("search-changed", self._on_retro_search)
-        header.append(self._retro_search)
+        # Bouton d'export à droite de la recherche, sur la même ligne (centrée à la fenêtre).
+        search_row = Gtk.Box(spacing=8, halign=Gtk.Align.CENTER)
+        search_row.append(self._retro_search)
+        search_row.append(self._build_export_button())
+        header.append(search_row)
         self.retro_head_title = Gtk.Label(xalign=0, css_classes=["title-3"])
         header.append(self.retro_head_title)
         self.retro_head_desc = Gtk.Label(xalign=0, css_classes=["dim-label"])
@@ -102,6 +107,45 @@ class RetroMixin:
         self._top_rows, self._game_rows = [], {}
         self._refresh_retro()
         return self.retro_page
+
+    # ---------- export : Web (HTML + CSS), PNG, PDF ----------
+    _EXPORT_FORMATS = (("html", "Web (HTML + CSS)"), ("png", "PNG"), ("pdf", "PDF"))
+
+    def _build_export_button(self):
+        pop = Gtk.Popover()
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, margin_top=4, margin_bottom=4,
+                      margin_start=4, margin_end=4)
+        for fmt, label in self._EXPORT_FORMATS:
+            b = Gtk.Button(label=label, css_classes=["flat"])
+            b.connect("clicked", lambda _b, f=fmt: (pop.popdown(), self._export_retro(f)))
+            box.append(b)
+        pop.set_child(box)
+        return Gtk.MenuButton(label=tr("Export"), icon_name="document-save-symbolic", popover=pop,
+                              tooltip_text=tr("Export this retrospective"))
+
+    def _export_retro(self, fmt):
+        """Exporte la période et le filtre affichés ; réseau inutile, dessin hors du fil principal."""
+        kind, game = self._retro_kind, self._retro_game or None
+        dlg = Gtk.FileDialog(title=tr("Export"), initial_name=f"{E.filename(kind)}.{fmt}")
+
+        def chosen(d, res):
+            try:
+                path = d.save_finish(res).get_path()
+            except GLib.Error:
+                return                                   # annulé
+            self.toasts.add_toast(Adw.Toast.new(tr("Exporting…")))
+
+            def work():
+                try:
+                    con = P.db()
+                    files = E.export(con, kind, fmt, path, game=game)
+                    con.close()
+                    msg = tr("Exported: {path}", path=files[0])
+                except Exception as e:
+                    msg = tr("Failed: {e}", e=e)
+                GLib.idle_add(lambda: self.toasts.add_toast(Adw.Toast.new(GLib.markup_escape_text(msg))) and False)
+            threading.Thread(target=work, daemon=True).start()
+        dlg.save(self, None, chosen)
 
     def _retro_kinds(self):
         """Périodes affichées, dans l'ordre : celles qui sont activées (toutes par défaut)."""

@@ -42,7 +42,7 @@ def tags_summary(inclus, exclus):
     return "  ".join(x for x in (inc, exc) if x)
 
 
-def weight(g, minutes, mood, now, mood_mode="any", include_not_installed=False, exclude=None):
+def weight(g, minutes, mood, now, mood_mode="any", include_not_installed=False, exclude=None, finish_in=None):
     if g["hidden"] or (not g["installed"] and not include_not_installed):
         return 0
     w = STATUS_WEIGHT.get(g["status"], 0)
@@ -50,6 +50,10 @@ def weight(g, minutes, mood, now, mood_mode="any", include_not_installed=False, 
         return 0
     if minutes is not None and g["session_length"] > minutes:
         return 0
+    if finish_in is not None:  # « finissable en N min » : durée HLTB de l'histoire connue, reste ≤ N
+        main = g["hltb_main"]
+        if not main or max(0, main - g["playtime_min"]) > finish_in:
+            return 0
     tags = {t.strip().lower() for t in (g["tags"] + "," + g["store_tags"]).split(",") if t.strip()}
     excluded = {t.strip().lower() for t in (exclude or ()) if t.strip()}
     if excluded & tags:  # un tag exclu écarte le jeu d'office (filtre dur)
@@ -80,10 +84,11 @@ def store_page(g):
     return g["store_url"] or ""
 
 
-def pick_pool(con, minutes, mood, collection=None, mood_mode="any", exclude=None):
+def pick_pool(con, minutes, mood, collection=None, mood_mode="any", exclude=None, finish_in=None):
     """Bassin de jeux éligibles : (installés, possédés non installés).
     Exclut les plateformes d'import désactivées (données conservées)
-    et tout jeu portant un tag de `exclude`."""
+    et tout jeu portant un tag de `exclude`. `finish_in` (minutes) ne garde que les jeux dont
+    l'histoire principale (HowLongToBeat) se termine en ce temps, au vu du temps déjà joué."""
     if collection is None:
         allowed = None
     elif isinstance(collection, (set, list, tuple)):  # plusieurs collections : union de leurs jeux
@@ -98,7 +103,7 @@ def pick_pool(con, minutes, mood, collection=None, mood_mode="any", exclude=None
         sql += " WHERE " + cond
 
     def build(include_not_installed):
-        pool = [(g, weight(g, minutes, mood, time.time(), mood_mode, include_not_installed, exclude))
+        pool = [(g, weight(g, minutes, mood, time.time(), mood_mode, include_not_installed, exclude, finish_in))
                 for g in con.execute(sql)]
         return [(g, w) for g, w in pool if w > 0 and (allowed is None or g["id"] in allowed)]
 
@@ -109,29 +114,33 @@ def pick_pool(con, minutes, mood, collection=None, mood_mode="any", exclude=None
 
 # ---------- carrousel (tirage animé) ----------
 def roulette_strip(pool, winner_id, slots=45, rng=None, deja_visibles=()):
-    """Bande de jaquettes du carrousel, composée à partir du BASSIN éligible `pool`.
+    """Bande de jaquettes du carrousel (voir `roulette_strip_rang`) ; seule la liste est rendue."""
+    return roulette_strip_rang(pool, winner_id, slots, rng, deja_visibles)[0]
 
-    Le tirage pondérer a lieu AVANT l'animation : cette fonction ne fait que la mise
-    en scène, en disposant les jaquettes pour que le gagnant `winner_id` atterrisse
-    dans la case centrale après que tout le reste a défilé. Les jaquettes sont
-    celles qui auraient pu sortir — jamais un décor emprunté ailleurs.
 
-    Le gagnant y figure UNE seule fois, en `slots - 3` : il reste de la place pour
-    des voisins visibles de part et d'autre une fois à l'arrêt. Les autres cases se
-    cyclent en rebattant les cartes à chaque tour ; la longueur suit le bassin, au
-    plus DEUX exemplaires par jeu — à bassin réduit, garder `slots` faisait revenir
-    chaque jaquette en boucle (5 éligibles sur 45 cases, c'est 11 exemplaires de
-    chacune : mesuré, et perçu comme des duplicatas). Plafonnée à `slots`, elle
-    reste de 45 dès 23 jeux éligibles : le défilement des gros bassins n'a pas
-    bougé. Pendant la rotation tout est flou et rapide : une jaquette vue deux fois
-    ne s'y remarque pas.
+def roulette_strip_rang(pool, winner_id, slots=45, rng=None, deja_visibles=()):
+    """(bande, rang) : bande de jaquettes du carrousel, composée à partir du BASSIN éligible
+    `pool`, et rang du gagnant `winner_id` dans cette bande.
 
-    `deja_visibles` reçoit les ids déjà affichées en bout de bande. Un tirage
-    n'ALLONGE la bande que — sans cette exclusion, le gagnant pourrait se trouver
-    dans les jaquettes conservées, et `index_de` le lirait LÀ plutôt qu'à sa vraie
-    place : la cible serait alors derrière le point de départ et l'animation
-    partirait à rebours. Si le bassin est trop petit pour s'en passer, on dégrade
-    en répétant plutôt qu'en vidant la bande.
+    Le tirage pondéré a lieu AVANT l'animation : cette fonction ne fait que la mise en
+    scène, en disposant les jaquettes pour que le gagnant atterrisse dans la case
+    centrale après que tout le reste a défilé. Les jaquettes sont celles qui auraient
+    pu sortir — jamais un décor emprunté ailleurs.
+
+    La longueur est CONSTANTE (`slots`), quelle que soit la taille du bassin : à deux
+    jeux éligibles, la bande en alterne deux, et le défilement garde la même durée et
+    la même vitesse qu'avec quarante. Les doublons sont donc voulus ; pendant la
+    rotation tout est flou et rapide. Deux jaquettes identiques ne se touchent jamais
+    (sauf avec un seul jeu), et les voisins du gagnant en sont différents : au repos,
+    le jeu tiré n'est pas répété à côté de lui-même.
+
+    Le gagnant est posé en `slots - 3` ; la bande est remplie vers l'extérieur à partir
+    de lui, des « donnes » rebattues à chaque tour de bassin. Le rang est RENDU, et non
+    cherché par la suite : le gagnant peut figurer ailleurs dans la bande.
+
+    `deja_visibles` (ids déjà affichés en bout de bande) n'est plus nécessaire à la
+    justesse — le rang est explicite — et sert seulement à varier : ces jeux passent
+    en dernier dans la donne tant qu'il reste d'autres choix.
 
     `rng` reçoit un `random.Random(graine)` pour rendre un défilement rejouable à
     l'identique (utile au débogage comme en test).
@@ -139,36 +148,36 @@ def roulette_strip(pool, winner_id, slots=45, rng=None, deja_visibles=()):
     rng = rng or random
     jeux = [p[0] for p in pool]
     if not jeux:
-        return []
+        return [], 0
     if len(jeux) == 1:  # un seul jeu possible : aucune bande n'a de sens
-        return list(jeux)
-    # La bande ne dépasse pas DEUX exemplaires par jeu. À bassin réduit, garder
-    # `slots` faisait revenir chaque jaquette en boucle — 5 éligibles sur 45 cases,
-    # soit 11 exemplaires chacune, mesuré et perçu comme des duplicatas. `2n − 1`
-    # et non `2n` : le gagnant occupe une case à lui seul en plus du remplissage,
-    # qui ne dispose plus que de `n − 1` autres jeux. Plafonnée à `slots`, la
-    # longueur des gros bassins est inchangée — 38 jeux installés donnent 45 cases.
-    slots = min(slots, 2 * len(jeux) - 1)
+        return list(jeux), 0
     gagnant = next((g for g in jeux if g["id"] == winner_id), jeux[0])
-    autres = [g for g in jeux if g["id"] != gagnant["id"] and g["id"] not in deja_visibles]
-    if not autres:  # bassin trop petit : on préfère répéter à garder une bande vide
-        autres = [g for g in jeux if g["id"] != gagnant["id"]]
     rang = min(max(slots - 3, 0), slots - 1)
-    bande, reste = [], None
-    for i in range(slots):
-        if i == rang:
-            bande.append(gagnant)
-            continue
-        if not reste:  # donne épuisée : on rebat pour le tour suivant
-            reste = autres[:]
-            rng.shuffle(reste)
-            # À la couture, la première carte de la nouvelle donne ne doit pas
-            # être la dernière de l'ancienne : deux jaquettes identiques de suite
-            # se liraient comme un ralentissement du défilement.
-            if bande and len(reste) > 1 and reste[-1]["id"] == bande[-1]["id"]:
-                reste[-1], reste[0] = reste[0], reste[-1]
-        bande.append(reste.pop())
-    return bande
+    vus = set(deja_visibles)
+    etat = {"donne": []}
+
+    def tirer(voisin):
+        """Prochaine jaquette, différente de `voisin` ; on rebat quand la donne est épuisée."""
+        for _ in range(2):
+            d = etat["donne"]
+            for i in range(len(d) - 1, -1, -1):
+                if d[i]["id"] != voisin["id"]:
+                    return d.pop(i)
+            neuve = jeux[:]
+            rng.shuffle(neuve)
+            neuve.sort(key=lambda g: g["id"] in vus, reverse=True)   # déjà visibles : en bout de pile
+            etat["donne"] = neuve
+        return next(g for g in jeux if g["id"] != voisin["id"])
+
+    avant, voisin = [], gagnant
+    for _ in range(rang):                       # vers la gauche, depuis le gagnant
+        voisin = tirer(voisin)
+        avant.append(voisin)
+    apres, voisin = [], gagnant
+    for _ in range(slots - rang - 1):           # vers la droite
+        voisin = tirer(voisin)
+        apres.append(voisin)
+    return avant[::-1] + [gagnant] + apres, rang
 
 
 def roulette_rogne(longueur, rang, a_gauche=4, a_droite=2):
@@ -269,10 +278,10 @@ def tirer_candidats(pool, tires=frozenset(), courant=None):
     return reste, tires
 
 
-def pick(con, minutes, mood, collection=None, mood_mode="any", exclude=None):
+def pick(con, minutes, mood, collection=None, mood_mode="any", exclude=None, finish_in=None):
     if exclude is None:
         exclude = excluded_tags(con)
-    installed, owned = pick_pool(con, minutes, mood, collection, mood_mode, exclude)
+    installed, owned = pick_pool(con, minutes, mood, collection, mood_mode, exclude, finish_in)
     if not installed and not owned:
         return print(tr("No eligible game (filters too strict, or library empty)."))
     stage = "installed" if installed else "owned"

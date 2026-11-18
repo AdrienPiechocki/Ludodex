@@ -1,3 +1,8 @@
+game:
+  name: "Mindustry"
+  mod: "LudodexLogger-Mindustry.zip"
+  log: "ludodex.log in the Mindustry data folder"
+
 # Mindustry achievements for Ludodex ("Achievements" module).
 #
 # To use with the "Ludodex Logger" mod for Mindustry (LudodexLogger.zip, a script mod: scripts/main.js).

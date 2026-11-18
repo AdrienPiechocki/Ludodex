@@ -1,0 +1,215 @@
+{
+ "games": [
+  {
+   "aliases": [],
+   "author": "",
+   "count": 50,
+   "description": "",
+   "extras": [],
+   "hidden": 0,
+   "id": "dusklight",
+   "language": "",
+   "log": "achievements.json of the game (see the YAML comments)",
+   "mod": "",
+   "name": "Dusklight (Zelda: Twilight Princess, PC)",
+   "sha256": "1d69ea35bbded24965d262fc5d5173eeb8756e20c7269fad0cb3c04b1e849993",
+   "url": "",
+   "version": "",
+   "yaml": "dusklight/dusklight-achievements.yaml"
+  },
+  {
+   "aliases": [],
+   "author": "",
+   "count": 127,
+   "description": "",
+   "extras": [
+    {
+     "path": "fear-and-hunger/LudodexLogger.js",
+     "sha256": "f37982b41b86bf9fd1c91d1c14b3931bf0d4e38d64f2fa7c23eb72d2b8f4acd0"
+    }
+   ],
+   "hidden": 25,
+   "id": "fear-and-hunger",
+   "language": "",
+   "log": "ludodex.log, next to index.html in the game folder",
+   "mod": "LudodexLogger.js",
+   "name": "Fear & Hunger",
+   "sha256": "6b865212342bc4c4b7874082618936c565b5d853c20d904dfb558281bf32e9b0",
+   "url": "",
+   "version": "",
+   "yaml": "fear-and-hunger/fear-and-hunger-achievements.yaml"
+  },
+  {
+   "aliases": [],
+   "author": "",
+   "count": 283,
+   "description": "",
+   "extras": [
+    {
+     "path": "mindustry/LudodexLogger-Mindustry.zip",
+     "sha256": "0c6b88d07f9986bc98cd69107ce8cb02834e5135e7b53a56c4b1b91d6da060c3"
+    }
+   ],
+   "hidden": 9,
+   "id": "mindustry",
+   "language": "",
+   "log": "ludodex.log in the Mindustry data folder",
+   "mod": "LudodexLogger-Mindustry.zip",
+   "name": "Mindustry",
+   "sha256": "fe90bd2d261973ed83daea7a880f712d9450cc5db9a7c9a3aedbb6b8eb50e29a",
+   "url": "",
+   "version": "",
+   "yaml": "mindustry/mindustry-achievements.yaml"
+  },
+  {
+   "aliases": [],
+   "author": "",
+   "count": 29,
+   "description": "",
+   "extras": [],
+   "hidden": 12,
+   "id": "minecraft",
+   "language": "",
+   "log": "latest.log (chat announcements of advancements and challenges)",
+   "mod": "",
+   "name": "Minecraft",
+   "sha256": "453ba5c1f4c1bef86bf15e73e52eb274bddac6a4aee9663068feaed32222512d",
+   "url": "",
+   "version": "",
+   "yaml": "minecraft/minecraft-achievements.yaml"
+  },
+  {
+   "aliases": [
+    "Morrowind",
+    "Tamriel Rebuilt"
+   ],
+   "author": "",
+   "count": 365,
+   "description": "",
+   "extras": [
+    {
+     "path": "openmw/LudodexLogger-OpenMW.zip",
+     "sha256": "40b55df065de2d0a6c5f9a4f7455c77f8b019e04d8398eb37a9d92bfb42b5e88"
+    }
+   ],
+   "hidden": 68,
+   "id": "openmw",
+   "language": "",
+   "log": "~/.local/share/openmw/openmw.log",
+   "mod": "LudodexLogger-OpenMW.zip",
+   "name": "OpenMW (Morrowind)",
+   "sha256": "3b99ffb3959514d4d6deb784548dd662ca30892626090e74a0d47a6f9b3e3f1b",
+   "url": "",
+   "version": "",
+   "yaml": "openmw/openmw-achievements.yaml"
+  },
+  {
+   "aliases": [],
+   "author": "",
+   "count": 50,
+   "description": "",
+   "extras": [
+    {
+     "path": "pseudoregalia/LudodexLogger-Pseudoregalia.zip",
+     "sha256": "771b12767751dafd980049dff39d499b0b0e26aad42fb10d7aac6f40d12aacb3"
+    }
+   ],
+   "hidden": 4,
+   "id": "pseudoregalia",
+   "language": "",
+   "log": "ludodex.log next to UE4SS.log (pseudoregalia/Binaries/Win64/)",
+   "mod": "LudodexLogger-Pseudoregalia.zip",
+   "name": "Pseudoregalia",
+   "sha256": "8300a961b21124498faf4f5c4305f20444326f570ed1a6bc65ed9890c94a8219",
+   "url": "",
+   "version": "",
+   "yaml": "pseudoregalia/pseudoregalia-achievements.yaml"
+  },
+  {
+   "aliases": [],
+   "author": "",
+   "count": 51,
+   "description": "",
+   "extras": [],
+   "hidden": 3,
+   "id": "supertuxkart",
+   "language": "en",
+   "log": "players.xml itself (no mod needed; Flatpak: ~/.var/app/net.supertuxkart.SuperTuxKart/config/supertuxkart/config*/players.xml)",
+   "mod": "",
+   "name": "SuperTuxKart",
+   "sha256": "4b69bc16629c7e4f1b2c43953c056e1a4192bddfc7f7e45b60da4b352a447bb5",
+   "url": "",
+   "version": "",
+   "yaml": "supertuxkart/supertuxkart-achievements.yaml"
+  },
+  {
+   "aliases": [],
+   "author": "",
+   "count": 36,
+   "description": "",
+   "extras": [
+    {
+     "path": "tunic/LudodexLogger-Tunic.zip",
+     "sha256": "1938d19c85172b875bddaf2e179d2d0c2c2ffd0b9e85a145201a23daa7068aad"
+    }
+   ],
+   "hidden": 19,
+   "id": "tunic",
+   "language": "",
+   "log": "ludodex.log written by the BepInEx 6 IL2CPP mod",
+   "mod": "LudodexLogger-Tunic.zip",
+   "name": "TUNIC",
+   "sha256": "53ff30ceded1a7c735a2b95f50da3ebe36e8808cd0ddb134bb224d8e845f52f3",
+   "url": "",
+   "version": "",
+   "yaml": "tunic/tunic-achievements.yaml"
+  },
+  {
+   "aliases": [],
+   "author": "",
+   "count": 105,
+   "description": "",
+   "extras": [
+    {
+     "path": "vintage-story/LudodexLogger-VintageStory.zip",
+     "sha256": "5f57261e9e342ca31ed087ccd82b24d5de435dc1b02b30944d0646aa4f8dbb88"
+    }
+   ],
+   "hidden": 4,
+   "id": "vintage-story",
+   "language": "",
+   "log": "<VintagestoryData>/ModData/ludodex/ludodex.log",
+   "mod": "LudodexLogger-VintageStory.zip",
+   "name": "Vintage Story",
+   "sha256": "6ceb245f888ce80efaeb55d46e91095389a555502002cf7e4bcb0dd779e18101",
+   "url": "",
+   "version": "",
+   "yaml": "vintage-story/vintagestory-achievements.yaml"
+  },
+  {
+   "aliases": [
+    "VotV"
+   ],
+   "author": "",
+   "count": 136,
+   "description": "",
+   "extras": [
+    {
+     "path": "votv/LudodexLogger-VotV.zip",
+     "sha256": "cbf614fdf3d8fcf61358851b6b540de459ab69cb82a10a7f5528e7273a45fe56"
+    }
+   ],
+   "hidden": 29,
+   "id": "votv",
+   "language": "",
+   "log": "%LOCALAPPDATA%/VotV/ludodex.log (under Proton: inside the game's Wine prefix)",
+   "mod": "LudodexLogger-VotV.zip",
+   "name": "Voices of the Void",
+   "sha256": "a397c2b60a4f2a0bb06bdaef9e2d8be5103b4f6192e5166e6773d37444a9aa85",
+   "url": "",
+   "version": "",
+   "yaml": "votv/votv-achievements.yaml"
+  }
+ ],
+ "schema": 1
+}
