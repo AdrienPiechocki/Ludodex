@@ -2,6 +2,20 @@
 
 A GTK4 / libadwaita game library manager that imports your games (Steam, itch.io, Flatpak, Lutris, RetroArch…), picks a **random game to play** based on your mood and the time available, and keeps a **retrospective** of your play sessions — all local, with a Markdown note per game and user-defined achievements tracked from game logs.
 
+<p align="center">
+  <img src="docs/ludodex.gif" alt="Ludodex: library view with collections, covers from SteamGridDB, Steam and IGDB" width="800">
+</p>
+
+**Why Ludodex?** You own hundreds of games across several launchers and still can't decide what to play. Ludodex puts them in one local library, picks one for you from your mood and the time you have, tells you how long it takes to beat (optional HowLongToBeat), and gives achievements to games that have none, by reading their logs.
+
+- 🔒 **Local first**: one SQLite file, no account, no telemetry. Network features (SteamGridDB, IGDB, HowLongToBeat, RetroAchievements, Steam, community YAML repo) are optional and explicit; API keys live in separate `0600` files, never in the database.
+- 🎲 **Pick** a game by mood, available time and status, with an animated roulette.
+- 🏆 **Custom achievements** from game logs (YAML rules: counts, sequences, distinct values, sums, meta-achievements), plus a **community repository** in [`achievements/`](achievements/) — contributions welcome.
+- 📊 **Retrospectives** (week / month / year) exportable to **HTML + CSS, PNG and PDF**.
+- 🗂 Imports **Steam, Heroic, Lutris, itch.io, Flatpak, RetroArch** and custom entries.
+
+> **AI disclosure.** Ludodex is developed with the help of an AI assistant (Claude, by Anthropic). A significant share of the code, tests and documentation was written or refactored with it — recent additions such as the rule engine, schema migrations, the HowLongToBeat / IGDB integrations, the community repository and the exports in particular. The author sets the direction, runs the app on a real library and decides what gets merged, and remains responsible for the result. Bug reports are welcome whatever the origin of the code, and the full history is in the commits. If that matters to you (some distribution channels have their own policy on AI-assisted software), you can judge from the source.
+
 ## Features
 
 ### Pick — the draw
