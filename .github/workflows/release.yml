@@ -1,0 +1,42 @@
+name: Release
+
+# Pousser un tag (« 1.5.1 » ou « v1.5.1 ») construit ludodex.flatpak et l'attache à la release GitHub :
+# l'utilisateur n'a rien à cloner ni à compiler. « Run workflow » (manuel) produit seulement
+# l'artefact, pour tester le paquet sans publier.
+on:
+  push:
+    tags: ["v[0-9]*", "[0-9]*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # attacher le fichier à la release
+
+jobs:
+  flatpak:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install flatpak-builder and the GNOME runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y flathub org.gnome.Platform//51 org.gnome.Sdk//51
+      - name: Build
+        run: |
+          flatpak-builder --force-clean --user --disable-rofiles-fuse \
+            --repo=build/repo build/flatpak io.github.AdrienPiechocki.Ludodex.yml
+          flatpak build-bundle build/repo ludodex.flatpak io.github.AdrienPiechocki.Ludodex
+      - name: Smoke test (the bundle installs and the CLI starts)
+        run: |
+          flatpak install --user -y --bundle ./ludodex.flatpak
+          flatpak run --command=ludodex-cli io.github.AdrienPiechocki.Ludodex --help | head -5
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ludodex.flatpak
+          path: ludodex.flatpak
+      - name: Attach to the GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" ludodex.flatpak --generate-notes || gh release upload "$GITHUB_REF_NAME" ludodex.flatpak --clobber
