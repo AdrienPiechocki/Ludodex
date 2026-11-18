@@ -539,5 +539,6 @@
   "Time per game": "Temps par jeu",
   "max games per run (default: all)": "nombre max de jeux par passage (défaut : tous)",
   "exit code {code}": "code de sortie {code}",
-  "Launch failed: {e}": "Échec du lancement : {e}"
+  "Launch failed: {e}": "Échec du lancement : {e}",
+  "Couldn't open {url}: {e}": "Impossible d'ouvrir {url} : {e}"
 }

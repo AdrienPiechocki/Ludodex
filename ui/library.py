@@ -832,6 +832,17 @@ class LibraryMixin:
         """Le play des collections automatiques : ouvrir le client de la plateforme
         (Steam, Lutris…), lui-même et pas un jeu. Rien à dire quand ça réussit —
         la fenêtre du client EST le retour. Toast seulement si le spawn a cassé."""
+        url = P.launcher_url(source)
+        if url:                                   # flathub.org : navigateur par défaut, via le portail
+            def done(launcher, res):
+                try:
+                    launcher.launch_finish(res)
+                except GLib.Error as e:
+                    if not P.open_launcher(source):   # repli : xdg-open
+                        self.toasts.add_toast(Adw.Toast.new(GLib.markup_escape_text(
+                            tr("Couldn't open {url}: {e}", url=url, e=e.message))))
+            Gtk.UriLauncher.new(url).launch(self, None, done)
+            return
         if not P.open_launcher(source):
             self.toasts.add_toast(Adw.Toast.new(tr("Couldn't open the launcher")))
 

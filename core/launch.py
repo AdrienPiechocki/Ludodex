@@ -564,6 +564,15 @@ LAUNCHER_URIS = {"steam": "steam://nav/games", "itch": "itch://",
                  "heroic": "heroic://", "flatpak": "https://flathub.org"}
 
 
+def launcher_url(source):
+    """Adresse web que le play de `source` ouvre (Flatpak → flathub.org), ou None quand c'est un
+    client ou un protocole (steam://, itch://…). L'interface ouvre les adresses web par le portail
+    du bureau — le navigateur par défaut — plutôt que par `xdg-open`, absent ou muet sur
+    certains postes sans qu'aucune erreur ne remonte."""
+    uri = LAUNCHER_URIS.get(source)
+    return uri if uri and uri.startswith(("http://", "https://")) else None
+
+
 def launcher_command(source):
     """Commande ouvrant le launcher de `source` (son client lui-même, pas un jeu),
     ou None : cette source n'a rien à ouvrir — Imported est une commande arbitraire
