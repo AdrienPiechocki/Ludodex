@@ -13,7 +13,7 @@ jobs:
           python-version: "3.12"
       - name: System libraries (cairo, for the export tests)
         run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config python3-dev
-      - run: pip install pyyaml pytest pycairo
+      - run: pip install pyyaml pytest pycairo pillow
       - name: Community achievements are valid and index.json is up to date
         run: python3 tools/build_index.py --check
       - run: python3 -m pytest tests -q

@@ -186,3 +186,17 @@ def test_fetch_missing_covers_and_hltb_target_every_game(monkeypatch):
     monkeypatch.setattr(hltb, "fetch_hltb", lambda con, g, http=None: seen.append(g["name"]) or True)
     hltb.fetch_missing(c, delay=0)
     assert sorted(seen) == ["a", "b", "c", "d"]
+
+
+def test_fetch_missing_covers_unlimited_and_reports_progress(monkeypatch):
+    import sqlite3
+    from core import covers
+    from core.migrations import migrate
+    c = sqlite3.connect(":memory:"); c.row_factory = sqlite3.Row; migrate(c)
+    for i in range(120):
+        c.execute("INSERT INTO games (source, ext_id, name) VALUES ('custom', ?, ?)", (str(i), f"g{i}"))
+    monkeypatch.setattr(covers, "fetch_cover", lambda con, g, fetch=None: True)
+    monkeypatch.setattr(covers, "FETCH_COVERS", True)
+    found = []
+    assert covers.fetch_missing_covers(c, limit=-1, delay=0, on_found=found.append) == 120
+    assert found[-1] == 120 and len(found) == 120

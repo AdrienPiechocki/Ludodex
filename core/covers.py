@@ -472,7 +472,7 @@ def fetch_cover(con, g, fetch=None):
     return bool(name)
 
 
-def fetch_missing_covers(con, limit=50, delay=0.5, progress=None, fetch=None):
+def fetch_missing_covers(con, limit=50, delay=0.5, progress=None, fetch=None, on_found=None):
     """Une couverture par jeu, récupérée une fois puis gardée en local (réessai après 30 jours si introuvable).
 
     TOUS les jeux sont visés — installés ou non, masqués ou non : masquer un jeu de la
@@ -516,6 +516,8 @@ def fetch_missing_covers(con, limit=50, delay=0.5, progress=None, fetch=None):
                 progress(tr("! covers: {e}", e=e))
             break
         done += ok
+        if ok and on_found:
+            on_found(done)
         if progress:
             progress(tr("  {name}: {state}", name=g["name"], state=tr("ok") if ok else tr("not found")))
         time.sleep(delay)

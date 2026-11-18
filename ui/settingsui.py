@@ -583,8 +583,10 @@ class SettingsMixin:
 
     def _fetch_covers_bg(self):
         if getattr(self, "_covering", False):
+            self._covers_again = True     # demandé pendant une récupération (import…) : on repasse ensuite
             return
         self._covering = True
+        self._covers_again = False
 
         errors = []
 
@@ -592,12 +594,19 @@ class SettingsMixin:
             n = 0
             try:
                 con = P.db()
-                n = P.fetch_missing_covers(con, progress=lambda m: errors.append(m.lstrip("! ")) if m.startswith("!") else None)
+                # TOUS les jeux, d'une traite (sinon, après une réinstallation, 50 jaquettes par
+                # lancement) ; la grille se rafraîchit au fil des trouvailles, par paquets de 10.
+                n = P.fetch_missing_covers(con, limit=-1, delay=0.3,
+                                           progress=lambda m: errors.append(m.lstrip("! ")) if m.startswith("!") else None,
+                                           on_found=lambda k: GLib.idle_add(self._after_covers) if k % 10 == 0 else None)
                 con.close()
             finally:
                 self._covering = False
             if n:
                 GLib.idle_add(self._after_covers)
+            if getattr(self, "_covers_again", False):
+                GLib.idle_add(lambda: self._fetch_covers_bg() and False)
+                return
             if errors:   # clé SteamGridDB refusée, réseau coupé… : sinon seules les jaquettes Steam arrivent, sans un mot
                 GLib.idle_add(lambda: self.toasts.add_toast(Adw.Toast.new(
                     GLib.markup_escape_text(errors[0][:200]))) and False)

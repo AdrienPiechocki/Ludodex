@@ -110,7 +110,7 @@ flatpak-builder --force-clean --user --install --repo=build/repo build/flatpak i
 flatpak build-bundle build/repo build/ludodex.flatpak io.github.AdrienPiechocki.Ludodex
 ```
 
-`ludodex.flatpak` is attached to each GitHub release **automatically**: pushing a tag `vX.Y.Z` runs `.github/workflows/release.yml`, which builds the bundle and publishes it. To build it yourself (replace the last command's output path with `build/ludodex.flatpak`), install it with:
+`ludodex.flatpak` is attached to each GitHub release **automatically**: pushing a tag (`X.Y.Z` or `vX.Y.Z`) runs `.github/workflows/release.yml`, which builds the bundle and publishes it. To build it yourself (replace the last command's output path with `build/ludodex.flatpak`), install it with:
 
 ```sh
 flatpak install --user ./ludodex.flatpak
