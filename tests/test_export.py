@@ -115,7 +115,7 @@ def test_helpers():
 
 
 def test_html_has_pie_and_all_covers_even_when_large(con, tmp_path, monkeypatch):
-    from PIL import Image
+    Image = pytest.importorskip("PIL.Image")      # Pillow : fabrique les jaquettes de test et réduit les vignettes
     d = export.collect(con, "month", now=NOW)
     # une grosse jaquette PNG (bruit, > 400 Ko) pour CHAQUE jeu du top
     import os
