@@ -6,6 +6,7 @@ gtk4-layer-shell, compositeur sans layer-shell…), le jeu se lance quand même,
 bruit. L'overlay s'éteint seul quand la session du jeu est close (il lit la base)."""
 import os, pathlib, shutil, subprocess, sys
 
+from . import platform
 from .db import get_setting
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -32,7 +33,12 @@ def _spawn(args):
     if cmd is None or os.environ.get("LUDODEX_NO_OVERLAY"):
         return False
     try:
-        subprocess.Popen(cmd + args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+        # Comme les jeux (platform.host_argv) : derrière `cyberrealm-launch`, qui bascule l'affichage et
+        # le bus D-Bus vers CyberRealm quand il tourne — l'overlay se dessine alors DANS le bureau 3D, à
+        # côté du jeu, et non sur le bureau hôte par-dessus la fenêtre de CyberRealm. Sans CyberRealm, le
+        # wrapper exécute la commande telle quelle. (Flatpak : le bac à sable ne voit pas le socket du jeu.)
+        wrapper = [] if platform.in_flatpak() else platform.cyberrealm_wrapper()
+        subprocess.Popen(wrapper + cmd + args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL, start_new_session=True)
         return True
     except OSError:

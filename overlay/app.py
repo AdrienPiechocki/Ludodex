@@ -254,15 +254,25 @@ class ClockCard(Card):
     def build_settings(self):
         modes = [("clock", tr("Clock")), ("session", tr("Session time")),
                  ("stopwatch", tr("Stopwatch")), ("countdown", tr("Countdown"))]
-        dd = Gtk.DropDown.new_from_strings([m[1] for m in modes])
-        dd.set_selected([m[0] for m in modes].index(self.cfg["mode"]))
+        # Des boutons liés plutôt qu'un menu déroulant : un GtkDropDown ouvre un popover DANS ce
+        # popover, et les popups imbriqués ne s'affichent pas partout (CyberRealm, layer-shell).
+        row = Gtk.Box(css_classes=["linked"], halign=Gtk.Align.FILL)
+        first = None
+        for key, label in modes:
+            b = Gtk.ToggleButton(label=label, hexpand=True, active=(key == self.cfg["mode"]))
+            if first is None:
+                first = b
+            else:
+                b.set_group(first)
 
-        def mode(d, _p):
-            self.cfg["mode"] = modes[d.get_selected()][0]
-            self.ov.save()
-            self.reset()
-        dd.connect("notify::selected", mode)
-        self._setting_row(tr("Mode"), dd)
+            def picked(btn, k=key):
+                if btn.get_active() and self.cfg["mode"] != k:
+                    self.cfg["mode"] = k
+                    self.ov.save()
+                    self.reset()
+            b.connect("toggled", picked)
+            row.append(b)
+        self._pop_box.append(row)
         self._setting_row(tr("24-hour clock"), self._switch("hour24"))
         self._setting_row(tr("Show seconds"), self._switch("seconds"))
         self._setting_row(tr("Countdown (min)"), self._spin("countdown_min", 1, 600))
