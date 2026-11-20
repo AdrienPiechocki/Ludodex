@@ -101,3 +101,69 @@ def test_spawn_is_blocked_by_env_guard(monkeypatch):
     # conftest pose LUDODEX_NO_OVERLAY : aucun test ne doit lancer un vrai overlay
     monkeypatch.setattr(core_overlay.subprocess, "Popen", lambda *a, **k: 1 / 0)
     assert core_overlay._spawn(["--toggle"]) is False
+
+
+# ---------- fenêtre du jeu : échelle, réduite, reconnaissance ----------
+from overlay import windows as W
+
+
+def test_scale_follows_height_and_is_bounded():
+    assert W.scale_for(1080) == 1.0
+    assert W.scale_for(540) == 0.5
+    assert W.scale_for(2160) == 2.0
+    assert W.scale_for(100) == W.SCALE_MIN and W.scale_for(99999) == W.SCALE_MAX
+    assert W.scale_for(0) == 1.0 and W.scale_for(None) == 1.0       # inconnu : pas de changement
+    assert W.scale_for(720, reference=720) == 1.0
+
+
+def test_config_has_scale_settings():
+    c = config.normalize({"reference_height": 10, "scale_with_game": "no"})
+    assert c["reference_height"] == 360 and c["scale_with_game"] is True
+
+
+def test_parsers():
+    cr = W.parse_cyberrealm(json.dumps([{"wid": 3, "pid": 42, "title": "Game", "app_id": "g",
+                                          "width": 1280, "height": 720, "hidden": True}]))
+    assert cr == [W.Win(42, "Game", "g", 1280, 720, True, False)]
+    hy = W.parse_hyprland(json.dumps([
+        {"pid": 7, "title": "T", "class": "c", "size": [1920, 1080], "mapped": True,
+         "hidden": False, "workspace": {"name": "1"}},
+        {"pid": 8, "title": "S", "class": "s", "size": [800, 600], "mapped": True,
+         "hidden": False, "workspace": {"name": "special:magic"}},
+        {"pid": 9, "size": [1, 1], "mapped": False}]))
+    assert [(w.pid, w.minimized) for w in hy] == [(7, False), (8, True)]
+    kw = W.parse_kwin(json.dumps([{"pid": 1, "title": "x", "app_id": "y", "width": 10, "height": 20,
+                                    "minimized": True, "active": True}]))
+    assert kw[0].minimized and kw[0].active
+    assert W.parse_kwin("not json") == W.parse_cyberrealm("{}") == W.parse_hyprland("") == []
+
+
+def test_pick_window_prefers_pid_then_name():
+    a = W.Win(100, "Launcher", "steam", 400, 300, False, False)
+    b = W.Win(200, "Hollow", "hk", 1920, 1080, False, False)
+    c = W.Win(200, "Hollow dialog", "hk", 300, 200, False, False)
+    d = W.Win(300, "Other", "o", 800, 600, False, False)
+    assert W.pick_window([a, b, c, d], {200}, "Hollow Knight") is b          # même PID : la plus grande
+    assert W.pick_window([a, d], {999}, "Launcher stuff") is None            # rien ne correspond
+    assert W.pick_window([a, b], set(), "abc") is None                       # nom trop court : pas de devinette
+    named = W.Win(5, "Hollow Knight", "x", 10, 10, False, False)
+    assert W.pick_window([a, named], set(), "Hollow Knight") is named
+
+
+def test_descendants_and_detect():
+    tree = {1: [2, 3], 2: [4], 4: [5], 9: [10]}
+    assert W.descendants(1, tree) == {1, 2, 3, 4, 5}
+    assert W.descendants(7, tree) == {7}
+    assert W.detect({"WAYLAND_DISPLAY": "cyberrealm-0"}) == "cyberrealm"
+    assert W.detect({"HYPRLAND_INSTANCE_SIGNATURE": "x"}) == "hyprland"
+    assert W.detect({"XDG_CURRENT_DESKTOP": "KDE"}) == "kwin"
+    assert W.detect({"XDG_CURRENT_DESKTOP": "sway"}) is None
+
+
+def test_start_passes_pid(monkeypatch):
+    con = P.db()
+    calls = []
+    monkeypatch.setattr(core_overlay, "_spawn", lambda args: calls.append(args) or True)
+    P.set_setting(con, "overlay_enabled", "1")
+    core_overlay.start(con, 3, 4242)
+    assert calls == [["--game", "3", "--pid", "4242"]]

@@ -26,7 +26,7 @@ import cairo
 
 from core.db import db, get_note, set_note
 from i18n import tr
-from . import APP_ID, config, data
+from . import APP_ID, config, data, windows
 from .mdrender import MarkdownRenderer
 from .shortcut import GlobalShortcut
 
@@ -60,6 +60,7 @@ class Canvas(Gtk.Widget):
     def __init__(self):
         super().__init__(hexpand=True, vexpand=True)
         self.cards = []
+        self.scale = 1.0        # suit la taille de la fenêtre du jeu (cf. windows.scale_for)
         self.on_drag_end = None
         self._dragged = None
         # Le geste vit sur le canevas, qui ne bouge pas : sur l'en-tête de la carte (qui se
@@ -77,8 +78,7 @@ class Canvas(Gtk.Widget):
             if hit is not None and c.menu.get_visible() and (hit is c.menu or hit.is_ancestor(c.menu)):
                 break   # le bouton ⚙ garde son clic : on ne le prend pas pour un début de glisser
             if c.header.get_visible() and hit is not None and (hit is c.header or hit.is_ancestor(c.header)):
-                a = c.get_allocation()
-                self._dragged, self._origin = c, (a.x, a.y)
+                self._dragged, self._origin = c, c.disp[:2]
                 gesture.set_state(Gtk.EventSequenceState.CLAIMED)
                 return
         self._dragged = None
@@ -88,11 +88,11 @@ class Canvas(Gtk.Widget):
         c = self._dragged
         if c is None:
             return
-        a = c.get_allocation()
+        _x, _y, dw, dh = c.disp          # taille À L'ÉCRAN (échelle comprise)
         W, H = self.get_width(), self.get_height()
-        x = min(max(self._origin[0] + dx, 0), max(0, W - a.width))
-        y = min(max(self._origin[1] + dy, 0), max(0, H - a.height))
-        c.cfg["x"], c.cfg["y"] = config.fraction(x, y, W, H, a.width, a.height)
+        x = min(max(self._origin[0] + dx, 0), max(0, W - dw))
+        y = min(max(self._origin[1] + dy, 0), max(0, H - dh))
+        c.cfg["x"], c.cfg["y"] = config.fraction(x, y, W, H, dw, dh)
         self.queue_allocate()
 
     def _drag_end(self, *_):
@@ -107,15 +107,25 @@ class Canvas(Gtk.Widget):
     def do_measure(self, orientation, for_size):
         return 0, 0, -1, -1
 
+    def set_scale(self, scale):
+        if abs(scale - self.scale) > 1e-3:
+            self.scale = scale
+            self.queue_allocate()
+
     def do_size_allocate(self, width, height, baseline):
         for c in self.cards:
             if not c.get_visible():
                 continue
             w = max(c.measure(Gtk.Orientation.HORIZONTAL, -1)[1], 1)
             h = max(c.measure(Gtk.Orientation.VERTICAL, w)[1], 1)
-            w, h = min(w, width), min(h, height)
-            x, y = config.place(c.cfg["x"], c.cfg["y"], width, height, w, h)
-            c.allocate(w, h, -1, Gsk.Transform().translate(Graphene.Point().init(x, y)))
+            # La carte est mise en page à SA taille naturelle puis agrandie/réduite d'un bloc
+            # (texte, marges, cases à cocher) ; jamais plus grande que l'écran.
+            s = min(self.scale, width / w, height / h)
+            sw, sh = w * s, h * s
+            x, y = config.place(c.cfg["x"], c.cfg["y"], width, height, sw, sh)
+            c.disp = (x, y, sw, sh)
+            t = Gsk.Transform().translate(Graphene.Point().init(x, y)).scale(s, s)
+            c.allocate(w, h, -1, t)
 
     def do_dispose(self):
         for c in self.cards:
@@ -135,6 +145,7 @@ class Card(Gtk.Box):
         self.ov = ov
         self.cfg = ov.cfg["widgets"][self.KEY]
         self.interactive = False
+        self.disp = (0, 0, 0, 0)    # position et taille à l'écran, posées par Canvas
         self.add_css_class("ld-card")
         self.set_halign(Gtk.Align.START)
         self.set_valign(Gtk.Align.START)
@@ -448,6 +459,8 @@ CARDS = (ClockCard, AchievementsCard, NotesCard)
 def parse_args(argv):
     p = argparse.ArgumentParser(prog="ludodex-overlay", description="Ludodex in-game overlay")
     p.add_argument("--game", type=int, metavar="ID", help="game id (starts the overlay for it)")
+    p.add_argument("--pid", type=int, metavar="PID",
+                   help="with --game: process launched for the game (to find its window)")
     p.add_argument("--keep", action="store_true",
                    help="with --game: stay open without a running session (for testing)")
     p.add_argument("--toggle", action="store_true", help="open/close the running overlay")
@@ -463,6 +476,8 @@ class Overlay(Gtk.Application):
         self.gid = None
         self.interactive = False
         self.keep = False
+        self.minimized = False
+        self.root_pid, self.tracker, self._pids_at, self._pids = None, None, 0.0, set()
         self.cfg = config.load()
         self._save_id = 0
 
@@ -478,7 +493,7 @@ class Overlay(Gtk.Application):
             return 0
         if ns.game is not None and ns.game != self.gid:
             self.keep = ns.keep
-            self.start_game(ns.game)
+            self.start_game(ns.game, ns.pid)
         if ns.toggle and self.win:
             self.set_interactive(not self.interactive)
         if self.win is None:
@@ -486,13 +501,14 @@ class Overlay(Gtk.Application):
         return 0
 
     # -- démarrage / arrêt
-    def start_game(self, gid):
+    def start_game(self, gid, pid=None):
         if self.con is None:
             self.con = db()
         g = data.game(self.con, gid)
         if g is None:
             return
-        self.gid = gid
+        self.gid, self.root_pid, self.game_name = gid, pid, g["name"]
+        self.motifs, self._pids_at = data.motifs(self.con, gid), 0.0
         self.session_id, self.session_started = None, time.time()
         self._wait_until = time.monotonic() + SESSION_WAIT_SEC
         self.known = data.unlocked(self.con, gid)   # base : on n'annonce que les NOUVEAUX succès
@@ -503,6 +519,11 @@ class Overlay(Gtk.Application):
             GLib.timeout_add_seconds(POLL_SEC, self._poll)
             self.shortcut = GlobalShortcut(lambda: self.set_interactive(not self.interactive))
             self.shortcut.start()
+        if self.tracker is None:
+            self.tracker = windows.GameWindow(self._game_pids, self.game_name, self._on_game_window)
+            self.tracker.start(self)
+        else:
+            self.tracker.name, self.tracker.last = self.game_name, False    # autre jeu : on renotifie
         for c in self.cards:
             if isinstance(c, NotesCard):
                 c.flush()
@@ -515,6 +536,8 @@ class Overlay(Gtk.Application):
             if isinstance(c, NotesCard):
                 c.flush()
         self.save(now=True)
+        if self.tracker:
+            self.tracker.stop()
         self.win = None
         self.quit()
 
@@ -575,6 +598,34 @@ class Overlay(Gtk.Application):
             self.set_interactive(False)
             return True
         return False
+
+    # -- fenêtre du jeu : échelle et mise en veille
+    def _game_pids(self):
+        """PIDs du jeu : le processus lancé par Ludodex et ses descendants, plus ceux que les
+        sources du jeu (dossier Steam, Heroic…) y rattachent. Relu au plus toutes les 2 s."""
+        now = time.monotonic()
+        if now - self._pids_at > 2.0:
+            self._pids_at = now
+            pids = set()
+            if self.root_pid:
+                pids |= windows.descendants(self.root_pid, windows.process_children())
+            pids |= data.pids_of(self.motifs)
+            self._pids = pids
+        return self._pids
+
+    def _on_game_window(self, win):
+        """Appelé à chaque changement de taille ou d'état de la fenêtre du jeu (None = introuvable :
+        échelle 1, jamais réduit — on ne cache pas l'overlay sur une simple incertitude)."""
+        if win is not None and self.cfg["scale_with_game"]:
+            self.canvas.set_scale(windows.scale_for(win.height, self.cfg["reference_height"]))
+        else:
+            self.canvas.set_scale(1.0)
+        self.minimized = bool(win and win.minimized)
+        if self.minimized and self.interactive:
+            self.set_interactive(False)      # jeu réduit : plus rien à piloter
+        self.win.set_visible(not self.minimized)
+        if not self.minimized:
+            self._apply_input()
 
     # -- états
     def set_interactive(self, on):

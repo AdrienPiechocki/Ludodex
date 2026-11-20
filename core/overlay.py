@@ -39,9 +39,10 @@ def _spawn(args):
         return False
 
 
-def start(con, gid):
-    """Démarre l'overlay pour le jeu `gid` (ou le fait passer à ce jeu s'il tourne déjà)."""
-    return enabled(con) and _spawn(["--game", str(gid)])
+def start(con, gid, pid=None):
+    """Démarre l'overlay pour le jeu `gid` (ou le fait passer à ce jeu s'il tourne déjà).
+    `pid` : processus lancé pour le jeu, qui sert à retrouver sa fenêtre (taille, réduite)."""
+    return enabled(con) and _spawn(["--game", str(gid)] + (["--pid", str(pid)] if pid else []))
 
 
 def toggle():

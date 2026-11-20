@@ -20,6 +20,8 @@ finish-args:
   - --filesystem=~/.var/app/io.itch.itch/config/itch/db:ro
   - --filesystem=~/.var/app/com.heroicgameslauncher.hgl/config/heroic:ro
   - --talk-name=org.freedesktop.Flatpak
+  # Overlay : charger un script KWin (taille / état de la fenêtre du jeu sous KDE)
+  - --talk-name=org.kde.KWin
 modules:
   - name: pyyaml
     buildsystem: simple

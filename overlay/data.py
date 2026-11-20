@@ -47,3 +47,22 @@ def unlocked(con, gid):
 def new_unlocks(known, current):
     """Succès présents dans `current` et absents de `known`, dans un ordre stable."""
     return [current[k] for k in sorted(current) if k not in known]
+
+
+def motifs(con, gid):
+    """Repères /proc du jeu (dossier d'installation…) — [] si inconnus (voir core.launch.motifs_jeu)."""
+    from core import launch
+    try:
+        g = con.execute("SELECT * FROM games WHERE id=?", (gid,)).fetchone()
+        return launch.motifs_jeu(g) if g else []
+    except Exception:
+        return []
+
+
+def pids_of(patterns):
+    """PIDs des processus portant l'un des repères (liste vide si inconnu ou illisible)."""
+    from core import launch
+    try:
+        return set(launch._pids_sous(patterns) or ()) if patterns else set()
+    except Exception:
+        return set()

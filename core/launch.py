@@ -420,7 +420,7 @@ def launch(con, g, on_exit=None, on_fail=None):
                       (g["id"], now))
     con.commit()
     if on_exit is not None:   # lancement depuis l'application (pas la CLI) : l'overlay accompagne la session
-        overlay.start(con, g["id"])
+        overlay.start(con, g["id"], proc.pid)
     if on_exit is not None and cur.rowcount:  # INSERT ignoré = rien d'ouvert à suivre
         # Un argv contenant "://" est remis à xdg-open : le processus tenu n'est que
         # le passe-plat, qui rend la main en ms. Pour un jeu connu (Heroic), on suit
