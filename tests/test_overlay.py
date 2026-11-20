@@ -110,7 +110,7 @@ from overlay import windows as W
 def test_parsers():
     cr = W.parse_cyberrealm(json.dumps([{"wid": 3, "pid": 42, "title": "Game", "app_id": "g",
                                           "width": 1280, "height": 720, "hidden": True}]))
-    assert cr == [W.Win(42, "Game", "g", 1280, 720, True, False)]
+    assert cr == [W.Win(42, "Game", "g", 1280, 720, True, False, wid=3)]
     hy = W.parse_hyprland(json.dumps([
         {"pid": 7, "title": "T", "class": "c", "size": [1920, 1080], "mapped": True,
          "hidden": False, "workspace": {"name": "1"}},
@@ -197,3 +197,73 @@ def test_cyberrealm_position_en_mode_focus():
     cr = W.parse_cyberrealm(json.dumps([{"pid": 1, "width": 800, "height": 600, "x": 560, "y": 240},
                                         {"pid": 2, "width": 5, "height": 5}]))
     assert (cr[0].x, cr[0].y) == (560, 240) and (cr[1].x, cr[1].y) == (None, None)
+
+
+def test_kwin_fenetre_recouverte():
+    kw = W.parse_kwin(json.dumps([{"pid": 1, "covered": True}, {"pid": 2}]))
+    assert kw[0].covered is True and kw[1].covered is False
+
+
+def _hypr(clients, monitors):
+    return json.dumps(clients) + W.HYPR_SEP + json.dumps(monitors)
+
+
+def test_hyprland_fenetre_recouverte():
+    mons = [{"activeWorkspace": {"id": 1}}]
+    game = {"pid": 1, "class": "g", "title": "g", "at": [100, 100], "size": [800, 600], "mapped": True,
+            "workspace": {"id": 1, "name": "1"}, "focusHistoryID": 1}
+    # une autre fenêtre du même workspace, focalisée plus récemment, qui chevauche le jeu
+    above = dict(game, pid=2, at=[700, 100], size=[600, 400], focusHistoryID=0)
+    assert [w.covered for w in W.parse_hyprland(_hypr([game, above], mons))] == [True, False]
+    assert W.parse_hyprland(_hypr([game], mons))[0].covered is False
+    # même workspace mais l'autre fenêtre est derrière (focus plus ancien) : le jeu reste visible
+    behind = dict(above, focusHistoryID=5)
+    assert W.parse_hyprland(_hypr([game, behind], mons))[0].covered is False
+    # aucun chevauchement
+    apart = dict(above, at=[1000, 800], size=[200, 100])
+    assert W.parse_hyprland(_hypr([game, apart], mons))[0].covered is False
+    # même processus (dialogue du jeu) : ne recouvre pas
+    assert W.parse_hyprland(_hypr([game, dict(above, pid=1)], mons))[0].covered is False
+    # workspace non affiché : recouverte
+    other_ws = dict(game, workspace={"id": 2, "name": "2"})
+    assert W.parse_hyprland(_hypr([other_ws], mons))[0].covered is True
+    # sans la liste des écrans : on ne sait pas, donc visible
+    assert W.parse_hyprland(json.dumps([other_ws]))[0].covered is False
+
+
+def test_cyberrealm_covered():
+    cr = W.parse_cyberrealm(json.dumps([{"pid": 1, "covered": True}, {"pid": 2}]))
+    assert [w.covered for w in cr] == [True, False]
+
+
+def test_cyberrealm_wid_pour_lier_l_overlay():
+    cr = W.parse_cyberrealm(json.dumps([{"pid": 1, "wid": 17}, {"pid": 2}]))
+    assert (cr[0].wid, cr[1].wid) == (17, None)
+
+
+def test_pick_window_cyberrealm_pid_inconnu():
+    old = W.Win(5, "Konsole", "konsole", 1920, 1080, False, False, wid=16)
+    game = W.Win(-1, "Weird Title", "", 1280, 720, False, False, wid=40)       # X11 : pid introuvable
+    dialog = W.Win(-1, "dlg", "", 300, 200, False, False, wid=41)
+    pre = W.Win(-1, "avant", "", 1920, 1080, False, False, wid=12)             # présente avant le suivi
+    assert W.pick_window([old, pre, dialog, game], {999}, "Other", wid_floor=16) == game
+    assert W.pick_window([old, pre], {999}, "Other", wid_floor=16) is None
+    assert W.pick_window([old, game], {999}, "Other") is None                   # sans plancher : inchangé
+
+
+def test_spawn_flatpak_sous_cyberrealm_part_de_l_hote(monkeypatch):
+    """Dans Flatpak, avec CyberRealm sur l'hôte : `cyberrealm-launch flatpak run …` via flatpak-spawn."""
+    import subprocess
+    from core import platform as plat
+    seen = []
+    monkeypatch.setenv("FLATPAK_ID", "io.example.Ludodex")
+    monkeypatch.delenv("LUDODEX_NO_OVERLAY", raising=False)
+    monkeypatch.setattr(core_overlay, "command", lambda: ["/app/bin/ludodex-overlay"])
+    monkeypatch.setattr(core_overlay, "_cyberrealm_on_host", lambda: True)
+    monkeypatch.setattr(plat, "cyberrealm_wrapper", lambda: ["/home/u/.local/bin/cyberrealm-launch"])
+    monkeypatch.setattr(subprocess, "Popen", lambda argv, **kw: seen.append(argv))
+    assert core_overlay._spawn(["--game", "3", "--pid", "9"]) is True
+    argv = seen[0]
+    assert argv[:3] == ["flatpak-spawn", "--host", "sh"]
+    assert "--env=LUDODEX_OVERLAY_TRACKER=cyberrealm" in argv and argv[-4:] == ["--game", "3", "--pid", "9"]
+    assert argv[argv.index("flatpak", 3) - 1].endswith("cyberrealm-launch")

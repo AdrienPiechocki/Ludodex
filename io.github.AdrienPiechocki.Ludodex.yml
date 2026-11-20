@@ -22,6 +22,8 @@ finish-args:
   - --talk-name=org.freedesktop.Flatpak
   # Overlay : charger un script KWin (taille / état de la fenêtre du jeu sous KDE)
   - --talk-name=org.kde.KWin
+  # Overlay : rendre l'activation au jeu à la fermeture (raccourci du script KWin, déclenché par D-Bus)
+  - --talk-name=org.kde.kglobalaccel
 modules:
   - name: pyyaml
     buildsystem: simple

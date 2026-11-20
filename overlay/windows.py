@@ -13,12 +13,12 @@ Ailleurs (sway, GNOME…), rien n'est suivi : échelle 1 et jamais réduit.
 La fenêtre du jeu est reconnue par son PID (le processus lancé par Ludodex, ses
 descendants, et les processus que `core.launch.motifs_jeu` rattache au jeu), à défaut
 par le nom du jeu dans le titre ou l'app_id. Le calcul est pur (testable sans GTK)."""
-import json, os, pathlib, re, shutil, time
+import json, os, pathlib, re, shlex, shutil, time
 from collections import namedtuple
 
 from core import platform
 
-Win = namedtuple("Win", "pid title app_id width height minimized active x y", defaults=(None, None))
+Win = namedtuple("Win", "pid title app_id width height minimized active x y covered wid", defaults=(None, None, False, None))
 # x, y : coin haut-gauche de la fenêtre dans l'espace global des sorties (None = inconnu)
 
 BUS_PATH = "/io/github/AdrienPiechocki/Ludodex/Overlay/Windows"
@@ -38,32 +38,65 @@ def parse_cyberrealm(text):
     """Sortie de `cyberrealm-exec windows` (tableau JSON) -> [Win]."""
     return [Win(_int(w.get("pid")), str(w.get("title") or ""), str(w.get("app_id") or ""),
                 _int(w.get("width")), _int(w.get("height")), bool(w.get("hidden")), False,
-                _opt_int(w.get("x")), _opt_int(w.get("y")))     # x, y : seulement en mode focus
+                _opt_int(w.get("x")), _opt_int(w.get("y")),     # x, y : seulement en mode focus
+                bool(w.get("covered")), _opt_int(w.get("wid")))     # wid : identifiant côté CyberRealm
             for w in _array(text)]
 
 
+HYPR_SEP = "@@LUDODEX@@"
+
+
 def parse_hyprland(text):
-    """Sortie de `hyprctl clients -j` -> [Win]. Hyprland n'a pas de « réduire » : une fenêtre
-    envoyée dans un workspace spécial (scratchpad) ou cachée est traitée comme réduite."""
-    out = []
-    for w in _array(text):
+    """Sortie de `hyprctl clients -j`, suivie de HYPR_SEP et de `hyprctl monitors -j`, -> [Win].
+
+    Hyprland n'a pas de « réduire » : une fenêtre envoyée dans un workspace spécial (scratchpad) ou
+    cachée est traitée comme réduite. « Recouverte » : hors du workspace affiché de son écran, ou
+    chevauchée (> 2 %) par une fenêtre d'un autre processus du même workspace focalisée plus
+    récemment (l'historique du focus tient lieu d'ordre d'empilement : une fenêtre flottante
+    focalisée passe devant)."""
+    clients, _, mons = text.partition(HYPR_SEP)
+    shown = {(m.get("activeWorkspace") or {}).get("id") for m in _array(mons)} - {None}
+    items = []
+    for w in _array(clients):
         if not w.get("mapped", True):
             continue
         size = w.get("size") or [0, 0]
-        ws = (w.get("workspace") or {}).get("name") or ""
-        out.append(Win(_int(w.get("pid")), str(w.get("title") or ""), str(w.get("class") or ""),
-                       _int(size[0]), _int(size[1]),
-                       bool(w.get("hidden")) or ws.startswith("special"),
-                       w.get("focusHistoryID") == 0,      # 0 = la fenêtre qui a le focus
-                       *_xy(w.get("at"))))
+        at = w.get("at") or [None, None]
+        ws = w.get("workspace") or {}
+        hist = w.get("focusHistoryID")
+        items.append(dict(
+            pid=_int(w.get("pid")), title=str(w.get("title") or ""), app_id=str(w.get("class") or ""),
+            width=_int(size[0]), height=_int(size[1]), x=_opt_int(at[0]), y=_opt_int(at[1]),
+            hidden=bool(w.get("hidden")) or str(ws.get("name") or "").startswith("special"),
+            active=hist == 0, ws=ws.get("id"), rank=hist if isinstance(hist, int) and hist >= 0 else 10**6))
+    out = []
+    for w in items:
+        covered = bool(shown) and w["ws"] not in shown
+        if not covered and w["x"] is not None:
+            for o in items:
+                if (o is not w and o["ws"] == w["ws"] and not o["hidden"] and o["pid"] != w["pid"]
+                        and o["rank"] < w["rank"] and o["x"] is not None
+                        and _overlap_pct(w, o) > 2):
+                    covered = True
+                    break
+        out.append(Win(w["pid"], w["title"], w["app_id"], w["width"], w["height"], w["hidden"],
+                       w["active"], w["x"], w["y"], covered))
     return out
+
+
+def _overlap_pct(a, b):
+    """Part (en %) de la surface de la fenêtre `a` cachée par `b` (dicts x, y, width, height)."""
+    w = min(a["x"] + a["width"], b["x"] + b["width"]) - max(a["x"], b["x"])
+    h = min(a["y"] + a["height"], b["y"] + b["height"]) - max(a["y"], b["y"])
+    area = a["width"] * a["height"]
+    return 100.0 * w * h / area if w > 0 and h > 0 and area > 0 else 0.0
 
 
 def parse_kwin(text):
     """Tableau JSON poussé par le script KWin -> [Win]."""
     return [Win(_int(w.get("pid")), str(w.get("title") or ""), str(w.get("app_id") or ""),
                 _int(w.get("width")), _int(w.get("height")), bool(w.get("minimized")),
-                bool(w.get("active")), _opt_int(w.get("x")), _opt_int(w.get("y")))
+                bool(w.get("active")), _opt_int(w.get("x")), _opt_int(w.get("y")), bool(w.get("covered")))
             for w in _array(text)]
 
 
@@ -72,10 +105,6 @@ def _opt_int(v):
         return int(v)
     except (TypeError, ValueError):
         return None
-
-
-def _xy(at):
-    return (_opt_int(at[0]), _opt_int(at[1])) if isinstance(at, (list, tuple)) and len(at) >= 2 else (None, None)
 
 
 def confine(win, monitors, tol=4):
@@ -181,7 +210,7 @@ def process_started(pid):
     return start
 
 
-def pick_window(wins, pids, name, since=None, started=process_started):
+def pick_window(wins, pids, name, since=None, started=process_started, wid_floor=None):
     """La fenêtre du jeu parmi `wins`, ou None.
 
     1. PID parmi `pids` (le plus sûr) ; plusieurs : la plus grande (une fenêtre de jeu est
@@ -190,7 +219,9 @@ def pick_window(wins, pids, name, since=None, started=process_started):
     3. sinon, la plus grande fenêtre dont le processus est né APRÈS le début de la session : une
        fenêtre qui n'existait pas avant le lancement n'est pas Ludodex, ni le terminal, ni le bureau.
        Rattrape les jeux dont le titre n'est pas le nom de la bibliothèque (OpenMW pour Morrowind)
-       et les lanceurs qui se détachent (Proton, AppImage, Steam)."""
+       et les lanceurs qui se détachent (Proton, AppImage, Steam) ;
+    4. CyberRealm : le PID d'une fenêtre X11 est parfois introuvable (-1). La plus grande fenêtre SANS
+       PID connu apparue depuis le démarrage du suivi (identifiant > `wid_floor`)."""
     by_pid = [w for w in wins if w.pid and w.pid in pids]
     if by_pid:
         return max(by_pid, key=lambda w: (w.active, w.width * w.height))
@@ -207,6 +238,10 @@ def pick_window(wins, pids, name, since=None, started=process_started):
                 fresh.append(w)
         if fresh:
             return max(fresh, key=lambda w: (w.active, w.width * w.height))
+    if wid_floor is not None:
+        unknown = [w for w in wins if w.wid is not None and w.wid > wid_floor and (w.pid or 0) <= 0]
+        if unknown:
+            return max(unknown, key=lambda w: w.width * w.height)
     return None
 
 
@@ -244,6 +279,8 @@ class GameWindow:
         self.last = False          # ≠ de tout résultat possible : le premier est toujours notifié
         self._busy = False
         self._kwin_loaded = False
+        self._bound = None         # CyberRealm : wid déjà signalé au compositeur
+        self._wid_floor = None     # CyberRealm : plus grand wid présent au démarrage du suivi
 
     def start(self, app, kind=None):
         """Démarre le suivi ; `app` : Gio.Application (connexion D-Bus pour KWin)."""
@@ -254,7 +291,11 @@ class GameWindow:
             if exe is None and not platform.in_flatpak():
                 self.kind = None
                 return False
-            self._argv = [exe or self.kind, *(["windows"] if self.kind == "cyberrealm" else ["clients", "-j"])]
+            if self.kind == "cyberrealm":
+                self._argv = [exe or "cyberrealm-exec", "windows"]
+            else:   # clients + écrans (workspace affiché), en un seul appel
+                h = shlex.quote(exe or "hyprctl")
+                self._argv = ["sh", "-c", f"{h} clients -j; echo {HYPR_SEP}; {h} monitors -j"]
             self._parse = parse_cyberrealm if self.kind == "cyberrealm" else parse_hyprland
             GLib.timeout_add(1500, self._poll)
             return True
@@ -263,11 +304,28 @@ class GameWindow:
         return False
 
     def feed(self, wins):
-        pick = pick_window(wins, self.get_pids(), self.name, self.get_since())
-        key = None if pick is None else (pick.width, pick.height, pick.minimized, pick.x, pick.y)
+        if self.kind == "cyberrealm" and self._wid_floor is None:
+            # fenêtres déjà là au démarrage du suivi : jamais le jeu (il n'existait pas encore)
+            self._wid_floor = max((w.wid for w in wins if w.wid is not None), default=0)
+        pick = pick_window(wins, self.get_pids(), self.name, self.get_since(), wid_floor=self._wid_floor)
+        self._bind(pick)
+        key = None if pick is None else (pick.width, pick.height, pick.minimized, pick.x, pick.y, pick.covered)
         if key != self.last:
             self.last = key
             self.on_change(pick)
+
+    def _bind(self, pick):
+        """CyberRealm : dit au compositeur quelle fenêtre est le jeu, pour qu'il y plaque l'overlay
+        quand elle est en 3D (`cyberrealm-exec overlay-bind <wid>`)."""
+        if self.kind != "cyberrealm" or pick is None or pick.wid is None or pick.wid == self._bound:
+            return
+        from gi.repository import Gio
+        self._bound = pick.wid
+        try:
+            Gio.Subprocess.new(platform.host_argv([self._argv[0], "overlay-bind", str(pick.wid)]),
+                               Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE)
+        except Exception:
+            self._bound = None
 
     # -- sondage (CyberRealm, Hyprland)
     def _poll(self):
@@ -336,6 +394,16 @@ class GameWindow:
                                      GLib.Variant("(ss)", (self._kwin_path, KWIN_SCRIPT)), None,
                                      Gio.DBusCallFlags.NONE, -1, None, loaded))
         return True
+
+    def restore_focus(self):
+        """KWin : rend l'activation au jeu après la fermeture de l'overlay (qui, sinon, la garde et
+        laisse un jeu plein écran sous la barre des tâches). Raccourci du script, déclenché par D-Bus."""
+        if not self._kwin_loaded:
+            return
+        from gi.repository import Gio, GLib
+        self._bus.call("org.kde.kglobalaccel", "/component/kwin", "org.kde.kglobalaccel.Component",
+                       "invokeShortcut", GLib.Variant("(s)", ("LudodexRestoreFocus",)), None,
+                       Gio.DBusCallFlags.NONE, 1000, None, lambda b, r: None)
 
     def stop(self):
         from gi.repository import Gio, GLib

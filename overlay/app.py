@@ -499,6 +499,7 @@ class Overlay(Gtk.Application):
         self.interactive = False
         self.keep = False
         self.minimized = False
+        self.covered = False
         self.root_pid, self.tracker, self._pids_at, self._pids = None, None, 0.0, set()
         self.cfg = config.load()
         self._save_id = 0
@@ -547,6 +548,7 @@ class Overlay(Gtk.Application):
             self.tracker.start(self)
         else:
             self.tracker.name, self.tracker.last = self.game_name, False    # autre jeu : on renotifie
+            self.tracker._wid_floor, self.tracker._bound = None, None
         for c in self.cards:
             if isinstance(c, NotesCard):
                 c.flush()
@@ -641,6 +643,7 @@ class Overlay(Gtk.Application):
         """Appelé à chaque changement d'état de la fenêtre du jeu (None = introuvable : jamais
         réduit — on ne cache pas l'overlay sur une simple incertitude)."""
         self.minimized = bool(win and win.minimized)
+        self.covered = bool(win and win.covered)
         self._confine(win)
         if os.environ.get("LUDODEX_OVERLAY_DEBUG"):
             print(f"overlay: fenêtre du jeu = {win}", file=sys.stderr)
@@ -649,7 +652,9 @@ class Overlay(Gtk.Application):
         self._apply_presence()
 
     def _hidden(self):
-        return self.minimized
+        # Une couche de la fenêtre du jeu : cachée quand elle est réduite, ou recouverte par une autre
+        # fenêtre (sauf ouvert : on ne se cache pas sous les doigts de l'utilisateur).
+        return self.minimized or (self.covered and not self.interactive)
 
     def _confine(self, game):
         """Fenêtre du jeu non plein écran : la surface se réduit à cette fenêtre (marges de la
@@ -685,6 +690,9 @@ class Overlay(Gtk.Application):
     def set_interactive(self, on):
         if on and self._hidden():
             return                           # jeu réduit : le raccourci n'ouvre rien
+        if self.interactive and not on and self.tracker:
+            # fermé : l'overlay garde l'activation de la fenêtre ; le jeu doit la récupérer
+            GLib.timeout_add(150, lambda: self.tracker.restore_focus() and False)
         self.interactive = on
         if LS is not None and LS.is_supported():
             LS.set_keyboard_mode(self.win, LS.KeyboardMode.EXCLUSIVE if on else LS.KeyboardMode.NONE)

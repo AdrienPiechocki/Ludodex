@@ -28,10 +28,35 @@ def command():
     return [sys.executable, str(script)] if script.is_file() else None
 
 
+def _cyberrealm_on_host():
+    """Flatpak : le jeu CyberRealm tourne-t-il sur l'HÔTE ? Le bac à sable ne voit pas son socket
+    (flatpak filtre `$XDG_RUNTIME_DIR`) ; `$XDG_RUNTIME_DIR` a le même chemin des deux côtés."""
+    rt = os.environ.get("XDG_RUNTIME_DIR")
+    if not (platform.in_flatpak() and rt and platform.cyberrealm_wrapper()):
+        return False
+    try:
+        return subprocess.run(["flatpak-spawn", "--host", "test", "-e", f"{rt}/cyberrealm-0"],
+                              capture_output=True, timeout=3).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def _spawn(args):
     cmd = command()
     if cmd is None or os.environ.get("LUDODEX_NO_OVERLAY"):
         return False
+    if _cyberrealm_on_host():
+        # Flatpak sous CyberRealm : l'overlay doit se dessiner DANS le bureau 3D, donc partir de l'hôte,
+        # derrière `cyberrealm-launch` (affichage et bus D-Bus du jeu), dans son propre bac à sable.
+        # Là-dedans flatpak rebaptise l'affichage (`wayland-0`) : le suivi des fenêtres est forcé.
+        argv = platform.host_argv(["flatpak", "run", "--env=LUDODEX_OVERLAY_TRACKER=cyberrealm",
+                                   "--command=ludodex-overlay", os.environ["FLATPAK_ID"], *args])
+        try:
+            subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
+            return True
+        except OSError:
+            return False
     try:
         # Comme les jeux (platform.host_argv) : derrière `cyberrealm-launch`, qui bascule l'affichage et
         # le bus D-Bus vers CyberRealm quand il tourne — l'overlay se dessine alors DANS le bureau 3D, à
