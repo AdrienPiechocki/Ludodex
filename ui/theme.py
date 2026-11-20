@@ -94,13 +94,6 @@ flowboxchild:selected { box-shadow: 0 0 0 3px @accent_bg_color; border-radius: 1
    immobilisée. La transition porte sur l'opacité, que le code change — un
    widget masqué par `visible` libérerait sa place et décalerait la bande. */
 .revel { transition: opacity 240ms ease-out; }
-
-/* Popups (popovers, listes déroulantes) : GTK ajoute une marge d'ombre autour de la surface
-   et la retranche via xdg_surface.set_window_geometry. Un compositeur qui ignore cette
-   géométrie (CyberRealm) place alors le contenu et la zone cliquable décalés de la taille
-   de l'ombre ; sans ombre, plus de marge, plus de décalage. */
-popover > contents, popover.background > contents { box-shadow: none; }
-popover { margin: 0; }
 """
 _css_done = False
 
