@@ -506,7 +506,6 @@ class Overlay(Gtk.Application):
         self.interactive = False
         self.keep = False
         self.minimized = False
-        self.unfocused = False
         self.root_pid, self.tracker, self._pids_at, self._pids = None, None, 0.0, set()
         self.cfg = config.load()
         self._save_id = 0
@@ -652,21 +651,14 @@ class Overlay(Gtk.Application):
         else:
             self.canvas.set_scale(1.0)
         self.minimized = bool(win and win.minimized)
-        # Sans focus sur le jeu (autre fenêtre devant, ou — sous CyberRealm — pas en mode focus) l'overlay
-        # se tait aussi. Ouvert, il est exempté : en prenant le clavier il peut faire perdre le focus au
-        # jeu, et il ne doit pas se cacher sous les doigts de l'utilisateur.
-        # Fenêtre INTROUVABLE (None) : le suivi fonctionne mais ne la voit pas (pas encore affichée, ou pas
-        # reconnue) — rien à recouvrir, on se tait aussi. Sans suivi du tout (compositeur non géré),
-        # cette méthode n'est jamais appelée et l'overlay reste affiché.
-        self.unfocused = bool(self.cfg["only_when_focused"] and (win is None or not win.active))
         if os.environ.get("LUDODEX_OVERLAY_DEBUG"):
-            print(f"overlay: fenêtre du jeu = {win}  masqué={self._hidden()}", file=sys.stderr)
+            print(f"overlay: fenêtre du jeu = {win}", file=sys.stderr)
         if self.minimized and self.interactive:
             self.set_interactive(False)      # jeu réduit : plus rien à piloter
         self._apply_presence()
 
     def _hidden(self):
-        return self.minimized or (self.unfocused and not self.interactive)
+        return self.minimized
 
     def _apply_presence(self):
         self.win.set_visible(not self._hidden())
@@ -676,7 +668,7 @@ class Overlay(Gtk.Application):
     # -- états
     def set_interactive(self, on):
         if on and self._hidden():
-            return                           # jeu réduit ou sans focus : le raccourci n'ouvre rien
+            return                           # jeu réduit : le raccourci n'ouvre rien
         self.interactive = on
         if LS is not None and LS.is_supported():
             LS.set_keyboard_mode(self.win, LS.KeyboardMode.EXCLUSIVE if on else LS.KeyboardMode.NONE)

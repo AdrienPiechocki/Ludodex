@@ -45,7 +45,7 @@ def _int(v):
 def parse_cyberrealm(text):
     """Sortie de `cyberrealm-exec windows` (tableau JSON) -> [Win]."""
     return [Win(_int(w.get("pid")), str(w.get("title") or ""), str(w.get("app_id") or ""),
-                _int(w.get("width")), _int(w.get("height")), bool(w.get("hidden")), bool(w.get("focused")))
+                _int(w.get("width")), _int(w.get("height")), bool(w.get("hidden")), False)
             for w in _array(text)]
 
 
@@ -113,15 +113,39 @@ def _norm(s):
     return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
 
 
+_STARTS = {}     # pid -> epoch de démarrage (ne change jamais pour un pid donné)
+
+
+def _start_epoch(stat_text, uptime_text, now):
+    """Epoch de démarrage d'après le texte de /proc/<pid>/stat et de /proc/uptime."""
+    ticks = int(stat_text.rsplit(")", 1)[1].split()[19])               # starttime, en ticks depuis le boot
+    boot = now - float(uptime_text.split()[0])
+    return boot + ticks / os.sysconf("SC_CLK_TCK")
+
+
 def process_started(pid):
-    """Date de démarrage (epoch, s) du processus `pid`, ou None."""
+    """Date de démarrage (epoch, s) du processus `pid`, ou None.
+
+    Dans le bac à sable Flatpak, /proc ne voit pas les processus de l'HÔTE — or les PID des fenêtres
+    sont ceux de l'hôte : la lecture passe alors par `flatpak-spawn --host`. Résultat mis en cache."""
+    if pid in _STARTS:
+        return _STARTS[pid]
     try:
-        stat = pathlib.Path(f"/proc/{pid}/stat").read_text()
-        ticks = int(stat.rsplit(")", 1)[1].split()[19])               # starttime, en ticks depuis le boot
-        boot = time.time() - float(pathlib.Path("/proc/uptime").read_text().split()[0])
-        return boot + ticks / os.sysconf("SC_CLK_TCK")
-    except (OSError, ValueError, IndexError):
+        if platform.in_flatpak():
+            import subprocess
+            r = subprocess.run(platform.host_argv(["sh", "-c", 'cat /proc/uptime /proc/"$1"/stat', "sh", str(pid)]),
+                               capture_output=True, text=True, timeout=3)
+            if r.returncode != 0:
+                return None
+            uptime, _, stat = r.stdout.partition("\n")
+            start = _start_epoch(stat, uptime, time.time())
+        else:
+            start = _start_epoch(pathlib.Path(f"/proc/{pid}/stat").read_text(),
+                                 pathlib.Path("/proc/uptime").read_text(), time.time())
+    except (OSError, ValueError, IndexError, Exception):
         return None
+    _STARTS[pid] = start
+    return start
 
 
 def pick_window(wins, pids, name, since=None, started=process_started):
@@ -207,7 +231,7 @@ class GameWindow:
 
     def feed(self, wins):
         pick = pick_window(wins, self.get_pids(), self.name, self.get_since())
-        key = None if pick is None else (pick.width, pick.height, pick.minimized, pick.active)
+        key = None if pick is None else (pick.width, pick.height, pick.minimized)
         if key != self.last:
             self.last = key
             self.on_change(pick)
