@@ -221,6 +221,7 @@ def _pie_row(cr, th, d, y):
     top_y = y + (hgt - step * len(slices)) / 2
     for i, s_ in enumerate(slices):
         ly = top_y + i * step
+        cr.new_sub_path()
         cr.arc(lx + 6, ly + 10, 6, 0, 2 * math.pi)
         cr.set_source_rgb(*rgb(s_["color"]))
         cr.fill()
