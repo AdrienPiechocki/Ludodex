@@ -178,3 +178,15 @@ def test_focus_flag_from_each_compositor():
         {"pid": 2, "size": [1, 1], "mapped": True, "workspace": {"name": "1"}, "focusHistoryID": 1}]))
     assert [w.active for w in hy] == [True, False]
     assert config.normalize(None)["only_when_focused"] is True
+
+
+def test_pick_window_falls_back_to_processes_born_after_the_session():
+    old = W.Win(10, "Ludodex", "io.github.Ludodex", 1920, 1088, False, False)
+    konsole = W.Win(11, "Konsole", "konsole", 1920, 1088, False, True)
+    game = W.Win(500, "OpenMW", "openmw", 1920, 1080, False, False)
+    born = {10: 1000.0, 11: 1500.0, 500: 2005.0}
+    assert W.pick_window([old, konsole, game], set(), "The Elder Scrolls III: Morrowind",
+                         since=2000.0, started=born.get) is game           # ni PID ni titre : né après le début
+    assert W.pick_window([old, konsole], set(), "Morrowind", since=2000.0, started=born.get) is None
+    assert W.pick_window([old, game], set(), "Morrowind", since=None, started=born.get) is None
+    assert W.pick_window([old, game], {10}, "x", since=2000.0, started=born.get) is old   # le PID prime

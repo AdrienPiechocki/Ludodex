@@ -6,7 +6,7 @@ Deux états :
   * OUVERT (Maj+Tab) : tous les widgets activés, déplaçables à la souris, réglables
     (⚙), le clavier est pris (notes). Maj+Tab ou Échap referme.
 La fenêtre n'a jamais de contenu quand rien n'est à montrer : transparente et traversable."""
-import argparse, datetime, time
+import argparse, datetime, os, sys, time
 from collections import deque
 
 import gi
@@ -39,6 +39,8 @@ window.ludodex-overlay.interactive { background: alpha(black, %(dim).2f); }
 .ld-card { background: alpha(#0f1115, 0.80); color: #f4f4f5; border-radius: 14px; padding: 8px 14px 10px; }
 .ld-card.interactive { border: 1px solid alpha(white, 0.28); }
 .ld-header { margin-bottom: 4px; }
+.ld-settings { background: alpha(white, 0.07); border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; }
+.ld-settings label { font-size: 12px; }
 .ld-header label { font-size: 11px; font-weight: 700; opacity: 0.7; letter-spacing: 1px; }
 .ld-header button { min-height: 22px; min-width: 22px; padding: 0 4px; color: #f4f4f5; }
 .ld-clock { font-weight: 800; font-feature-settings: "tnum"; }
@@ -75,10 +77,11 @@ class Canvas(Gtk.Widget):
     def _drag_begin(self, gesture, x, y):
         hit = self.pick(x, y, Gtk.PickFlags.DEFAULT)
         for c in self.cards:
-            if hit is not None and c.menu.get_visible() and (hit is c.menu or hit.is_ancestor(c.menu)):
+            if hit is not None and c.gear.get_visible() and (hit is c.gear or hit.is_ancestor(c.gear)):
                 break   # le bouton ⚙ garde son clic : on ne le prend pas pour un début de glisser
             if c.header.get_visible() and hit is not None and (hit is c.header or hit.is_ancestor(c.header)):
                 self._dragged, self._origin = c, c.disp[:2]
+                self.raise_card(c)
                 gesture.set_state(Gtk.EventSequenceState.CLAIMED)
                 return
         self._dragged = None
@@ -106,6 +109,13 @@ class Canvas(Gtk.Widget):
 
     def do_measure(self, orientation, for_size):
         return 0, 0, -1, -1
+
+    def raise_card(self, card):
+        """Met `card` au premier plan (ses réglages ouverts, ou pendant son déplacement)."""
+        if self.cards[-1] is not card:
+            self.cards.remove(card)
+            self.cards.append(card)
+            card.insert_before(self, None)
 
     def set_scale(self, scale):
         if abs(scale - self.scale) > 1e-3:
@@ -153,16 +163,18 @@ class Card(Gtk.Box):
         self.header = Gtk.Box(spacing=6, css_classes=["ld-header"])
         self.header.append(Gtk.Label(label=tr(self.TITLE).upper(), xalign=0, hexpand=True,
                                      cursor=Gdk.Cursor.new_from_name("grab")))
-        self.menu = Gtk.MenuButton(icon_name="emblem-system-symbolic", has_frame=False,
-                                   tooltip_text=tr("Widget settings"))
-        pop = Gtk.Popover()
-        self._pop_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
-                                margin_top=8, margin_bottom=8, margin_start=8, margin_end=8)
-        pop.set_child(self._pop_box)
-        self.menu.set_popover(pop)
-        self.header.append(self.menu)
+        # Réglages EN LIGNE dans la carte (⚙ les déplie) et non dans un popover : un popup est une
+        # surface xdg_popup que tous les compositeurs de layer-shell ne savent pas afficher
+        # (CyberRealm ne gère pas les popups, et encore moins imbriqués).
+        self.gear = Gtk.ToggleButton(icon_name="emblem-system-symbolic", has_frame=False,
+                                     tooltip_text=tr("Widget settings"))
+        self.header.append(self.gear)
         self.header.set_visible(False)
         self.append(self.header)
+        self._pop_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
+                                css_classes=["ld-settings"], visible=False)
+        self.gear.connect("toggled", lambda *_: self._sync_settings())
+        self.append(self._pop_box)
         self.body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.append(self.body)
 
@@ -222,9 +234,16 @@ class Card(Gtk.Box):
         """Reflète la config : opacité, texte… (surchargé)."""
         self.set_opacity(self.cfg["opacity"])
 
+    def _sync_settings(self):
+        self._pop_box.set_visible(self.interactive and self.gear.get_active())
+        if self._pop_box.get_visible() and self.get_parent() is not None:
+            self.get_parent().raise_card(self)
+        self.queue_resize()
+
     def set_interactive(self, on):
         self.interactive = on
         self.header.set_visible(on)
+        self._sync_settings()
         self.set_css_classes(["ld-card"] + (["interactive"] if on else []) + self.extra_classes())
         self.on_mode()
 
@@ -531,7 +550,8 @@ class Overlay(Gtk.Application):
             self.shortcut = GlobalShortcut(lambda: self.set_interactive(not self.interactive))
             self.shortcut.start()
         if self.tracker is None:
-            self.tracker = windows.GameWindow(self._game_pids, self.game_name, self._on_game_window)
+            self.tracker = windows.GameWindow(self._game_pids, self.game_name, self._on_game_window,
+                                              get_since=lambda: self.session_started)
             self.tracker.start(self)
         else:
             self.tracker.name, self.tracker.last = self.game_name, False    # autre jeu : on renotifie
@@ -635,7 +655,12 @@ class Overlay(Gtk.Application):
         # Sans focus sur le jeu (autre fenêtre devant, ou — sous CyberRealm — pas en mode focus) l'overlay
         # se tait aussi. Ouvert, il est exempté : en prenant le clavier il peut faire perdre le focus au
         # jeu, et il ne doit pas se cacher sous les doigts de l'utilisateur.
-        self.unfocused = bool(win and not win.active and self.cfg["only_when_focused"])
+        # Fenêtre INTROUVABLE (None) : le suivi fonctionne mais ne la voit pas (pas encore affichée, ou pas
+        # reconnue) — rien à recouvrir, on se tait aussi. Sans suivi du tout (compositeur non géré),
+        # cette méthode n'est jamais appelée et l'overlay reste affiché.
+        self.unfocused = bool(self.cfg["only_when_focused"] and (win is None or not win.active))
+        if os.environ.get("LUDODEX_OVERLAY_DEBUG"):
+            print(f"overlay: fenêtre du jeu = {win}  masqué={self._hidden()}", file=sys.stderr)
         if self.minimized and self.interactive:
             self.set_interactive(False)      # jeu réduit : plus rien à piloter
         self._apply_presence()

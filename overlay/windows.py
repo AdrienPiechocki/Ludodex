@@ -113,12 +113,27 @@ def _norm(s):
     return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
 
 
-def pick_window(wins, pids, name):
+def process_started(pid):
+    """Date de démarrage (epoch, s) du processus `pid`, ou None."""
+    try:
+        stat = pathlib.Path(f"/proc/{pid}/stat").read_text()
+        ticks = int(stat.rsplit(")", 1)[1].split()[19])               # starttime, en ticks depuis le boot
+        boot = time.time() - float(pathlib.Path("/proc/uptime").read_text().split()[0])
+        return boot + ticks / os.sysconf("SC_CLK_TCK")
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def pick_window(wins, pids, name, since=None, started=process_started):
     """La fenêtre du jeu parmi `wins`, ou None.
 
     1. PID parmi `pids` (le plus sûr) ; plusieurs : la plus grande (une fenêtre de jeu est
        presque toujours la plus grande de son processus : le lanceur, les dialogues sont plus petits) ;
-    2. sinon le nom du jeu (≥ 4 caractères) contenu dans le titre ou l'app_id."""
+    2. sinon le nom du jeu (≥ 4 caractères) contenu dans le titre ou l'app_id ;
+    3. sinon, la plus grande fenêtre dont le processus est né APRÈS le début de la session : une
+       fenêtre qui n'existait pas avant le lancement n'est pas Ludodex, ni le terminal, ni le bureau.
+       Rattrape les jeux dont le titre n'est pas le nom de la bibliothèque (OpenMW pour Morrowind)
+       et les lanceurs qui se détachent (Proton, AppImage, Steam)."""
     by_pid = [w for w in wins if w.pid and w.pid in pids]
     if by_pid:
         return max(by_pid, key=lambda w: (w.active, w.width * w.height))
@@ -127,6 +142,14 @@ def pick_window(wins, pids, name):
         named = [w for w in wins if n in _norm(w.title) or n in _norm(w.app_id)]
         if named:
             return max(named, key=lambda w: (w.active, w.width * w.height))
+    if since:
+        fresh = []
+        for w in wins:
+            born = started(w.pid) if w.pid else None
+            if born is not None and born >= since - 3:
+                fresh.append(w)
+        if fresh:
+            return max(fresh, key=lambda w: (w.active, w.width * w.height))
     return None
 
 
@@ -158,8 +181,8 @@ class GameWindow:
     """Suit la fenêtre du jeu et appelle `on_change(Win | None)` à chaque changement de
     taille ou d'état. `get_pids()` : PIDs du jeu (mis en cache par l'appelant)."""
 
-    def __init__(self, get_pids, name, on_change):
-        self.get_pids, self.name, self.on_change = get_pids, name, on_change
+    def __init__(self, get_pids, name, on_change, get_since=lambda: None):
+        self.get_pids, self.name, self.on_change, self.get_since = get_pids, name, on_change, get_since
         self.backend = None
         self.last = False          # ≠ de tout résultat possible : le premier est toujours notifié
         self._busy = False
@@ -183,7 +206,7 @@ class GameWindow:
         return False
 
     def feed(self, wins):
-        pick = pick_window(wins, self.get_pids(), self.name)
+        pick = pick_window(wins, self.get_pids(), self.name, self.get_since())
         key = None if pick is None else (pick.width, pick.height, pick.minimized, pick.active)
         if key != self.last:
             self.last = key
