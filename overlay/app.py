@@ -487,6 +487,7 @@ class Overlay(Gtk.Application):
         self.interactive = False
         self.keep = False
         self.minimized = False
+        self.unfocused = False
         self.root_pid, self.tracker, self._pids_at, self._pids = None, None, 0.0, set()
         self.cfg = config.load()
         self._save_id = 0
@@ -631,14 +632,26 @@ class Overlay(Gtk.Application):
         else:
             self.canvas.set_scale(1.0)
         self.minimized = bool(win and win.minimized)
+        # Sans focus sur le jeu (autre fenêtre devant, ou — sous CyberRealm — pas en mode focus) l'overlay
+        # se tait aussi. Ouvert, il est exempté : en prenant le clavier il peut faire perdre le focus au
+        # jeu, et il ne doit pas se cacher sous les doigts de l'utilisateur.
+        self.unfocused = bool(win and not win.active and self.cfg["only_when_focused"])
         if self.minimized and self.interactive:
             self.set_interactive(False)      # jeu réduit : plus rien à piloter
-        self.win.set_visible(not self.minimized)
-        if not self.minimized:
+        self._apply_presence()
+
+    def _hidden(self):
+        return self.minimized or (self.unfocused and not self.interactive)
+
+    def _apply_presence(self):
+        self.win.set_visible(not self._hidden())
+        if not self._hidden():
             self._apply_input()
 
     # -- états
     def set_interactive(self, on):
+        if on and self._hidden():
+            return                           # jeu réduit ou sans focus : le raccourci n'ouvre rien
         self.interactive = on
         if LS is not None and LS.is_supported():
             LS.set_keyboard_mode(self.win, LS.KeyboardMode.EXCLUSIVE if on else LS.KeyboardMode.NONE)
@@ -650,6 +663,8 @@ class Overlay(Gtk.Application):
             c.set_interactive(on)
         self.refresh()
         self._apply_input()
+        if not on:
+            self._apply_presence()           # fermé sans focus sur le jeu : on se retire
 
     def refresh(self):
         """Visibilité de chaque carte selon l'état, et région de saisie de la surface."""

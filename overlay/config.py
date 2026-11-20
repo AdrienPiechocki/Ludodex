@@ -14,6 +14,7 @@ DEFAULTS = {
     "monitor": "",        # nom de sortie (ex. « DP-1 ») ; vide = celle que choisit le compositeur
     "dim": 0.35,          # assombrissement du fond quand l'overlay est ouvert
     "scale_with_game": True,    # l'overlay suit la taille de la fenêtre du jeu (échelle = hauteur / référence)
+    "only_when_focused": True,  # affiché seulement quand la fenêtre du jeu a le focus (si le compositeur le dit)
     "reference_height": 1080,   # hauteur de fenêtre pour laquelle l'échelle vaut 1
     "widgets": {
         # x, y : position en FRACTION de l'espace libre (0 = bord gauche/haut, 1 = bord droit/bas),
@@ -58,7 +59,7 @@ def normalize(raw):
     """Configuration complète et valide à partir de n'importe quel JSON."""
     raw = raw if isinstance(raw, dict) else {}
     out = copy.deepcopy(DEFAULTS)
-    for k in ("monitor", "dim", "scale_with_game", "reference_height"):
+    for k in ("monitor", "dim", "scale_with_game", "only_when_focused", "reference_height"):
         out[k] = _clean(k, raw.get(k), DEFAULTS[k])
     given = raw.get("widgets") if isinstance(raw.get("widgets"), dict) else {}
     for name, defaults in DEFAULTS["widgets"].items():

@@ -45,7 +45,7 @@ def _int(v):
 def parse_cyberrealm(text):
     """Sortie de `cyberrealm-exec windows` (tableau JSON) -> [Win]."""
     return [Win(_int(w.get("pid")), str(w.get("title") or ""), str(w.get("app_id") or ""),
-                _int(w.get("width")), _int(w.get("height")), bool(w.get("hidden")), False)
+                _int(w.get("width")), _int(w.get("height")), bool(w.get("hidden")), bool(w.get("focused")))
             for w in _array(text)]
 
 
@@ -60,7 +60,8 @@ def parse_hyprland(text):
         ws = (w.get("workspace") or {}).get("name") or ""
         out.append(Win(_int(w.get("pid")), str(w.get("title") or ""), str(w.get("class") or ""),
                        _int(size[0]), _int(size[1]),
-                       bool(w.get("hidden")) or ws.startswith("special"), False))
+                       bool(w.get("hidden")) or ws.startswith("special"),
+                       w.get("focusHistoryID") == 0))     # 0 = la fenêtre qui a le focus
     return out
 
 
@@ -183,7 +184,7 @@ class GameWindow:
 
     def feed(self, wins):
         pick = pick_window(wins, self.get_pids(), self.name)
-        key = None if pick is None else (pick.width, pick.height, pick.minimized)
+        key = None if pick is None else (pick.width, pick.height, pick.minimized, pick.active)
         if key != self.last:
             self.last = key
             self.on_change(pick)

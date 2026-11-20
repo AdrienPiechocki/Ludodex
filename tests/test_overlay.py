@@ -167,3 +167,14 @@ def test_start_passes_pid(monkeypatch):
     P.set_setting(con, "overlay_enabled", "1")
     core_overlay.start(con, 3, 4242)
     assert calls == [["--game", "3", "--pid", "4242"]]
+
+
+def test_focus_flag_from_each_compositor():
+    cr = W.parse_cyberrealm(json.dumps([{"pid": 1, "width": 10, "height": 10, "focused": True},
+                                         {"pid": 2, "width": 10, "height": 10}]))
+    assert [w.active for w in cr] == [True, False]
+    hy = W.parse_hyprland(json.dumps([
+        {"pid": 1, "size": [1, 1], "mapped": True, "workspace": {"name": "1"}, "focusHistoryID": 0},
+        {"pid": 2, "size": [1, 1], "mapped": True, "workspace": {"name": "1"}, "focusHistoryID": 1}]))
+    assert [w.active for w in hy] == [True, False]
+    assert config.normalize(None)["only_when_focused"] is True
