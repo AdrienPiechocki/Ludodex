@@ -159,6 +159,19 @@ class SettingsMixin:
         self._notes_group = notes_group   # référence pour les tests
         self._notes_font_spin = spin
 
+        # Overlay en jeu : le réglage maître (le détail se règle dans l'overlay lui-même, via ⚙)
+        ov_group = Adw.PreferencesGroup(
+            title=tr("Overlay"),
+            description=tr("Clock, achievement pop-ups and notes drawn over the game by a separate "
+                           "process — nothing is injected into the game. Open it with Shift+Tab, or "
+                           "bind a key to «ludodex-overlay --toggle» (see the README)."))
+        ov_row = Adw.SwitchRow(title=tr("Show the overlay when a game starts"),
+                               active=P.overlay.enabled(self.con))
+        ov_row.connect("notify::active", self._on_overlay_enabled)
+        ov_group.add(ov_row)
+        page.add(ov_group)
+        self._overlay_row = ov_row   # référence pour les tests
+
         # Succès : le masquage des succès secrets
         ach_group = Adw.PreferencesGroup(title=tr("Achievements"))
         chk = Gtk.CheckButton(active=P.show_hidden(self.con), valign=Gtk.Align.CENTER)
@@ -382,6 +395,9 @@ class SettingsMixin:
         P.save_igdb_credentials(cid, secret)
         self._toast_settings(tr("Credentials saved") if cid.strip() and secret.strip()
                              else tr("Credentials cleared"))
+
+    def _on_overlay_enabled(self, row, _p):
+        P.set_setting(self.con, "overlay_enabled", "1" if row.get_active() else "0")
 
     def _on_ach_show_hidden(self, chk):
         """Affiche/masque les succès secrets (verrouillés) partout dans l'app."""

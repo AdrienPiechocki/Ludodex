@@ -62,6 +62,14 @@ Launch the picked game directly, or launch from the library.
 - **Steam on/off**: the same *Use Steam achievements* switch hides Steam achievements everywhere, makes Steam-only games leave the game list and stops every API call — while YAML-tracked achievements and RetroAchievements keep working as usual;
 - **secret achievements** are masked by default (name, description and icon replaced by a generic label until unlocked); the flag comes from the log (YAML) or from Steam's own `hidden` field, so a secret Steam achievement is masked too, and reveals itself as soon as it is earned. The global setting *Reveal hidden achievements* (Settings → Achievements) reveals them everywhere, including in `ludodex tracker status`. The search bar can **not** find a masked achievement by its real name or description — otherwise typing a guess and seeing a row appear would give the spoiler away.
 
+### Overlay
+A small overlay drawn **over the game** when you launch it from Ludodex (Wayland, [`gtk4-layer-shell`](https://github.com/wmww/gtk4-layer-shell)). It is a **separate process** (`ludodex-overlay`): nothing is injected into the game — no `LD_PRELOAD`, no hook — the compositor does the stacking. It stops by itself when the game's session ends.
+- **Shift+Tab** opens / closes it. Closed, it only shows the widgets marked *Always visible* (and achievement pop-ups), and mouse and keyboard go straight to the game. Open, every widget can be **dragged anywhere** by its header and tuned with its ⚙ (opacity, always visible, options); positions are saved as fractions of the screen, so they survive a resolution change. Settings live in `~/.local/share/ludodex/overlay.json`.
+- Widgets: **clock** (clock 12/24 h with or without seconds, session time, stopwatch, countdown), **achievement unlocked** pop-up (YAML, RetroAchievements and Steam; it watches what the app already records), and the game's **notes** (editable, auto-saved to the same note as the Notes page).
+- Turn it off in Settings → Overlay. Requires `gtk4-layer-shell` (your distro's `gtk4-layer-shell` package, e.g. `pacman -S gtk4-layer-shell`; the Flatpak bundles it) and a compositor with the layer-shell protocol (wlroots: sway, Hyprland, river, dwl…; KDE; not GNOME/Mutter). Without it the game launches normally, without overlay.
+- **Global shortcut.** Wayland doesn't let an application read keys without focus. Ludodex asks the XDG *GlobalShortcuts* portal for Shift+Tab (KDE, Hyprland, recent GNOME). Where the portal isn't available (sway, dwl, river…), bind a compositor key to `ludodex-overlay --toggle` (Flatpak: `flatpak run --command=ludodex-overlay io.github.AdrienPiechocki.Ludodex --toggle`), e.g. sway/Hyprland: `bindsym Mod4+Tab exec ludodex-overlay --toggle` / `bind = SUPER, Tab, exec, ludodex-overlay --toggle`. Binding bare Shift+Tab would take it from every application.
+- Limits: a game that **locks the mouse pointer** keeps it while the overlay is open (the keyboard — notes — still works): without injection a Wayland client can't release another client's pointer lock. The overlay closes with the *session*; a game launched through a launcher URI that Ludodex cannot follow keeps its session (and the overlay) open until you press *End session*. The PyInstaller build does not bundle `gtk4-layer-shell`.
+
 ### Play time tracking
 Every launch through Ludodex opens a **session**; its duration is recorded when it closes. Closing a session is also the only moment that can move a game to `In progress`, since it is the first time its real length is known — and only if it reached 5 minutes. Steam history (minutes played, last launch) is imported locally with `backfill`, no API needed. Both the interface and the CLI show total play time, the timelines, and rankings.
 
@@ -188,6 +196,8 @@ i18n.py       translation engine (tr, detection, set_lang)
 core/         logic: db, platform, sources, importers, steam, tags, covers,
               launch, stats, pick, game_collections, tracker, rules, ra, hltb,
               community, export, export_draw, migrations, cli
+overlay/      in-game overlay (separate process): app, config, data, shortcut
+overlay_main.py  `ludodex-overlay` entry (--game ID | --toggle | --quit)
 ui/           GTK4 interface: main, theme, pickview, library, retrospec,
               notes, markdown, achievements, settingsui
 lang/         translations (en = base, fr)
