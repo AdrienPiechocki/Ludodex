@@ -587,6 +587,7 @@ class Overlay(Gtk.Application):
             mon = self._monitor()
             if mon is not None:
                 LS.set_monitor(win, mon)
+            self._ls_monitor = mon
         else:   # développement / compositeur sans layer-shell : simple fenêtre
             win.set_default_size(1280, 720)
         self.canvas = Canvas()
@@ -640,6 +641,7 @@ class Overlay(Gtk.Application):
         """Appelé à chaque changement d'état de la fenêtre du jeu (None = introuvable : jamais
         réduit — on ne cache pas l'overlay sur une simple incertitude)."""
         self.minimized = bool(win and win.minimized)
+        self._confine(win)
         if os.environ.get("LUDODEX_OVERLAY_DEBUG"):
             print(f"overlay: fenêtre du jeu = {win}", file=sys.stderr)
         if self.minimized and self.interactive:
@@ -648,6 +650,31 @@ class Overlay(Gtk.Application):
 
     def _hidden(self):
         return self.minimized
+
+    def _confine(self, game):
+        """Fenêtre du jeu non plein écran : la surface se réduit à cette fenêtre (marges de la
+        surface ancrée aux quatre bords). Position inconnue ou plein écran : toute la sortie."""
+        if LS is None or not LS.is_supported() or self.win is None:
+            return
+        mons = Gdk.Display.get_default().get_monitors()
+        geoms = []
+        for i in range(mons.get_n_items()):
+            g = mons.get_item(i).get_geometry()
+            geoms.append((g.x, g.y, g.width, g.height))
+        found = None if game is None or game.minimized else windows.confine(game, geoms)
+        if found is None:
+            margins, mon = (0, 0, 0, 0), self._monitor()
+        else:
+            margins, mon = found[1], mons.get_item(found[0])
+        for edge, m in zip((LS.Edge.LEFT, LS.Edge.TOP, LS.Edge.RIGHT, LS.Edge.BOTTOM), margins):
+            LS.set_margin(self.win, edge, m)
+        if mon is not None and mon != self._ls_monitor:
+            # la sortie d'une surface layer-shell ne change qu'à son affichage : on la remappe
+            LS.set_monitor(self.win, mon)
+            self._ls_monitor = mon
+            if self.win.get_visible():
+                self.win.set_visible(False)
+                self.win.set_visible(True)
 
     def _apply_presence(self):
         self.win.set_visible(not self._hidden())

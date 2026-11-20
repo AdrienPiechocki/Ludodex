@@ -172,3 +172,28 @@ def test_pick_window_falls_back_to_processes_born_after_the_session():
     assert W.pick_window([old, konsole], set(), "Morrowind", since=2000.0, started=born.get) is None
     assert W.pick_window([old, game], set(), "Morrowind", since=None, started=born.get) is None
     assert W.pick_window([old, game], {10}, "x", since=2000.0, started=born.get) is old   # le PID prime
+
+
+def test_confine_fenetre_et_plein_ecran():
+    mons = [(0, 0, 1920, 1080), (1920, 0, 2560, 1440)]
+    win = W.Win(1, "g", "g", 800, 600, False, False, 100, 50)
+    assert W.confine(win, mons) == (0, (100, 50, 1020, 430))
+    full = W.Win(1, "g", "g", 1920, 1080, False, False, 0, 0)
+    assert W.confine(full, mons) == (0, (0, 0, 0, 0))
+    second = W.Win(1, "g", "g", 1000, 700, False, False, 2000, 100)    # centre sur la 2e sortie
+    assert W.confine(second, mons) == (1, (80, 100, 1480, 640))
+    assert W.confine(W.Win(1, "g", "g", 800, 600, False, False), mons) is None     # position inconnue
+    assert W.confine(None, mons) is None
+
+
+def test_positions_poussees_par_les_compositeurs():
+    hy = W.parse_hyprland(json.dumps([{"pid": 1, "size": [800, 600], "at": [10, 20], "mapped": True}]))
+    assert (hy[0].x, hy[0].y) == (10, 20)
+    kw = W.parse_kwin(json.dumps([{"pid": 1, "width": 10, "height": 20, "x": 5, "y": 6}]))
+    assert (kw[0].x, kw[0].y) == (5, 6)
+
+
+def test_cyberrealm_position_en_mode_focus():
+    cr = W.parse_cyberrealm(json.dumps([{"pid": 1, "width": 800, "height": 600, "x": 560, "y": 240},
+                                        {"pid": 2, "width": 5, "height": 5}]))
+    assert (cr[0].x, cr[0].y) == (560, 240) and (cr[1].x, cr[1].y) == (None, None)

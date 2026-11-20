@@ -18,7 +18,8 @@ from collections import namedtuple
 
 from core import platform
 
-Win = namedtuple("Win", "pid title app_id width height minimized active")
+Win = namedtuple("Win", "pid title app_id width height minimized active x y", defaults=(None, None))
+# x, y : coin haut-gauche de la fenêtre dans l'espace global des sorties (None = inconnu)
 
 BUS_PATH = "/io/github/AdrienPiechocki/Ludodex/Overlay/Windows"
 BUS_IFACE = "io.github.AdrienPiechocki.Ludodex.Overlay.Windows"
@@ -36,7 +37,8 @@ def _int(v):
 def parse_cyberrealm(text):
     """Sortie de `cyberrealm-exec windows` (tableau JSON) -> [Win]."""
     return [Win(_int(w.get("pid")), str(w.get("title") or ""), str(w.get("app_id") or ""),
-                _int(w.get("width")), _int(w.get("height")), bool(w.get("hidden")), False)
+                _int(w.get("width")), _int(w.get("height")), bool(w.get("hidden")), False,
+                _opt_int(w.get("x")), _opt_int(w.get("y")))     # x, y : seulement en mode focus
             for w in _array(text)]
 
 
@@ -52,7 +54,8 @@ def parse_hyprland(text):
         out.append(Win(_int(w.get("pid")), str(w.get("title") or ""), str(w.get("class") or ""),
                        _int(size[0]), _int(size[1]),
                        bool(w.get("hidden")) or ws.startswith("special"),
-                       w.get("focusHistoryID") == 0))     # 0 = la fenêtre qui a le focus
+                       w.get("focusHistoryID") == 0,      # 0 = la fenêtre qui a le focus
+                       *_xy(w.get("at"))))
     return out
 
 
@@ -60,7 +63,46 @@ def parse_kwin(text):
     """Tableau JSON poussé par le script KWin -> [Win]."""
     return [Win(_int(w.get("pid")), str(w.get("title") or ""), str(w.get("app_id") or ""),
                 _int(w.get("width")), _int(w.get("height")), bool(w.get("minimized")),
-                bool(w.get("active"))) for w in _array(text)]
+                bool(w.get("active")), _opt_int(w.get("x")), _opt_int(w.get("y")))
+            for w in _array(text)]
+
+
+def _opt_int(v):
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _xy(at):
+    return (_opt_int(at[0]), _opt_int(at[1])) if isinstance(at, (list, tuple)) and len(at) >= 2 else (None, None)
+
+
+def confine(win, monitors, tol=4):
+    """Où poser l'overlay pour qu'il reste dans la fenêtre du jeu.
+
+    `monitors` : [(x, y, w, h)] des sorties (espace global). Renvoie (index de la sortie qui
+    contient le centre de la fenêtre, (gauche, haut, droite, bas)) : les marges, depuis les bords
+    de cette sortie, d'une surface ancrée aux quatre bords. None si la position est inconnue
+    (CyberRealm, sway…) : l'overlay couvre alors toute la sortie. Une fenêtre qui couvre la
+    sortie (plein écran) donne des marges nulles ; une fenêtre qui déborde est rognée."""
+    if win is None or win.x is None or win.y is None or win.width <= 0 or win.height <= 0:
+        return None
+    cx, cy = win.x + win.width / 2, win.y + win.height / 2
+    best = None
+    for i, (mx, my, mw, mh) in enumerate(monitors):
+        if mx <= cx < mx + mw and my <= cy < my + mh:
+            best = i
+            break
+    if best is None:
+        return None
+    mx, my, mw, mh = monitors[best]
+    left, top = max(0, win.x - mx), max(0, win.y - my)
+    right, bottom = max(0, mx + mw - (win.x + win.width)), max(0, my + mh - (win.y + win.height))
+    m = [left, top, right, bottom]
+    if left + right >= mw or top + bottom >= mh:
+        return None
+    return best, tuple(0 if v <= tol else v for v in m)
 
 
 def _array(text):
@@ -222,7 +264,7 @@ class GameWindow:
 
     def feed(self, wins):
         pick = pick_window(wins, self.get_pids(), self.name, self.get_since())
-        key = None if pick is None else (pick.width, pick.height, pick.minimized)
+        key = None if pick is None else (pick.width, pick.height, pick.minimized, pick.x, pick.y)
         if key != self.last:
             self.last = key
             self.on_change(pick)

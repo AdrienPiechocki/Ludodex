@@ -17,6 +17,8 @@ function snapshot(w) {
         pid: w.pid,
         title: String(w.caption),
         app_id: String(w.resourceClass || ""),
+        x: Math.round(g.x),
+        y: Math.round(g.y),
         width: Math.round(g.width),
         height: Math.round(g.height),
         minimized: !!w.minimized,
