@@ -107,20 +107,6 @@ def test_spawn_is_blocked_by_env_guard(monkeypatch):
 from overlay import windows as W
 
 
-def test_scale_follows_height_and_is_bounded():
-    assert W.scale_for(1080) == 1.0
-    assert W.scale_for(540) == 0.5
-    assert W.scale_for(2160) == 2.0
-    assert W.scale_for(100) == W.SCALE_MIN and W.scale_for(99999) == W.SCALE_MAX
-    assert W.scale_for(0) == 1.0 and W.scale_for(None) == 1.0       # inconnu : pas de changement
-    assert W.scale_for(720, reference=720) == 1.0
-
-
-def test_config_has_scale_settings():
-    c = config.normalize({"reference_height": 10, "scale_with_game": "no"})
-    assert c["reference_height"] == 360 and c["scale_with_game"] is True
-
-
 def test_parsers():
     cr = W.parse_cyberrealm(json.dumps([{"wid": 3, "pid": 42, "title": "Game", "app_id": "g",
                                           "width": 1280, "height": 720, "hidden": True}]))

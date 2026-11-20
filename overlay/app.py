@@ -62,7 +62,6 @@ class Canvas(Gtk.Widget):
     def __init__(self):
         super().__init__(hexpand=True, vexpand=True)
         self.cards = []
-        self.scale = 1.0        # suit la taille de la fenêtre du jeu (cf. windows.scale_for)
         self.on_drag_end = None
         self._dragged = None
         # Le geste vit sur le canevas, qui ne bouge pas : sur l'en-tête de la carte (qui se
@@ -117,20 +116,14 @@ class Canvas(Gtk.Widget):
             self.cards.append(card)
             card.insert_before(self, None)
 
-    def set_scale(self, scale):
-        if abs(scale - self.scale) > 1e-3:
-            self.scale = scale
-            self.queue_allocate()
-
     def do_size_allocate(self, width, height, baseline):
         for c in self.cards:
             if not c.get_visible():
                 continue
             w = max(c.measure(Gtk.Orientation.HORIZONTAL, -1)[1], 1)
             h = max(c.measure(Gtk.Orientation.VERTICAL, w)[1], 1)
-            # La carte est mise en page à SA taille naturelle puis agrandie/réduite d'un bloc
-            # (texte, marges, cases à cocher) ; jamais plus grande que l'écran.
-            s = min(self.scale, width / w, height / h)
+            # Mise en page à la taille naturelle ; réduite d'un bloc seulement si elle dépasse l'écran.
+            s = min(1.0, width / w, height / h)
             sw, sh = w * s, h * s
             x, y = config.place(c.cfg["x"], c.cfg["y"], width, height, sw, sh)
             c.disp = (x, y, sw, sh)
@@ -644,12 +637,8 @@ class Overlay(Gtk.Application):
         return self._pids
 
     def _on_game_window(self, win):
-        """Appelé à chaque changement de taille ou d'état de la fenêtre du jeu (None = introuvable :
-        échelle 1, jamais réduit — on ne cache pas l'overlay sur une simple incertitude)."""
-        if win is not None and self.cfg["scale_with_game"]:
-            self.canvas.set_scale(windows.scale_for(win.height, self.cfg["reference_height"]))
-        else:
-            self.canvas.set_scale(1.0)
+        """Appelé à chaque changement d'état de la fenêtre du jeu (None = introuvable : jamais
+        réduit — on ne cache pas l'overlay sur une simple incertitude)."""
         self.minimized = bool(win and win.minimized)
         if os.environ.get("LUDODEX_OVERLAY_DEBUG"):
             print(f"overlay: fenêtre du jeu = {win}", file=sys.stderr)

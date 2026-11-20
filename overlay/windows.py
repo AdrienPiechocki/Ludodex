@@ -1,4 +1,4 @@
-"""windows.py — suivi de la fenêtre du jeu : sa taille (échelle de l'overlay) et son état « réduite ».
+"""windows.py — suivi de la fenêtre du jeu : son état « réduite » (l'overlay se cache avec elle).
 
 Wayland n'offre à un client AUCUN moyen de voir les fenêtres des autres : chaque
 compositeur s'interroge à sa façon. Trois sont pris en charge :
@@ -20,21 +20,12 @@ from core import platform
 
 Win = namedtuple("Win", "pid title app_id width height minimized active")
 
-SCALE_MIN, SCALE_MAX = 0.5, 3.0
 BUS_PATH = "/io/github/AdrienPiechocki/Ludodex/Overlay/Windows"
 BUS_IFACE = "io.github.AdrienPiechocki.Ludodex.Overlay.Windows"
 KWIN_SCRIPT = "ludodex-overlay-windows"
 
 
 # ---------------------------------------------------------------- calcul pur
-def scale_for(height, reference=1080, lo=SCALE_MIN, hi=SCALE_MAX):
-    """Échelle de l'overlay pour une fenêtre de `height` px : 1 à la hauteur de référence,
-    bornée (une fenêtre minuscule ne doit pas rendre l'overlay illisible)."""
-    if not height or height <= 0 or reference <= 0:
-        return 1.0
-    return min(max(height / reference, lo), hi)
-
-
 def _int(v):
     try:
         return int(v)
